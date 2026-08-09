@@ -2,7 +2,7 @@
 
 /* ============================================================
    Deedar Drive — Design System
-   Warm "cream soda" canvas, deep brand-green ink, crisp white
+   Soft lavender-white canvas, cool neutral ink, crisp white
    cards with real shadow/border. Component classes are Tailwind
    (@apply) so every page gets a consistent, professional look
    with minimal per-page CSS. Accent stays a CSS var so each
@@ -11,30 +11,30 @@
    ============================================================ */
 
 :root {
-  /* ---------- ACCENT (green brand, default outside role sections) --- */
+  /* ---------- ACCENT (brand green — sidebar logo + default outside role sections) --- */
   --accent: #7ca081;
   --accent-hover: #5d796f;
   --accent-press: #2a3326;
   --accent-tint: rgba(124, 160, 129, 0.14);
   --gradient-cosmic: linear-gradient(120deg, #7ca081 0%, #5d796f 55%, #2a3326 100%);
 
-  /* ---------- CANVAS — warm cream soda ---------- */
-  --bg: #fbf3e2;
-  --bg-soft: #f2e9d6;
+  /* ---------- CANVAS — soft lavender-white ---------- */
+  --bg: #f5f3fb;
+  --bg-soft: #efebfa;
   --surface: #ffffff;
-  --hairline: #e6d9bd;
-  --hairline-soft: #f1e8d3;
+  --hairline: #e3def2;
+  --hairline-soft: #ede9f8;
 
   /* ---------- INK (text) ---------- */
-  --ink-1: #2a3326;
-  --ink-2: #5d796f;
-  --ink-3: #84988a;
+  --ink-1: #1f2233;
+  --ink-2: #6b7280;
+  --ink-3: #9ca3af;
   --on-accent: #ffffff;
 
-  /* ---------- ELEVATION (warm-tinted shadow) ---------- */
-  --shadow-sm: 0 1px 2px rgba(58, 44, 20, 0.06), 0 1px 1px rgba(58, 44, 20, 0.04);
-  --shadow-md: 0 8px 24px -4px rgba(58, 44, 20, 0.12), 0 2px 8px rgba(58, 44, 20, 0.06);
-  --shadow-lg: 0 20px 48px -8px rgba(58, 44, 20, 0.18);
+  /* ---------- ELEVATION (cool-tinted shadow) ---------- */
+  --shadow-sm: 0 1px 2px rgba(30, 27, 60, 0.06), 0 1px 1px rgba(30, 27, 60, 0.04);
+  --shadow-md: 0 8px 24px -4px rgba(30, 27, 60, 0.12), 0 2px 8px rgba(30, 27, 60, 0.06);
+  --shadow-lg: 0 20px 48px -8px rgba(30, 27, 60, 0.18);
 
   /* ---------- SEMANTIC ---------- */
   --success: #1e9e5a;
