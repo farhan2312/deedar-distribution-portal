@@ -43,7 +43,7 @@ export function AreaCheckbox({
 }) {
   const [pending, start] = useTransition();
   return (
-    <label style={chipLabel}>
+    <label className="flex cursor-pointer items-center gap-1 rounded-full px-2 py-1 text-[11px]" style={{ background: "var(--bg-soft)" }}>
       <input type="checkbox" checked={checked} disabled={pending} onChange={() => start(() => toggleUserArea(userId, areaId))} />
       {name}
     </label>
@@ -63,7 +63,7 @@ export function DepotCheckbox({
 }) {
   const [pending, start] = useTransition();
   return (
-    <label style={chipLabel}>
+    <label className="flex cursor-pointer items-center gap-1 rounded-full px-2 py-1 text-[11px]" style={{ background: "var(--bg-soft)" }}>
       <input type="checkbox" checked={checked} disabled={pending} onChange={() => start(() => toggleUserDepot(userId, depotId))} />
       {name}
     </label>
@@ -83,7 +83,7 @@ export function DepotSelect({
   return (
     <select
       className="inp"
-      style={selectStyle}
+      style={{ padding: "5px 8px", fontSize: 12 }}
       defaultValue={value ?? ""}
       disabled={pending}
       onChange={(e) => {
@@ -114,7 +114,7 @@ export function CnfSelect({
   return (
     <select
       className="inp"
-      style={selectStyle}
+      style={{ padding: "5px 8px", fontSize: 12 }}
       defaultValue={value ?? ""}
       disabled={pending}
       onChange={(e) => {
@@ -130,15 +130,3 @@ export function CnfSelect({
     </select>
   );
 }
-
-const chipLabel: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 4,
-  fontSize: 11,
-  background: "var(--bg-soft)",
-  padding: "3px 8px",
-  borderRadius: "var(--r-pill)",
-  cursor: "pointer",
-};
-const selectStyle: React.CSSProperties = { padding: "5px 8px", fontSize: 12 };

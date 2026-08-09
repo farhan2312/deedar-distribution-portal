@@ -9,7 +9,13 @@ import {
   type NewCounterInput,
 } from "@/lib/field/actions";
 
-export type DepotOption = { name: string; areas: string[] };
+export type AreaOption = { id: string; name: string };
+export type DepotOption = { id: string; name: string; cnfId: string; areas: AreaOption[] };
+export type CnfOption = { id: string; name: string };
+
+type WizardProps =
+  | { mode: "locked"; depot: { id: string; name: string }; cnf: { name: string }; areas: AreaOption[] }
+  | { mode: "open"; cnfs: CnfOption[]; depots: DepotOption[] };
 
 const COUNTER_TYPES: NewCounterInput["type"][] = [
   "Kirana",
@@ -22,21 +28,16 @@ const COUNTER_TYPES: NewCounterInput["type"][] = [
 
 type Step = "duplicate" | "details" | "review";
 
-export function NewCounterWizard({
-  depots,
-  cnfName,
-}: {
-  depots: DepotOption[];
-  cnfName: string;
-}) {
+export function NewCounterWizard(props: WizardProps) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("duplicate");
   const [draft, setDraft] = useState({
     name: "",
     phone: "",
     address: "",
-    depotName: "",
-    areaName: "",
+    cnfId: "",
+    depotId: props.mode === "locked" ? props.depot.id : "",
+    areaId: "",
     type: "" as NewCounterInput["type"] | "",
     gps: "",
   });
@@ -50,7 +51,16 @@ export function NewCounterWizard({
     { key: "review", label: "Review" },
   ];
   const stepIdx = steps.findIndex((s) => s.key === step);
-  const areaOptions = depots.find((d) => d.name === draft.depotName)?.areas ?? [];
+
+  // Resolve display + option lists depending on locked vs open mode.
+  const cnfName = props.mode === "locked" ? props.cnf.name : props.cnfs.find((c) => c.id === draft.cnfId)?.name ?? "";
+  const depotName = props.mode === "locked" ? props.depot.name : props.depots.find((d) => d.id === draft.depotId)?.name ?? "";
+  const depotOptionsForCnf = props.mode === "open" ? props.depots.filter((d) => d.cnfId === draft.cnfId) : [];
+  const areaOptions =
+    props.mode === "locked"
+      ? props.areas
+      : props.depots.find((d) => d.id === draft.depotId)?.areas ?? [];
+  const areaName = areaOptions.find((a) => a.id === draft.areaId)?.name ?? "";
 
   async function goDetails() {
     setError("");
@@ -71,7 +81,7 @@ export function NewCounterWizard({
 
   function goReview() {
     setError("");
-    if (!draft.name.trim() || !draft.depotName || !draft.areaName || !draft.type) {
+    if (!draft.name.trim() || !draft.depotId || !draft.areaId || !draft.type) {
       setError("Fill name, depot, area and type.");
       return;
     }
@@ -85,8 +95,8 @@ export function NewCounterWizard({
       name: draft.name,
       phone: draft.phone,
       address: draft.address,
-      depotName: draft.depotName,
-      areaName: draft.areaName,
+      depotId: draft.depotId,
+      areaId: draft.areaId,
       type: draft.type as NewCounterInput["type"],
       gps: draft.gps,
     });
@@ -100,62 +110,40 @@ export function NewCounterWizard({
   }
 
   return (
-    <div style={{ animation: "fadeUp .3s ease", margin: "-28px -32px 0" }}>
+    <div className="card mx-auto max-w-xl overflow-hidden" style={{ animation: "fadeUp .3s ease" }}>
       {/* Header */}
       <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          padding: "18px 24px",
-          background: "var(--gradient-cosmic)",
-          color: "#fff",
-        }}
+        className="flex items-center gap-3.5 px-6 py-4.5"
+        style={{ background: "var(--gradient-cosmic)", color: "#fff" }}
       >
         <button
           onClick={() => router.push("/field/beat")}
           aria-label="Back"
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: "50%",
-            border: "none",
-            background: "rgba(255,255,255,.16)",
-            color: "#fff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-full border-0 text-white"
+          style={{ background: "rgba(255,255,255,.16)" }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="m15 18-6-6 6-6" />
           </svg>
         </button>
-        <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 19, flex: 1 }}>
+        <div className="text-[18px] font-bold" style={{ fontFamily: "var(--font-display)" }}>
           Add New Counter
         </div>
       </div>
 
       {/* Step bar */}
-      <div style={{ display: "flex", gap: 8, padding: "16px 24px 6px", maxWidth: 640 }}>
+      <div className="flex gap-2 px-6 pt-4 pb-1">
         {steps.map((s, i) => {
           const done = i <= stepIdx;
           return (
-            <div key={s.key} style={{ flex: 1 }}>
+            <div key={s.key} className="flex-1">
               <div
-                style={{
-                  height: 3,
-                  borderRadius: "var(--r-pill)",
-                  background: done ? "var(--accent)" : "var(--hairline)",
-                }}
+                className="h-[3px] rounded-full"
+                style={{ background: done ? "var(--accent)" : "var(--hairline)" }}
               />
               <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  marginTop: 6,
-                  color: done ? "var(--accent)" : "var(--ink-3)",
-                }}
+                className="mt-1.5 text-[11.5px] font-semibold"
+                style={{ color: done ? "var(--accent)" : "var(--ink-3)" }}
               >
                 {s.label}
               </div>
@@ -164,15 +152,15 @@ export function NewCounterWizard({
         })}
       </div>
 
-      <div style={{ padding: "8px 24px 32px", maxWidth: 640 }}>
+      <div className="px-6 pt-2 pb-7">
         {step === "duplicate" && (
           <>
-            <h4 style={h4Style}>Check for duplicates</h4>
-            <p style={{ fontSize: 13, color: "var(--ink-3)", margin: "0 0 16px" }}>
+            <h4 className="page-title mt-4 mb-1">Check for duplicates</h4>
+            <p className="mb-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
               Search by mobile number first — it&apos;s the unique ID for a
               counter, unlike free-text shop names.
             </p>
-            <div className="field" style={{ marginBottom: 10 }}>
+            <div className="field mb-2.5">
               <label>Owner / Counter Mobile Number *</label>
               <input
                 className="inp"
@@ -185,19 +173,18 @@ export function NewCounterWizard({
               />
             </div>
             {dup && (
-              <div style={{ marginBottom: 14, padding: 14, borderRadius: "var(--r-md)", background: "rgba(178,94,0,.1)" }}>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", color: "var(--warning)", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+              <div className="mb-3.5 rounded-xl p-3.5" style={{ background: "rgba(178,94,0,.1)" }}>
+                <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--warning)" }}>
                   This mobile number is already a counter
                 </div>
-                <div style={{ fontSize: 13, color: "var(--ink-1)" }}>
+                <div className="text-[13px]" style={{ color: "var(--ink-1)" }}>
                   {dup.name} · {dup.type} · {dup.area}
                 </div>
               </div>
             )}
             {error && !dup && <ErrorText>{error}</ErrorText>}
             <button
-              className="btn btn-primary"
-              style={{ width: "100%", justifyContent: "center", padding: 14, marginTop: 8 }}
+              className="btn btn-primary mt-2 w-full justify-center py-3.5"
               onClick={goDetails}
               disabled={busy}
             >
@@ -208,7 +195,7 @@ export function NewCounterWizard({
 
         {step === "details" && (
           <>
-            <h4 style={h4Style}>Counter Identity</h4>
+            <h4 className="page-title mt-4 mb-4">Counter Identity</h4>
             <Field label="Name of Counter/Point of Contact *">
               <input
                 className="inp"
@@ -227,64 +214,79 @@ export function NewCounterWizard({
                 onChange={(e) => setDraft({ ...draft, address: e.target.value })}
               />
             </Field>
-            <Field label="C&F">
-              <input
+
+            {props.mode === "locked" ? (
+              <div className="mb-3.5 grid grid-cols-2 gap-3.5">
+                <Field label="C&F">
+                  <input className="inp" type="text" value={cnfName} disabled />
+                </Field>
+                <Field label="Depot">
+                  <input className="inp" type="text" value={depotName} disabled />
+                </Field>
+              </div>
+            ) : (
+              <div className="mb-3.5 grid grid-cols-2 gap-3.5">
+                <div className="field">
+                  <label>C&F *</label>
+                  <select
+                    className="inp"
+                    value={draft.cnfId}
+                    onChange={(e) => setDraft({ ...draft, cnfId: e.target.value, depotId: "", areaId: "" })}
+                  >
+                    <option value="">Select</option>
+                    {props.cnfs.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Depot *</label>
+                  <select
+                    className="inp"
+                    value={draft.depotId}
+                    disabled={!draft.cnfId}
+                    onChange={(e) => setDraft({ ...draft, depotId: e.target.value, areaId: "" })}
+                  >
+                    <option value="">{draft.cnfId ? "Select" : "Pick a C&F first"}</option>
+                    {depotOptionsForCnf.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <div className="field mb-3.5">
+              <label>Area *</label>
+              <select
                 className="inp"
-                type="text"
-                value={cnfName}
-                disabled
-                style={{ background: "var(--bg-soft)", color: "var(--ink-2)" }}
-              />
-            </Field>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-              <div className="field">
-                <label>Depot *</label>
-                <select
-                  className="inp"
-                  value={draft.depotName}
-                  onChange={(e) => setDraft({ ...draft, depotName: e.target.value, areaName: "" })}
-                >
-                  <option value="">Select</option>
-                  {depots.map((d) => (
-                    <option key={d.name} value={d.name}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label>Area *</label>
-                <select
-                  className="inp"
-                  value={draft.areaName}
-                  onChange={(e) => setDraft({ ...draft, areaName: e.target.value })}
-                >
-                  <option value="">Select</option>
-                  {areaOptions.map((a) => (
-                    <option key={a} value={a}>
-                      {a}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                value={draft.areaId}
+                disabled={props.mode === "open" && !draft.depotId}
+                onChange={(e) => setDraft({ ...draft, areaId: e.target.value })}
+              >
+                <option value="">Select</option>
+                {areaOptions.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
             </div>
-            <div className="field" style={{ marginBottom: 16 }}>
+
+            <div className="field mb-4">
               <label>Type of Counter *</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <div className="flex flex-wrap gap-2">
                 {COUNTER_TYPES.map((t) => {
                   const active = draft.type === t;
                   return (
                     <button
                       key={t}
                       onClick={() => setDraft({ ...draft, type: t })}
+                      className="chip"
                       style={{
-                        border: `1px solid ${active ? "var(--accent)" : "var(--hairline)"}`,
-                        padding: "9px 16px",
-                        borderRadius: "var(--r-pill)",
-                        fontSize: 13,
-                        fontWeight: 600,
+                        borderColor: active ? "var(--accent)" : "var(--hairline)",
                         background: active ? "var(--accent)" : "transparent",
                         color: active ? "#fff" : "var(--ink-1)",
+                        padding: "9px 16px",
+                        fontSize: 13,
                       }}
                     >
                       {t}
@@ -293,13 +295,12 @@ export function NewCounterWizard({
                 })}
               </div>
             </div>
-            <div style={{ padding: 16, borderRadius: "var(--r-lg)", background: "var(--accent-tint)", marginBottom: 20 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-1)", display: "block", marginBottom: 10 }}>
+            <div className="mb-5 rounded-2xl p-4" style={{ background: "var(--accent-tint)" }}>
+              <label className="mb-2.5 block text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>
                 GPS Coordinates *
               </label>
               <button
-                className="btn btn-primary"
-                style={{ width: "100%", justifyContent: "center", padding: 13 }}
+                className="btn btn-primary w-full justify-center py-3"
                 onClick={() =>
                   setDraft({ ...draft, gps: `25.${700 + Math.floor(Math.random() * 99)}, 76.${100 + Math.floor(Math.random() * 99)}` })
                 }
@@ -308,11 +309,11 @@ export function NewCounterWizard({
               </button>
             </div>
             {error && <ErrorText>{error}</ErrorText>}
-            <div style={{ display: "flex", gap: 12 }}>
-              <button className="btn btn-secondary" style={twoBtn} onClick={() => setStep("duplicate")}>
+            <div className="flex gap-3">
+              <button className="btn btn-secondary flex-1 justify-center py-3.5" onClick={() => setStep("duplicate")}>
                 Back
               </button>
-              <button className="btn btn-primary" style={twoBtn} onClick={goReview}>
+              <button className="btn btn-primary flex-1 justify-center py-3.5" onClick={goReview}>
                 Review
               </button>
             </div>
@@ -321,24 +322,24 @@ export function NewCounterWizard({
 
         {step === "review" && (
           <>
-            <h4 style={h4Style}>Review &amp; submit</h4>
-            <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px", fontSize: 13 }}>
+            <h4 className="page-title mt-4 mb-4">Review &amp; submit</h4>
+            <div className="mb-5 rounded-2xl p-5" style={{ background: "var(--bg-soft)" }}>
+              <div className="grid grid-cols-2 gap-x-5 gap-y-3.5 text-[13px]">
                 <Review k="Name" v={draft.name} />
                 <Review k="Type" v={draft.type} />
                 <Review k="Address" v={draft.address || "—"} />
                 <Review k="C&F" v={cnfName} />
-                <Review k="Depot" v={draft.depotName} />
-                <Review k="Area" v={draft.areaName} />
+                <Review k="Depot" v={depotName} />
+                <Review k="Area" v={areaName} />
                 <Review k="GPS" v={draft.gps || "—"} />
               </div>
             </div>
             {error && <ErrorText>{error}</ErrorText>}
-            <div style={{ display: "flex", gap: 12 }}>
-              <button className="btn btn-secondary" style={twoBtn} onClick={() => setStep("details")}>
+            <div className="flex gap-3">
+              <button className="btn btn-secondary flex-1 justify-center py-3.5" onClick={() => setStep("details")}>
                 Back
               </button>
-              <button className="btn btn-primary" style={twoBtn} onClick={submit} disabled={busy}>
+              <button className="btn btn-primary flex-1 justify-center py-3.5" onClick={submit} disabled={busy}>
                 {busy ? "Submitting…" : "Submit counter"}
               </button>
             </div>
@@ -349,18 +350,9 @@ export function NewCounterWizard({
   );
 }
 
-const h4Style: React.CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontWeight: 700,
-  fontSize: 20,
-  margin: "20px 0 16px",
-  color: "var(--ink-1)",
-};
-const twoBtn: React.CSSProperties = { flex: 1, justifyContent: "center", padding: 14 };
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="field" style={{ marginBottom: 14 }}>
+    <div className="field mb-3.5">
       <label>{label}</label>
       {children}
     </div>
@@ -370,12 +362,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function Review({ k, v }: { k: string; v: string }) {
   return (
     <div>
-      <div style={{ color: "var(--ink-3)", marginBottom: 2 }}>{k}</div>
-      <div style={{ fontWeight: 600 }}>{v}</div>
+      <div className="mb-0.5" style={{ color: "var(--ink-3)" }}>{k}</div>
+      <div className="font-semibold" style={{ color: "var(--ink-1)" }}>{v}</div>
     </div>
   );
 }
 
 function ErrorText({ children }: { children: React.ReactNode }) {
-  return <p style={{ color: "var(--danger)", fontSize: 12, margin: "0 0 12px" }}>{children}</p>;
+  return <p className="mb-3 text-[12px]" style={{ color: "var(--danger)" }}>{children}</p>;
 }

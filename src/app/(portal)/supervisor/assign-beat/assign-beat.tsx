@@ -98,110 +98,116 @@ export function AssignBeat({
 
   return (
     <div>
-      <h4 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, margin: "0 0 4px" }}>
+      <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
         Assign daily beat
       </h4>
-      <p style={{ fontSize: 13, color: "var(--ink-3)", margin: "0 0 18px" }}>
+      <p className="mt-0.5 mb-5 text-[13px]" style={{ color: "var(--ink-3)" }}>
         Build a set of counters and hand them to a sales rep — schedule 1 day
         ahead or up to a week out.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14, maxWidth: 900, marginBottom: 16 }}>
-        <div className="field">
-          <label>Assign for date</label>
-          <select className="inp" value={date} onChange={(e) => setDate(e.target.value)}>
-            {dates.map((d) => (
-              <option key={d.value} value={d.value}>{d.label}</option>
+      <div className="card mb-5 p-5">
+        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+          <div className="field">
+            <label>Assign for date</label>
+            <select className="inp" value={date} onChange={(e) => setDate(e.target.value)}>
+              {dates.map((d) => (
+                <option key={d.value} value={d.value}>{d.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Rep</label>
+            <select className="inp" value={repId} onChange={(e) => setRepId(e.target.value)}>
+              {reps.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Scope</label>
+            <div className="flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
+              {(["depot", "area"] as const).map((s) => (
+                <button key={s} onClick={() => setScope(s)} className="seg" style={segStyle(scope === s)}>
+                  {s === "depot" ? "Depot" : "Area"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {scope === "area" && (
+            <div className="field">
+              <label>Area</label>
+              <select className="inp" value={area} onChange={(e) => setArea(e.target.value)}>
+                <option value="">Select area</option>
+                {areaOptions.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2.5" style={{ borderTop: "1px solid var(--hairline-soft)", paddingTop: 16 }}>
+          <input
+            className="inp"
+            style={{ maxWidth: 220 }}
+            type="text"
+            placeholder="Search counter name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select className="inp w-auto" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            {TYPE_OPTIONS.map((t) => (
+              <option key={t} value={t}>{t === "all" ? "All types" : t}</option>
             ))}
           </select>
-        </div>
-        <div className="field">
-          <label>Rep</label>
-          <select className="inp" value={repId} onChange={(e) => setRepId(e.target.value)}>
-            {reps.map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>Scope</label>
-          <div style={{ display: "flex", gap: 2, background: "var(--bg-soft)", padding: 3, borderRadius: "var(--r-pill)" }}>
-            {(["depot", "area"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setScope(s)}
-                style={segStyle(scope === s)}
-              >
-                {s === "depot" ? "Depot" : "Area"}
+          <div className="flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
+            {TREND_OPTIONS.map((t) => (
+              <button key={t} onClick={() => setFilterTrend(t)} style={segStyle(filterTrend === t)}>
+                {t === "all" ? "All trends" : t}
               </button>
             ))}
           </div>
         </div>
-        {scope === "area" && (
-          <div className="field">
-            <label>Area</label>
-            <select className="inp" value={area} onChange={(e) => setArea(e.target.value)}>
-              <option value="">Select area</option>
-              {areaOptions.map((a) => (
-                <option key={a} value={a}>{a}</option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-        <input
-          className="inp"
-          type="text"
-          placeholder="Search counter name…"
-          style={{ maxWidth: 220 }}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select className="inp" style={{ width: "auto" }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-          {TYPE_OPTIONS.map((t) => (
-            <option key={t} value={t}>{t === "all" ? "All types" : t}</option>
-          ))}
-        </select>
-        <div style={{ display: "flex", gap: 2, background: "var(--bg-soft)", padding: 3, borderRadius: "var(--r-pill)" }}>
-          {TREND_OPTIONS.map((t) => (
-            <button key={t} onClick={() => setFilterTrend(t)} style={segStyle(filterTrend === t)}>
-              {t === "all" ? "All trends" : t}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <span style={{ fontSize: 13, color: "var(--ink-2)" }}>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[13px]" style={{ color: "var(--ink-2)" }}>
           {candidates.length} counters in scope · {selected.size} selected
         </span>
-        <button className="link" style={{ fontSize: 13 }} onClick={toggleAll}>
+        <button className="link" onClick={toggleAll}>
           {allSelected ? "Clear all" : "Select all"}
         </button>
       </div>
 
-      <div style={{ maxHeight: 340, overflowY: "auto", border: "1px solid var(--hairline-soft)", borderRadius: "var(--r-md)", marginBottom: 16 }}>
+      <div className="table-wrap mb-5 max-h-[340px] overflow-y-auto">
         {candidates.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--ink-3)", padding: 14 }}>No counters match.</p>
+          <p className="p-4 text-[13px]" style={{ color: "var(--ink-3)" }}>No counters match.</p>
         ) : (
-          candidates.map((c) => {
-            const ts = TREND_STYLE[c.trend];
-            return (
-              <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid var(--hairline-soft)", cursor: "pointer" }}>
-                <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</div>
-                  <div style={{ fontSize: 12, color: "var(--ink-3)" }}>{c.type} · {c.area}</div>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--ink-2)", textAlign: "right" }}>Stock: {c.stock}</div>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: "var(--r-pill)", background: ts.bg, color: ts.color, whiteSpace: "nowrap" }}>
-                  {c.trend}
-                </span>
-              </label>
-            );
-          })
+          <table className="table">
+            <tbody>
+              {candidates.map((c) => {
+                const ts = TREND_STYLE[c.trend];
+                return (
+                  <tr key={c.id}>
+                    <td className="w-8">
+                      <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} />
+                    </td>
+                    <td>
+                      <div className="font-semibold" style={{ color: "var(--ink-1)" }}>{c.name}</div>
+                      <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>{c.type} · {c.area}</div>
+                    </td>
+                    <td className="text-right whitespace-nowrap">Stock: {c.stock}</td>
+                    <td className="text-right">
+                      <span className="chip whitespace-nowrap" style={{ background: ts.bg, color: ts.color, borderColor: "transparent" }}>
+                        {c.trend}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
 
@@ -209,22 +215,24 @@ export function AssignBeat({
         Assign {selected.size} counters to {repName} — {dateLabel}
       </button>
 
-      <h4 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, margin: "32px 0 12px" }}>
+      <h4 className="mt-8 mb-3 text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
         Assignments for {dateLabel}
       </h4>
       {assignments.length === 0 ? (
-        <p style={{ color: "var(--ink-3)", fontSize: 13 }}>No beats scheduled yet.</p>
+        <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>No beats scheduled yet.</p>
       ) : (
-        assignments.map((row, i) => (
-          <div key={i} className="card" style={{ padding: 16, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15 }}>{row.rep}</div>
-              <div style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 2 }}>
-                {row.count} counters · {row.scopeLabel} · {row.date}
+        <div className="space-y-2.5">
+          {assignments.map((row, i) => (
+            <div key={i} className="card flex items-center justify-between p-4">
+              <div>
+                <div className="text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>{row.rep}</div>
+                <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
+                  {row.count} counters · {row.scopeLabel} · {row.date}
+                </div>
               </div>
             </div>
-          </div>
-        ))
+          ))}
+        </div>
       )}
     </div>
   );

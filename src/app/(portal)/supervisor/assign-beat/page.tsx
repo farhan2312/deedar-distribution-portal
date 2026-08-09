@@ -3,13 +3,14 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, counters, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { Notice } from "@/components/ui/notice";
 import { AssignBeat, type AssignCounter, type RepOption } from "./assign-beat";
 
 export default async function AssignBeatPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!user.accessRoles.includes("supervisor")) {
-    return <p style={{ fontSize: 14, color: "var(--ink-2)" }}>You don&apos;t have Supervisor access.</p>;
+    return <Notice title="Assign Beat">You don&apos;t have Supervisor access.</Notice>;
   }
 
   const depotIds = user.supervisedDepots.map((d) => d.id);

@@ -4,6 +4,9 @@ import { db } from "@/db";
 import { areas, cnfs, counters, depots } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { resolveSelectedCnf } from "@/lib/hq/scope";
+import { Notice } from "@/components/ui/notice";
+import { LegendDot } from "@/components/ui/legend-dot";
+import { StatCard } from "@/components/ui/stat-card";
 import { CnfPicker } from "../_components/cnf-picker";
 
 const TREND = [12, 18, 15, 22, 19, 26, 24];
@@ -48,7 +51,7 @@ export default async function HqDashboardPage({
 
   const isAdmin = user.accessRoles.includes("admin");
   if (!user.accessRoles.includes("hq") && !isAdmin) {
-    return <p style={{ fontSize: 14, color: "var(--ink-2)" }}>You don&apos;t have C&amp;F HQ access.</p>;
+    return <Notice title="C&F HQ">You don&apos;t have C&amp;F HQ access.</Notice>;
   }
 
   const { cnf: requestedCnfId } = await searchParams;
@@ -56,7 +59,7 @@ export default async function HqDashboardPage({
   const selectedCnf = resolveSelectedCnf(allCnfs, requestedCnfId, user.cnf?.id ?? null, isAdmin);
 
   if (!selectedCnf) {
-    return <p style={{ fontSize: 14, color: "var(--ink-2)" }}>No C&amp;F HQ set up yet.</p>;
+    return <Notice title="C&F HQ">No C&amp;F HQ set up yet.</Notice>;
   }
 
   const cnfDepots = await db.select().from(depots).where(eq(depots.cnfId, selectedCnf.id));
@@ -104,32 +107,26 @@ export default async function HqDashboardPage({
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "var(--ink-2)", marginBottom: 16, flexWrap: "wrap" }}>
+      <div className="mb-5 flex flex-wrap items-center gap-2.5 text-[13px]" style={{ color: "var(--ink-2)" }}>
         <span>Headquarters (Kanpur) → {selectedCnf.name} → {cnfDepots.length} depots</span>
         {isAdmin && allCnfs.length > 1 && (
           <>
-            <span style={{ flex: 1 }} />
-            <label style={{ fontSize: 12 }}>C&amp;F HQ</label>
+            <span className="flex-1" />
+            <label className="text-[12px]">C&amp;F HQ</label>
             <CnfPicker options={allCnfs} value={selectedCnf.id} />
           </>
         )}
       </div>
 
-      <h4 style={sectionTitle}>Overview</h4>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16, marginBottom: 28 }}>
+      <h4 className="page-title mb-4">Overview</h4>
+      <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {kpis.map((k) => (
-          <div className="card" style={{ padding: 20 }} key={k.label}>
-            <div className="eyebrow" style={{ fontSize: 11, marginBottom: 6 }}>{k.label}</div>
-            <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 28, color: k.danger ? "var(--danger)" : "var(--ink-1)" }}>
-              {k.value}
-            </div>
-            <div style={{ fontSize: 13, color: "var(--ink-2)", marginTop: 4 }}>{k.sub}</div>
-          </div>
+          <StatCard key={k.label} label={k.label} value={k.value} sub={k.sub} danger={k.danger} />
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 16, marginBottom: 16, alignItems: "stretch" }}>
-        <div className="card" style={{ padding: 20 }}>
+      <div className="mb-4 grid items-stretch gap-4 lg:grid-cols-[1.5fr_1fr]">
+        <div className="card p-5">
           <h6 style={cardTitle}>Sales trend</h6>
           <p style={cardSub}>Packets sold, by date</p>
           <svg viewBox="0 0 320 110" style={{ width: "100%", height: 150 }} preserveAspectRatio="none">
@@ -140,93 +137,80 @@ export default async function HqDashboardPage({
             ))}
           </svg>
         </div>
-        <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column" }}>
+        <div className="card flex flex-col p-5">
           <h6 style={cardTitle}>Counter health</h6>
           <p style={cardSub}>Overall health of the C&amp;F, by counter status</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 18, flex: 1 }}>
-            <div style={{ width: 96, height: 96, borderRadius: "50%", background: health.css, flex: "none", position: "relative" }}>
-              <div style={{ position: "absolute", inset: 16, background: "var(--bg)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15 }}>
+          <div className="flex flex-1 items-center gap-4.5">
+            <div className="relative h-24 w-24 flex-none rounded-full" style={{ background: health.css }}>
+              <div
+                className="absolute inset-4 flex items-center justify-center rounded-full text-[15px] font-bold"
+                style={{ background: "var(--bg)", fontFamily: "var(--font-display)" }}
+              >
                 {health.activePct}%
               </div>
             </div>
-            <div style={{ fontSize: 12, color: "var(--ink-2)" }}>
-              <Legend color="var(--success)" label={`Active — ${activeCount}`} />
-              <Legend color="var(--warning)" label={`Dormant — ${dormantCount}`} />
-              <Legend color="var(--danger)" label={`Declining — ${decliningCount}`} last />
+            <div className="space-y-1.5 text-[12px]" style={{ color: "var(--ink-2)" }}>
+              <LegendDot color="var(--success)" label={`Active — ${activeCount}`} square />
+              <LegendDot color="var(--warning)" label={`Dormant — ${dormantCount}`} square />
+              <LegendDot color="var(--danger)" label={`Declining — ${decliningCount}`} square />
             </div>
           </div>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28, alignItems: "stretch" }}>
-        <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column" }}>
+      <div className="mb-7 grid items-stretch gap-4 sm:grid-cols-2">
+        <div className="card flex flex-col p-5">
           <h6 style={cardTitle}>Counters by depot</h6>
           <p style={cardSub}>Coverage split, by depot</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1 }}>
-            <div style={{ width: 88, height: 88, borderRadius: "50%", background: `conic-gradient(${depotConicStops})`, flex: "none" }} />
-            <div style={{ fontSize: 12, color: "var(--ink-2)" }}>
+          <div className="flex flex-1 items-center gap-4">
+            <div className="h-[88px] w-[88px] flex-none rounded-full" style={{ background: `conic-gradient(${depotConicStops})` }} />
+            <div className="space-y-1.5 text-[12px]" style={{ color: "var(--ink-2)" }}>
               {depotSplit.map((d) => (
-                <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                  <span style={{ width: 9, height: 9, borderRadius: 3, background: d.color, display: "inline-block" }} />
-                  {d.name} — {d.count} ({Math.round((d.count / splitTotal) * 100)}%)
-                </div>
+                <LegendDot key={d.name} color={d.color} label={`${d.name} — ${d.count} (${Math.round((d.count / splitTotal) * 100)}%)`} square />
               ))}
             </div>
           </div>
         </div>
-        <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column" }}>
+        <div className="card flex flex-col p-5">
           <h6 style={cardTitle}>Product mix</h6>
           <p style={cardSub}>Packets sold MTD, by SKU</p>
-          <div style={{ fontSize: 12, color: "var(--ink-2)" }}>
+          <div className="space-y-1.5 text-[12px]" style={{ color: "var(--ink-2)" }}>
             {PRODUCT_MIX.map((p) => (
-              <div key={p.label} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
-                <span style={{ width: 9, height: 9, borderRadius: 3, background: p.color, display: "inline-block" }} />
-                {p.label} — {p.pct}%
-              </div>
+              <LegendDot key={p.label} color={p.color} label={`${p.label} — ${p.pct}%`} square />
             ))}
           </div>
         </div>
       </div>
 
-      <h4 style={{ ...sectionTitle, margin: "0 0 14px" }}>Declining counters ({declining.length})</h4>
+      <h4 className="page-title mb-3.5">Declining counters ({declining.length})</h4>
       {declining.length === 0 ? (
-        <p style={{ fontSize: 13, color: "var(--ink-3)" }}>No declining counters — healthy C&amp;F.</p>
+        <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>No declining counters — healthy C&amp;F.</p>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-          <thead>
-            <tr>
-              {["Counter", "Area", "Stock stuck at", "Last visit"].map((h) => (
-                <th key={h} style={thStyle}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {declining.map((d) => (
-              <tr key={d.id}>
-                <td style={tdStyle}>{d.name}</td>
-                <td style={tdStyle}>{d.area}</td>
-                <td style={tdStyle}>{d.stock}</td>
-                <td style={tdStyle}>{d.lastVisit ? new Date(d.lastVisit).toISOString().slice(0, 10) : "—"}</td>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                {["Counter", "Area", "Stock stuck at", "Last visit"].map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {declining.map((d) => (
+                <tr key={d.id}>
+                  <td className="font-semibold">{d.name}</td>
+                  <td>{d.area}</td>
+                  <td>{d.stock}</td>
+                  <td>{d.lastVisit ? new Date(d.lastVisit).toISOString().slice(0, 10) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
 }
 
-const sectionTitle: React.CSSProperties = { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, margin: "0 0 14px" };
-const cardTitle: React.CSSProperties = { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, margin: "0 0 4px" };
+const cardTitle: React.CSSProperties = { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, margin: "0 0 4px", color: "var(--ink-1)" };
 const cardSub: React.CSSProperties = { fontSize: 12, color: "var(--ink-3)", margin: "0 0 12px" };
-const thStyle: React.CSSProperties = { textAlign: "left", fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--ink-3)", padding: 10, borderBottom: "1px solid var(--hairline)" };
-const tdStyle: React.CSSProperties = { padding: "12px 10px", borderBottom: "1px solid var(--hairline-soft)" };
-
-function Legend({ color, label, last }: { color: string; label: string; last?: boolean }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: last ? 0 : 6 }}>
-      <span style={{ width: 9, height: 9, borderRadius: 3, background: color, display: "inline-block" }} />
-      {label}
-    </div>
-  );
-}

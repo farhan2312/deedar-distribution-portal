@@ -3,6 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, counters } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { LegendDot } from "@/components/ui/legend-dot";
 import { STATUS_STYLE, TEAM_REPS, splitPct } from "@/lib/portal/mock";
 
 const DENSITY_COLORS = ["#1E6B3C", "#7AB88A", "#E0B15C", "#C7263B"];
@@ -42,86 +43,79 @@ export default async function SupervisorAnalyticsPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16 }}>
-        <h4 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, margin: 0 }}>
+      <div className="mb-5 flex items-baseline justify-between">
+        <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
           Analytics — {depotName}
         </h4>
-        <span style={{ fontSize: 12, color: "var(--ink-3)" }}>Scoped to your assigned depot/area</span>
+        <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>Scoped to your assigned depot/area</span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12, marginBottom: 22 }}>
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {kpis.map((k) => (
-          <div className="card" style={{ padding: 16 }} key={k.label}>
-            <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 24, color: "var(--accent)" }}>
+          <div className="card p-4" key={k.label}>
+            <div className="text-[24px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--accent)" }}>
               {k.value}
             </div>
-            <div style={{ fontSize: 12, color: "var(--ink-2)", marginTop: 4 }}>{k.label}</div>
-            <div style={{ fontSize: 11, fontWeight: 600, marginTop: 6, color: k.trendColor }}>{k.trend}</div>
+            <div className="mt-1 text-[12px]" style={{ color: "var(--ink-2)" }}>{k.label}</div>
+            <div className="mt-1.5 text-[11px] font-semibold" style={{ color: k.trendColor }}>{k.trend}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 20, alignItems: "start" }}>
-        <div className="card" style={{ padding: 18 }}>
-          <h6 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, margin: "0 0 14px" }}>
+      <div className="grid items-start gap-5 lg:grid-cols-[1.3fr_1fr]">
+        <div className="card p-5">
+          <h6 className="mb-3.5 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
             Time on counter vs travel vs idle (today)
           </h6>
           {TEAM_REPS.map((r) => {
             const s = splitPct(r);
             const st = STATUS_STYLE[r.status];
             return (
-              <div key={r.name} style={{ padding: "10px 0", borderBottom: "1px solid var(--hairline-soft)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: "var(--ink-1)" }}>{r.name}</div>
-                  <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: "var(--r-pill)", background: st.bg, color: st.color }}>
+              <div key={r.name} className="py-2.5" style={{ borderBottom: "1px solid var(--hairline-soft)" }}>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <div className="text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>{r.name}</div>
+                  <span className="chip" style={{ background: st.bg, color: st.color, borderColor: "transparent" }}>
                     {st.label}
                   </span>
                 </div>
-                <div style={{ display: "flex", height: 8, borderRadius: "var(--r-pill)", overflow: "hidden", background: "var(--hairline-soft)" }}>
+                <div className="flex h-2 overflow-hidden rounded-full" style={{ background: "var(--hairline-soft)" }}>
                   <div style={{ width: `${s.counterPct}%`, background: "var(--accent)" }} />
                   <div style={{ width: `${s.travelPct}%`, background: "#8CB4C9" }} />
                   <div style={{ width: `${s.idlePct}%`, background: "#E0B15C" }} />
                 </div>
-                <div style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 5 }}>
+                <div className="mt-1.5 text-[11px]" style={{ color: "var(--ink-3)" }}>
                   {r.visitsToday}/{r.target} visits · {r.counterTimeHrs}h on counter
                 </div>
               </div>
             );
           })}
-          <Legend />
+          <div className="mt-3 flex gap-4">
+            <LegendDot color="var(--accent)" label="Counter time" square />
+            <LegendDot color="#8CB4C9" label="Travel" square />
+            <LegendDot color="#E0B15C" label="Idle" square />
+          </div>
         </div>
 
-        <div className="card" style={{ padding: 18 }}>
-          <h6 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, margin: "0 0 14px" }}>
+        <div className="card p-5">
+          <h6 className="mb-3.5 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
             Retail density by area (counters)
           </h6>
           {densityTiles.length === 0 ? (
-            <p style={{ fontSize: 13, color: "var(--ink-3)" }}>No counters in scope yet.</p>
+            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>No counters in scope yet.</p>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(70px,1fr))", gap: 8, marginBottom: 14 }}>
+            <div className="mb-3.5 grid grid-cols-[repeat(auto-fill,minmax(70px,1fr))] gap-2">
               {densityTiles.map((t) => (
                 <div
                   key={t.area}
-                  style={{
-                    aspectRatio: "1",
-                    borderRadius: "var(--r-sm)",
-                    background: t.color,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: "#fff",
-                    textAlign: "center",
-                    padding: 4,
-                  }}
+                  className="flex aspect-square items-center justify-center rounded-xl p-1 text-center text-[11px] font-semibold text-white"
+                  style={{ background: t.color }}
                 >
                   {t.area}
                 </div>
               ))}
             </div>
           )}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 11, color: "var(--ink-2)" }}>
+          <div className="flex flex-wrap gap-2.5">
             <LegendDot color="#1E6B3C" label="Hot" />
             <LegendDot color="#7AB88A" label="Active" />
             <LegendDot color="#E0B15C" label="Thin" />
@@ -130,33 +124,5 @@ export default async function SupervisorAnalyticsPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function Legend() {
-  return (
-    <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 11, color: "var(--ink-2)" }}>
-      <LegendDot color="var(--accent)" label="Counter time" square />
-      <LegendDot color="#8CB4C9" label="Travel" square />
-      <LegendDot color="#E0B15C" label="Idle" square />
-    </div>
-  );
-}
-
-function LegendDot({ color, label, square }: { color: string; label: string; square?: boolean }) {
-  return (
-    <span>
-      <span
-        style={{
-          display: "inline-block",
-          width: 9,
-          height: 9,
-          borderRadius: square ? 3 : "50%",
-          background: color,
-          marginRight: 5,
-        }}
-      />
-      {label}
-    </span>
   );
 }

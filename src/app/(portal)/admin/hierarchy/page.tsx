@@ -53,44 +53,48 @@ export default async function AdminHierarchyPage() {
   }));
 
   return (
-    <div style={{ maxWidth: 820 }}>
-      <h4 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, margin: "0 0 4px" }}>
-        Organisation hierarchy
-      </h4>
-      <p style={{ fontSize: 13, color: "var(--ink-3)", margin: "0 0 16px" }}>
+    <div className="mx-auto max-w-4xl">
+      <h4 className="page-title">Organisation hierarchy</h4>
+      <p className="page-subtitle mb-5">
         Central Admin sets up down to C&amp;F HQ; each C&amp;F Manager then adds
         their own depots and areas.
       </p>
 
-      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15 }}>Headquarters</div>
-        <div style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 2 }}>
+      <div className="card mb-5 p-4">
+        <div className="text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+          Headquarters
+        </div>
+        <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
           Kanpur · {allStates.length} state{allStates.length === 1 ? "" : "s"} onboarded
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
-        <div className="card" style={{ padding: 20 }}>
-          <h6 style={cardTitle}>Add a state</h6>
+      <div className="mb-6 grid gap-5 sm:grid-cols-2">
+        <div className="card p-5">
+          <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+            Add a state
+          </h6>
           <form action={addState}>
-            <div className="field" style={{ marginBottom: 12 }}>
+            <div className="field mb-3">
               <label>State name</label>
               <input className="inp" type="text" name="name" placeholder="e.g. Madhya Pradesh" required />
             </div>
-            <div className="field" style={{ marginBottom: 14 }}>
+            <div className="field mb-3.5">
               <label>Country</label>
               <input className="inp" type="text" name="country" defaultValue="India" />
             </div>
             <button className="btn btn-primary" type="submit">Add state</button>
           </form>
         </div>
-        <div className="card" style={{ padding: 20 }}>
-          <h6 style={cardTitle}>Add a C&amp;F HQ</h6>
+        <div className="card p-5">
+          <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+            Add a C&amp;F HQ
+          </h6>
           {allStates.length === 0 ? (
-            <p style={{ fontSize: 13, color: "var(--ink-3)" }}>Add a state first.</p>
+            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>Add a state first.</p>
           ) : (
             <form action={addCnfWithState}>
-              <div className="field" style={{ marginBottom: 12 }}>
+              <div className="field mb-3">
                 <label>State</label>
                 <select className="inp" name="stateId" defaultValue={allStates[0].id}>
                   {allStates.map((s) => (
@@ -98,7 +102,7 @@ export default async function AdminHierarchyPage() {
                   ))}
                 </select>
               </div>
-              <div className="field" style={{ marginBottom: 14 }}>
+              <div className="field mb-3.5">
                 <label>C&amp;F HQ name</label>
                 <input className="inp" type="text" name="name" placeholder="e.g. BHOPAL CNF HQ" required />
               </div>
@@ -120,5 +124,3 @@ async function addCnfWithState(formData: FormData) {
   if (!stateId) return;
   await addCnf(stateId, formData);
 }
-
-const cardTitle: React.CSSProperties = { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, margin: "0 0 12px" };

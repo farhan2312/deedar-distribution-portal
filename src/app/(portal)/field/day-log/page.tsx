@@ -27,23 +27,15 @@ export default function FieldDayLogPage() {
   const complete = !!start && !!end;
 
   return (
-    <div style={{ maxWidth: 480, textAlign: "center", paddingTop: 24, animation: "fadeUp .3s ease" }}>
-      <h3
-        style={{
-          fontFamily: "var(--font-display)",
-          fontWeight: 600,
-          fontSize: 20,
-          margin: "0 0 4px",
-          color: "var(--ink-1)",
-        }}
-      >
+    <div className="mx-auto max-w-lg pt-4 text-center" style={{ animation: "fadeUp .3s ease" }}>
+      <h3 className="text-[20px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
         Today&apos;s Day Log
       </h3>
-      <p style={{ fontSize: 13, color: "var(--ink-3)", margin: "0 0 28px" }}>
+      <p className="mt-1 mb-6 text-[13px]" style={{ color: "var(--ink-3)" }}>
         Record your visit start and end time for the day.
       </p>
 
-      <div className="card" style={{ padding: 24, textAlign: "left", marginBottom: 20 }}>
+      <div className="card p-6 text-left">
         <LogRow
           label="Visit start time"
           value={start ?? "—"}
@@ -62,65 +54,42 @@ export default function FieldDayLogPage() {
       </div>
 
       {complete && (
-        <>
-          <p style={{ fontSize: 13, color: "var(--success)", fontWeight: 600, margin: "0 0 6px" }}>
+        <div className="mt-5 mb-2">
+          <p className="text-[13px] font-semibold" style={{ color: "var(--success)" }}>
             Day complete — logged for supervisor review.
           </p>
-          <p style={{ fontSize: 13, color: "var(--ink-2)", margin: "0 0 28px" }}>
+          <p className="mt-1 text-[13px]" style={{ color: "var(--ink-2)" }}>
             On Job: <strong>{diffLabel(start!, end!)}</strong> — used for travel /
             idle / counter-time analysis.
           </p>
-        </>
+        </div>
       )}
 
-      <div style={{ textAlign: "left" }}>
-        <h6
-          style={{
-            fontSize: 11,
-            letterSpacing: ".06em",
-            textTransform: "uppercase",
-            color: "var(--ink-3)",
-            margin: "0 0 10px",
-          }}
-        >
+      <div className="mt-8 text-left">
+        <h6 className="mb-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>
           Previous days
         </h6>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr>
-              {["Date", "Start", "End", "On Job"].map((h) => (
-                <th
-                  key={h}
-                  style={{
-                    textAlign: "left",
-                    fontSize: 11,
-                    letterSpacing: ".06em",
-                    textTransform: "uppercase",
-                    color: "var(--ink-3)",
-                    padding: "8px 4px",
-                    borderBottom: "1px solid var(--hairline)",
-                  }}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {HISTORY.map((h) => (
-              <tr key={h.date}>
-                {[h.date, h.start, h.end, h.onJob].map((cell, i) => (
-                  <td
-                    key={i}
-                    style={{ padding: "10px 4px", borderBottom: "1px solid var(--hairline-soft)" }}
-                  >
-                    {cell}
-                  </td>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                {["Date", "Start", "End", "On Job"].map((h) => (
+                  <th key={h}>{h}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {HISTORY.map((h) => (
+                <tr key={h.date}>
+                  <td className="font-medium">{h.date}</td>
+                  <td>{h.start}</td>
+                  <td>{h.end}</td>
+                  <td>{h.onJob}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -143,35 +112,16 @@ function LogRow({
 }) {
   return (
     <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "10px 0",
-        borderBottom: last ? "none" : "1px solid var(--hairline-soft)",
-      }}
+      className="flex items-center justify-between py-2.5"
+      style={{ borderBottom: last ? "none" : "1px solid var(--hairline-soft)" }}
     >
       <div>
-        <div className="eyebrow" style={{ fontSize: 11 }}>
-          {label}
-        </div>
-        <div
-          style={{
-            fontFamily: "var(--font-display)",
-            fontWeight: 700,
-            fontSize: 20,
-            marginTop: 2,
-            color: "var(--ink-1)",
-          }}
-        >
+        <div className="eyebrow">{label}</div>
+        <div className="mt-0.5 text-[20px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
           {value}
         </div>
       </div>
-      <button
-        className="btn btn-primary btn-sm"
-        onClick={onClick}
-        disabled={disabled}
-      >
+      <button className="btn btn-primary btn-sm" onClick={onClick} disabled={disabled}>
         {btnLabel}
       </button>
     </div>

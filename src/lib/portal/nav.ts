@@ -17,7 +17,7 @@ export const ROLE_THEME: Record<AccessRole, RoleTheme> = {
   dealer: { strong: "#128A82", bg: "#DFF5F3", dot: "#4FC3B8", muted: "#5FA39D" },
   hq: { strong: "#B9812E", bg: "#FBEAD1", dot: "#E3A542", muted: "#CBA06B" },
   khq: { strong: "#C1442A", bg: "#FBE5E1", dot: "#E8836C", muted: "#C17A6A" },
-  admin: { strong: "#5D796F", bg: "#EAF2EC", dot: "#84988A", muted: "#9BB0A2" },
+  admin: { strong: "#6B5B3E", bg: "#EFE6D2", dot: "#A6926B", muted: "#B3A588" },
 };
 
 export type NavItem = { href: string; label: string };

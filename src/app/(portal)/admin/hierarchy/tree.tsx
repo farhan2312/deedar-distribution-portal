@@ -8,6 +8,11 @@ export type DepotNode = { id: string; name: string; counters: number; reps: numb
 export type CnfNode = { id: string; name: string; depots: DepotNode[] };
 export type StateNode = { id: string; name: string; country: string; cnfs: CnfNode[] };
 
+const nameCls = "text-[15px] font-semibold";
+const nameStyle: React.CSSProperties = { fontFamily: "var(--font-display)", color: "var(--ink-1)" };
+const subCls = "mt-0.5 text-[12px]";
+const subStyle: React.CSSProperties = { color: "var(--ink-3)" };
+
 export function HierarchyTree({ tree }: { tree: StateNode[] }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (key: string) =>
@@ -19,7 +24,7 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
     });
 
   if (tree.length === 0) {
-    return <p style={{ fontSize: 13, color: "var(--ink-3)" }}>No states yet — add one above.</p>;
+    return <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>No states yet — add one above.</p>;
   }
 
   return (
@@ -30,13 +35,13 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
         return (
           <div key={st.id}>
             <Row
-              indent={24}
+              indent={0}
               onToggle={() => toggle(sKey)}
               chevron={sOpen}
               action={<DeleteLink action={deleteState.bind(null, st.id)} />}
             >
-              <div style={nameStyle}>{st.name}</div>
-              <div style={subStyle}>
+              <div className={nameCls} style={nameStyle}>{st.name}</div>
+              <div className={subCls} style={subStyle}>
                 {st.country} · {st.cnfs.length} C&amp;F HQ{st.cnfs.length === 1 ? "" : "s"}
               </div>
             </Row>
@@ -48,13 +53,13 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
                 return (
                   <div key={cf.id}>
                     <Row
-                      indent={48}
+                      indent={24}
                       onToggle={() => toggle(cKey)}
                       chevron={cOpen}
                       action={<DeleteLink action={deleteCnf.bind(null, cf.id)} />}
                     >
-                      <div style={nameStyle}>{cf.name}</div>
-                      <div style={subStyle}>One per state · {cf.depots.length} depots</div>
+                      <div className={nameCls} style={nameStyle}>{cf.name}</div>
+                      <div className={subCls} style={subStyle}>One per state · {cf.depots.length} depots</div>
                     </Row>
 
                     {cOpen && (
@@ -65,13 +70,13 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
                           return (
                             <div key={d.id}>
                               <Row
-                                indent={72}
+                                indent={48}
                                 onToggle={() => toggle(dKey)}
                                 chevron={dOpen}
                                 action={<DeleteLink action={deleteDepot.bind(null, d.id)} />}
                               >
-                                <div style={nameStyle}>{d.name}</div>
-                                <div style={subStyle}>
+                                <div className={nameCls} style={nameStyle}>{d.name}</div>
+                                <div className={subCls} style={subStyle}>
                                   Reports to {cf.name} · {d.counters} counters · {d.reps} reps
                                 </div>
                               </Row>
@@ -79,23 +84,23 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
                               {dOpen && (
                                 <>
                                   {d.areas.map((a) => (
-                                    <div key={a.id} className="card" style={{ padding: 14, marginBottom: 6, marginLeft: 96 }}>
-                                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <div key={a.id} className="card mb-1.5 p-3.5" style={{ marginLeft: 72 }}>
+                                      <div className="flex items-center justify-between">
                                         <div>
-                                          <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14 }}>{a.name}</div>
-                                          <div style={subStyle}>Reports to {d.name} · {a.counters} counters</div>
+                                          <div className="text-[14px] font-semibold" style={nameStyle}>{a.name}</div>
+                                          <div className={subCls} style={subStyle}>Reports to {d.name} · {a.counters} counters</div>
                                         </div>
                                         <DeleteLink action={deleteArea.bind(null, a.id)} />
                                       </div>
                                     </div>
                                   ))}
-                                  <InlineAdd action={addArea.bind(null, d.id)} placeholder="New area" indent={96} />
+                                  <InlineAdd action={addArea.bind(null, d.id)} placeholder="New area" indent={72} />
                                 </>
                               )}
                             </div>
                           );
                         })}
-                        <InlineAdd action={addDepot.bind(null, cf.id)} placeholder="New depot" indent={72} />
+                        <InlineAdd action={addDepot.bind(null, cf.id)} placeholder="New depot" indent={48} />
                       </>
                     )}
                   </div>
@@ -122,9 +127,9 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="card" style={{ padding: 16, marginBottom: 8, marginLeft: indent }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={onToggle}>
+    <div className="card card-hover mb-2 p-4" style={{ marginLeft: indent }}>
+      <div className="flex items-center justify-between">
+        <div className="flex cursor-pointer items-center gap-2" onClick={onToggle}>
           <svg
             width="14"
             height="14"
@@ -134,7 +139,8 @@ function Row({
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            style={{ transform: `rotate(${chevron ? 90 : 0}deg)`, transition: "transform .15s", flex: "none" }}
+            className="flex-none transition-transform"
+            style={{ transform: `rotate(${chevron ? 90 : 0}deg)` }}
           >
             <path d="m9 18 6-6-6-6" />
           </svg>
@@ -149,7 +155,7 @@ function Row({
 function DeleteLink({ action }: { action: () => Promise<void> }) {
   return (
     <form action={action}>
-      <button className="link" style={{ fontSize: 12, color: "var(--danger)" }} type="submit">
+      <button className="link link-danger" type="submit">
         Delete
       </button>
     </form>
@@ -166,12 +172,16 @@ function InlineAdd({
   indent: number;
 }) {
   return (
-    <form action={action} style={{ display: "flex", gap: 6, marginLeft: indent, marginBottom: 10 }}>
-      <input className="inp" type="text" name="name" placeholder={placeholder} required style={{ maxWidth: 200, padding: "6px 10px", fontSize: 12 }} />
+    <form action={action} className="mb-2.5 flex gap-1.5" style={{ marginLeft: indent + 24 }}>
+      <input
+        className="inp"
+        type="text"
+        name="name"
+        placeholder={placeholder}
+        required
+        style={{ maxWidth: 200, padding: "6px 10px", fontSize: 12 }}
+      />
       <button className="btn btn-primary btn-sm" type="submit">Add</button>
     </form>
   );
 }
-
-const nameStyle: React.CSSProperties = { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15 };
-const subStyle: React.CSSProperties = { fontSize: 12, color: "var(--ink-3)", marginTop: 2 };

@@ -44,20 +44,18 @@ export default async function AdminUsersPage() {
 
   return (
     <div>
-      <h4 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, margin: "0 0 4px" }}>
-        Users &amp; access
-      </h4>
-      <p style={{ fontSize: 13, color: "var(--ink-3)", margin: "0 0 14px" }}>
+      <h4 className="page-title">Users &amp; access</h4>
+      <p className="page-subtitle mb-5">
         Central Admin adds every user and controls which sections they see in
         their sidebar. Retailer scan stays public.
       </p>
 
-      <div className="card" style={{ padding: 18, maxWidth: 520, marginBottom: 20 }}>
-        <h6 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, margin: "0 0 12px" }}>
+      <div className="card mx-auto mb-6 max-w-lg p-5">
+        <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
           Add a user
         </h6>
         <form action={addUser}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 6 }}>
+          <div className="mb-1.5 grid grid-cols-2 gap-3">
             <div className="field">
               <label>Name</label>
               <input className="inp" type="text" name="name" placeholder="Full name" required />
@@ -67,24 +65,24 @@ export default async function AdminUsersPage() {
               <input className="inp" type="tel" name="phone" placeholder="10-digit mobile" maxLength={10} required />
             </div>
           </div>
-          <button className="btn btn-primary" style={{ marginTop: 8 }} type="submit">Add user</button>
-          <p style={{ fontSize: 12, color: "var(--ink-3)", margin: "10px 0 0" }}>
+          <button className="btn btn-primary mt-2" type="submit">Add user</button>
+          <p className="mt-2.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
             Password is the mobile number until first login; assign access below.
           </p>
         </form>
       </div>
 
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 900 }}>
+      <div className="table-wrap">
+        <table className="table" style={{ minWidth: 960 }}>
           <thead>
             <tr>
-              <th style={{ ...th, textAlign: "left" }}>Name</th>
-              <th style={{ ...th, textAlign: "left" }}>Mobile</th>
+              <th>Name</th>
+              <th>Mobile</th>
               {ROLE_COLS.map((c) => (
-                <th key={c.role} style={th}>{c.label}</th>
+                <th key={c.role} className="text-center">{c.label}</th>
               ))}
-              <th style={{ ...th, textAlign: "left" }}>Mapping</th>
-              <th style={th}></th>
+              <th>Mapping</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -93,19 +91,19 @@ export default async function AdminUsersPage() {
               const depotAreas = u.depotId ? (areasByDepot.get(u.depotId) ?? []) : [];
               return (
                 <tr key={u.id}>
-                  <td style={td}>{u.name}</td>
-                  <td style={td}>{u.phone}</td>
+                  <td className="font-semibold whitespace-nowrap">{u.name}</td>
+                  <td className="whitespace-nowrap">{u.phone}</td>
                   {ROLE_COLS.map((c) => (
-                    <td key={c.role} style={{ ...td, textAlign: "center" }}>
+                    <td key={c.role} className="text-center">
                       <RoleCheckbox userId={u.id} role={c.role} checked={roleSet.has(c.role)} />
                     </td>
                   ))}
-                  <td style={{ ...td, minWidth: 220 }}>
+                  <td style={{ minWidth: 220 }}>
                     {roleSet.has("field") && (
                       <Mapping label="Depot (Field)">
                         <DepotSelect userId={u.id} value={u.depotId} options={depotOptions} />
                         {u.depotId && depotAreas.length > 0 && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                          <div className="mt-1 flex flex-wrap gap-1">
                             {depotAreas.map((a) => (
                               <AreaCheckbox key={a.id} userId={u.id} areaId={a.id} name={a.name} checked={userAreaSet.get(u.id)?.has(a.id) ?? false} />
                             ))}
@@ -115,7 +113,7 @@ export default async function AdminUsersPage() {
                     )}
                     {roleSet.has("supervisor") && (
                       <Mapping label="Depots (Supervisor)">
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        <div className="flex flex-wrap gap-1">
                           {allDepots.map((d) => (
                             <DepotCheckbox key={d.id} userId={u.id} depotId={d.id} name={d.name} checked={userDepotSet.get(u.id)?.has(d.id) ?? false} />
                           ))}
@@ -135,13 +133,13 @@ export default async function AdminUsersPage() {
                     {roleSet.has("khq") && <Mapping label="Kanpur HQ"><Text>Company-wide</Text></Mapping>}
                     {roleSet.has("admin") && <Mapping label="Admin"><Text>Company-wide</Text></Mapping>}
                   </td>
-                  <td style={{ ...td, textAlign: "center", whiteSpace: "nowrap" }}>
+                  <td className="text-center whitespace-nowrap">
                     {u.id !== admin.id ? (
                       <form action={removeUser.bind(null, u.id)}>
-                        <button className="link" style={{ fontSize: 12, color: "var(--danger)" }} type="submit">Remove</button>
+                        <button className="link link-danger" type="submit">Remove</button>
                       </form>
                     ) : (
-                      <span style={{ fontSize: 11, color: "var(--ink-3)" }}>you</span>
+                      <span className="text-[11px]" style={{ color: "var(--ink-3)" }}>you</span>
                     )}
                   </td>
                 </tr>
@@ -156,24 +154,13 @@ export default async function AdminUsersPage() {
 
 function Mapping({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ fontSize: 11, color: "var(--ink-3)", marginBottom: 3 }}>{label}</div>
+    <div className="mb-2">
+      <div className="mb-1 text-[11px]" style={{ color: "var(--ink-3)" }}>{label}</div>
       {children}
     </div>
   );
 }
 
 function Text({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 12, color: "var(--ink-2)" }}>{children}</div>;
+  return <div className="text-[12px]" style={{ color: "var(--ink-2)" }}>{children}</div>;
 }
-
-const th: React.CSSProperties = {
-  textAlign: "center",
-  fontSize: 11,
-  letterSpacing: ".06em",
-  textTransform: "uppercase",
-  color: "var(--ink-3)",
-  padding: 10,
-  borderBottom: "1px solid var(--hairline)",
-};
-const td: React.CSSProperties = { padding: "12px 10px", borderBottom: "1px solid var(--hairline-soft)" };

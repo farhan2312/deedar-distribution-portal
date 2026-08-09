@@ -39,7 +39,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col md:flex-row bg-[#faf6ef]">
+    <div className="flex flex-1 flex-col md:flex-row" style={{ background: "var(--bg)" }}>
       {/* Left branding panel */}
       <div className="relative hidden md:block md:w-[60%]">
         <Image
@@ -54,7 +54,10 @@ export default function LoginPage() {
 
       {/* Right form panel */}
       <div className="flex flex-1 items-center justify-center px-6 py-16 md:py-0">
-        <div className="w-full max-w-md rounded-2xl bg-white px-10 py-12 shadow-xl shadow-black/5">
+        <div
+          className="w-full max-w-md rounded-3xl bg-white px-10 py-12 border"
+          style={{ borderColor: "var(--hairline-soft)", boxShadow: "var(--shadow-lg)" }}
+        >
           <div className="flex flex-col items-center text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-xl bg-[#0d3b2e] text-2xl font-bold text-white">
               D

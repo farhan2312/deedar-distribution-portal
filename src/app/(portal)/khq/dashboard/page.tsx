@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { cnfs, counters, depots, states, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { LegendDot } from "@/components/ui/legend-dot";
+import { StatCard } from "@/components/ui/stat-card";
+import { ProgressBar } from "@/components/ui/progress-bar";
 
 const PRODUCT_MIX = [
   { label: "DG10", pct: 38, color: "#7B2FA0" },
@@ -76,95 +79,88 @@ export default async function KhqDashboardPage() {
     { label: "Counters", value: allCounters.length },
     { label: "Field reps", value: fieldReps.length },
     { label: "Packets sold today", value: 35 },
-    { label: "Incentives payable", value: "₹2,960", danger: false },
+    { label: "Incentives payable", value: "₹2,960" },
     { label: "Declining counters", value: decliningCount, danger: true },
   ];
 
   return (
     <div>
-      <h4 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, margin: "0 0 4px" }}>
-        Kanpur HQ — Company Dashboard
-      </h4>
-      <p style={{ fontSize: 13, color: "var(--ink-3)", margin: "0 0 20px" }}>
+      <h4 className="page-title">Kanpur HQ — Company Dashboard</h4>
+      <p className="page-subtitle mb-6">
         Company-wide view across every state, C&amp;F HQ, depot and area.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 14, marginBottom: 24 }}>
+      <div className="mb-6 grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         {stats.map((s) => (
-          <div className="card" style={{ padding: 18 }} key={s.label}>
-            <div className="eyebrow" style={{ fontSize: 11, marginBottom: 6 }}>{s.label}</div>
-            <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 26, color: s.danger ? "var(--danger)" : "var(--ink-1)" }}>
-              {s.value}
-            </div>
-          </div>
+          <StatCard key={s.label} label={s.label} value={s.value} danger={s.danger} />
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24, alignItems: "stretch" }}>
-        <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column" }}>
+      <div className="mb-6 grid items-stretch gap-4 lg:grid-cols-2">
+        <div className="card flex flex-col p-5">
           <h6 style={cardTitle}>Counter health</h6>
           <p style={cardSub}>Overall company health, by counter status</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 18, flex: 1 }}>
-            <div style={{ width: 96, height: 96, borderRadius: "50%", background: health.conic, flex: "none", position: "relative" }}>
-              <div style={{ position: "absolute", inset: 16, background: "var(--bg)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15 }}>
+          <div className="flex flex-1 items-center gap-4.5">
+            <div className="relative h-24 w-24 flex-none rounded-full" style={{ background: health.conic }}>
+              <div
+                className="absolute inset-4 flex items-center justify-center rounded-full text-[15px] font-bold"
+                style={{ background: "var(--bg)", fontFamily: "var(--font-display)" }}
+              >
                 {health.activePct}%
               </div>
             </div>
-            <div style={{ fontSize: 12, color: "var(--ink-2)" }}>
-              <HealthLegend color="var(--success)" label={`Active — ${activeCount}`} />
-              <HealthLegend color="var(--warning)" label={`Dormant — ${dormantCount}`} />
-              <HealthLegend color="var(--danger)" label={`Declining — ${decliningCount}`} last />
+            <div className="space-y-1.5 text-[12px]" style={{ color: "var(--ink-2)" }}>
+              <LegendDot color="var(--success)" label={`Active — ${activeCount}`} square />
+              <LegendDot color="var(--warning)" label={`Dormant — ${dormantCount}`} square />
+              <LegendDot color="var(--danger)" label={`Declining — ${decliningCount}`} square />
             </div>
           </div>
         </div>
 
-        <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column" }}>
+        <div className="card flex flex-col p-5">
           <h6 style={cardTitle}>Counters by state</h6>
           <p style={cardSub}>Footprint by state — scales as new states onboard</p>
           {stateBars.map((s) => (
-            <div key={s.name} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <div style={{ width: 100, fontSize: 13 }}>{s.name}</div>
-              <div style={{ flex: 1, background: "var(--bg-soft)", height: 16, borderRadius: "var(--r-pill)" }}>
-                <div style={{ height: "100%", width: `${s.pct}%`, background: "var(--accent)", borderRadius: "var(--r-pill)" }} />
-              </div>
-              <div style={{ width: 28, textAlign: "right", fontSize: 12, fontWeight: 700 }}>{s.count}</div>
+            <div key={s.name} className="mb-2.5 flex items-center gap-2.5">
+              <div className="w-[100px] text-[13px]" style={{ color: "var(--ink-1)" }}>{s.name}</div>
+              <div className="flex-1"><ProgressBar pct={s.pct} height={16} /></div>
+              <div className="w-7 text-right text-[12px] font-bold" style={{ color: "var(--ink-1)" }}>{s.count}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <h6 style={{ ...cardTitle, marginBottom: 12 }}>Depot performance comparison</h6>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-        <thead>
-          <tr>
-            {["Depot", "Reps", "Counters", "Visits today", "Packets today", "Avg counter time", "Declining"].map((h) => (
-              <th key={h} style={thStyle}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {depotRows.map((d) => (
-            <tr key={d.name}>
-              <td style={{ ...tdStyle, fontWeight: 600 }}>{d.name}</td>
-              <td style={tdStyle}>{d.reps}</td>
-              <td style={tdStyle}>{d.counters}</td>
-              <td style={tdStyle}>{d.visits}</td>
-              <td style={tdStyle}>{d.packets}</td>
-              <td style={tdStyle}>{d.avgCounterTime}h</td>
-              <td style={{ ...tdStyle, color: "var(--danger)" }}>{d.declining}</td>
+      <h6 className="mb-3" style={cardTitle}>Depot performance comparison</h6>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              {["Depot", "Reps", "Counters", "Visits today", "Packets today", "Avg counter time", "Declining"].map((h) => (
+                <th key={h}>{h}</th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {depotRows.map((d) => (
+              <tr key={d.name}>
+                <td className="font-semibold">{d.name}</td>
+                <td>{d.reps}</td>
+                <td>{d.counters}</td>
+                <td>{d.visits}</td>
+                <td>{d.packets}</td>
+                <td>{d.avgCounterTime}h</td>
+                <td style={{ color: "var(--danger)" }}>{d.declining}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      <div style={{ marginTop: 24, maxWidth: 320 }}>
-        <h6 style={{ ...cardTitle, marginBottom: 12 }}>Product mix (MTD)</h6>
-        <div className="card" style={{ padding: 16 }}>
+      <div className="mt-6 max-w-xs">
+        <h6 className="mb-3" style={cardTitle}>Product mix (MTD)</h6>
+        <div className="card space-y-1.5 p-4">
           {PRODUCT_MIX.map((p) => (
-            <div key={p.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, fontSize: 12, color: "var(--ink-2)" }}>
-              <span style={{ width: 9, height: 9, borderRadius: 3, background: p.color, display: "inline-block" }} />
-              {p.label} — {p.pct}%
-            </div>
+            <LegendDot key={p.label} color={p.color} label={`${p.label} — ${p.pct}%`} square />
           ))}
         </div>
       </div>
@@ -172,16 +168,5 @@ export default async function KhqDashboardPage() {
   );
 }
 
-const cardTitle: React.CSSProperties = { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, margin: "0 0 4px" };
+const cardTitle: React.CSSProperties = { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, margin: "0 0 4px", color: "var(--ink-1)" };
 const cardSub: React.CSSProperties = { fontSize: 12, color: "var(--ink-3)", margin: "0 0 12px" };
-const thStyle: React.CSSProperties = { textAlign: "left", fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--ink-3)", padding: 10, borderBottom: "1px solid var(--hairline)" };
-const tdStyle: React.CSSProperties = { padding: "12px 10px", borderBottom: "1px solid var(--hairline-soft)" };
-
-function HealthLegend({ color, label, last }: { color: string; label: string; last?: boolean }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: last ? 0 : 6 }}>
-      <span style={{ width: 9, height: 9, borderRadius: 3, background: color, display: "inline-block" }} />
-      {label}
-    </div>
-  );
-}

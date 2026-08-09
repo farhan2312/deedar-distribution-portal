@@ -26,8 +26,8 @@ export type NewCounterInput = {
   name: string;
   phone: string;
   address: string;
-  depotName: string;
-  areaName: string;
+  depotId: string;
+  areaId: string;
   type: "Kirana" | "Paan" | "Tea Stall" | "Wholesale" | "Vegetable Shop" | "Others";
   gps: string;
 };
@@ -41,18 +41,17 @@ export async function createCounter(input: NewCounterInput) {
     return { ok: false as const, error: "Name and a valid 10-digit mobile are required." };
   }
 
-  const [depot] = await db
-    .select()
-    .from(depots)
-    .where(eq(depots.name, input.depotName))
-    .limit(1);
+  // A field rep belongs to exactly one depot and can only add counters there.
+  // Admin has full visibility and may pick any depot.
+  const isAdmin = user.accessRoles.includes("admin");
+  if (!isAdmin && input.depotId !== user.depot?.id) {
+    return { ok: false as const, error: "You can only add counters in your own depot." };
+  }
+
+  const [depot] = await db.select().from(depots).where(eq(depots.id, input.depotId)).limit(1);
   if (!depot) return { ok: false as const, error: "Unknown depot." };
 
-  const [area] = await db
-    .select()
-    .from(areas)
-    .where(eq(areas.name, input.areaName))
-    .limit(1);
+  const [area] = await db.select().from(areas).where(eq(areas.id, input.areaId)).limit(1);
   if (!area || area.depotId !== depot.id) {
     return { ok: false as const, error: "Area does not belong to the selected depot." };
   }

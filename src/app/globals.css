@@ -1,25 +1,29 @@
 @import "tailwindcss";
 
 /* ============================================================
-   Deedar Drive — Design System (ported from the prototype)
-   Green world: brand green accent, Apple-style neutrals.
-   Font: Manrope (loaded via next/font) with Apple system fallback.
+   Deedar Drive — Design System
+   Warm "cream soda" canvas, deep brand-green ink, crisp white
+   cards with real shadow/border. Component classes are Tailwind
+   (@apply) so every page gets a consistent, professional look
+   with minimal per-page CSS. Accent stays a CSS var so each
+   portal section (field/supervisor/dealer/hq/khq/admin) can
+   re-theme --accent without touching these rules.
    ============================================================ */
 
 :root {
-  /* ---------- ACCENT (green brand) ---------- */
+  /* ---------- ACCENT (green brand, default outside role sections) --- */
   --accent: #7ca081;
   --accent-hover: #5d796f;
   --accent-press: #2a3326;
   --accent-tint: rgba(124, 160, 129, 0.14);
   --gradient-cosmic: linear-gradient(120deg, #7ca081 0%, #5d796f 55%, #2a3326 100%);
 
-  /* ---------- NEUTRALS ---------- */
-  --bg: #ffffff;
-  --bg-soft: #f1f7f2;
+  /* ---------- CANVAS — warm cream soda ---------- */
+  --bg: #fbf3e2;
+  --bg-soft: #f2e9d6;
   --surface: #ffffff;
-  --hairline: #d3e5d6;
-  --hairline-soft: #e7f2e9;
+  --hairline: #e6d9bd;
+  --hairline-soft: #f1e8d3;
 
   /* ---------- INK (text) ---------- */
   --ink-1: #2a3326;
@@ -27,10 +31,10 @@
   --ink-3: #84988a;
   --on-accent: #ffffff;
 
-  /* ---------- ELEVATION ---------- */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.07);
-  --shadow-lg: 0 14px 50px rgba(0, 0, 0, 0.1);
+  /* ---------- ELEVATION (warm-tinted shadow) ---------- */
+  --shadow-sm: 0 1px 2px rgba(58, 44, 20, 0.06), 0 1px 1px rgba(58, 44, 20, 0.04);
+  --shadow-md: 0 8px 24px -4px rgba(58, 44, 20, 0.12), 0 2px 8px rgba(58, 44, 20, 0.06);
+  --shadow-lg: 0 20px 48px -8px rgba(58, 44, 20, 0.18);
 
   /* ---------- SEMANTIC ---------- */
   --success: #1e9e5a;
@@ -49,7 +53,7 @@
   --r-xs: 8px;
   --r-sm: 12px;
   --r-md: 18px;
-  --r-lg: 24px;
+  --r-lg: 22px;
   --r-pill: 980px;
 }
 
@@ -57,134 +61,162 @@
   --font-sans: var(--font-manrope);
 }
 
-body {
-  font-family: var(--font-sans);
-  color: var(--ink-1);
-  background: var(--bg);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    color: var(--ink-1);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-button {
-  font-family: inherit;
-  cursor: pointer;
-}
-::selection {
-  background: rgba(124, 160, 129, 0.22);
-}
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--hairline);
-  border-radius: 8px;
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+  ::selection {
+    background: rgba(124, 160, 129, 0.24);
+  }
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--hairline);
+    border-radius: 8px;
+  }
 }
 
 /* ============================================================
-   Component classes (ported from the prototype markup)
+   Component classes (Tailwind-composed via @apply)
    ============================================================ */
+@layer components {
+  .eyebrow {
+    @apply font-semibold text-[11px] uppercase tracking-wider;
+    color: var(--accent);
+  }
 
-.eyebrow {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
+  .page-title {
+    @apply text-[20px] font-bold tracking-tight;
+    font-family: var(--font-display);
+    color: var(--ink-1);
+  }
+  .page-subtitle {
+    @apply mt-1 text-[13px] leading-relaxed;
+    color: var(--ink-3);
+  }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--hairline-soft);
-  border-radius: var(--r-lg);
-}
+  .card {
+    @apply rounded-2xl bg-white border transition-shadow;
+    border-color: var(--hairline-soft);
+    box-shadow: var(--shadow-sm);
+  }
+  .card-hover:hover {
+    box-shadow: var(--shadow-md);
+  }
 
-.btn {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 15px;
-  border: none;
-  border-radius: var(--r-pill);
-  padding: 12px 24px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
-  white-space: nowrap;
-}
-.btn:active {
-  transform: scale(0.97);
-}
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.btn-primary {
-  background: var(--accent);
-  color: var(--on-accent);
-}
-.btn-primary:hover {
-  background: var(--accent-hover);
-}
-.btn-secondary {
-  background: var(--bg-soft);
-  color: var(--ink-1);
-  border: 1px solid var(--hairline);
-}
-.btn-secondary:hover {
-  background: #eaf2ec;
-}
-.btn-sm {
-  font-size: 13px;
-  padding: 8px 16px;
-}
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-5 py-2.5 text-[14px] font-semibold transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55;
+  }
+  .btn-primary {
+    @apply text-white;
+    background: var(--accent);
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+  .btn-secondary {
+    @apply border bg-white;
+    color: var(--ink-1);
+    border-color: var(--hairline);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--bg-soft);
+  }
+  .btn-sm {
+    @apply px-3.5 py-1.5 text-[12.5px];
+  }
 
-.link {
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--accent);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: none;
-  transition: gap 0.2s;
-}
-.link:hover {
-  gap: 8px;
-}
+  .link {
+    @apply inline-flex items-center gap-1 bg-transparent border-0 p-0 text-[13px] font-semibold transition-colors;
+    color: var(--accent);
+  }
+  .link:hover {
+    color: var(--accent-hover);
+  }
+  .link-danger {
+    color: var(--danger);
+  }
+  .link-danger:hover {
+    opacity: 0.8;
+  }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-.field label {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--ink-1);
-}
+  .field {
+    @apply flex flex-col gap-1.5;
+  }
+  .field label {
+    @apply text-[12.5px] font-semibold;
+    color: var(--ink-1);
+  }
 
-.inp {
-  font-family: var(--font-sans);
-  font-size: 15px;
-  color: var(--ink-1);
-  background: var(--bg-soft);
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  padding: 12px 14px;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
-  width: 100%;
-}
-.inp::placeholder {
-  color: var(--ink-3);
-}
-.inp:focus {
-  background: #fff;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-tint);
+  .inp {
+    @apply w-full rounded-xl border bg-white px-3.5 py-2.5 text-[14px] outline-none transition-shadow;
+    color: var(--ink-1);
+    border-color: var(--hairline);
+  }
+  .inp::placeholder {
+    color: var(--ink-3);
+  }
+  .inp:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3.5px var(--accent-tint);
+  }
+  .inp:disabled {
+    background: var(--bg-soft);
+    color: var(--ink-2);
+  }
+
+  .chip {
+    @apply rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors;
+  }
+
+  /* ---- Tables: bordered, shadowed, colored header ---- */
+  .table-wrap {
+    @apply overflow-hidden overflow-x-auto rounded-2xl border bg-white;
+    border-color: var(--hairline-soft);
+    box-shadow: var(--shadow-sm);
+  }
+  .table {
+    @apply w-full min-w-max border-collapse text-[13.5px];
+  }
+  .table thead tr {
+    background: var(--bg-soft);
+  }
+  .table th {
+    @apply px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider whitespace-nowrap;
+    color: var(--ink-2);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .table td {
+    @apply px-4 py-3 align-middle;
+    border-bottom: 1px solid var(--hairline-soft);
+    color: var(--ink-1);
+  }
+  .table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .table tbody tr {
+    transition: background-color 0.12s ease;
+  }
+  .table tbody tr:hover {
+    background: var(--bg-soft);
+  }
+
+  /* ---- Centered form shell (login-style standalone forms) ---- */
+  .form-shell {
+    @apply mx-auto w-full max-w-md;
+  }
 }
 
 /* ============================================================
