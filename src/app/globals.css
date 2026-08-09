@@ -1,26 +1,228 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Deedar Drive — Design System (ported from the prototype)
+   Green world: brand green accent, Apple-style neutrals.
+   Font: Manrope (loaded via next/font) with Apple system fallback.
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ---------- ACCENT (green brand) ---------- */
+  --accent: #7ca081;
+  --accent-hover: #5d796f;
+  --accent-press: #2a3326;
+  --accent-tint: rgba(124, 160, 129, 0.14);
+  --gradient-cosmic: linear-gradient(120deg, #7ca081 0%, #5d796f 55%, #2a3326 100%);
+
+  /* ---------- NEUTRALS ---------- */
+  --bg: #ffffff;
+  --bg-soft: #f1f7f2;
+  --surface: #ffffff;
+  --hairline: #d3e5d6;
+  --hairline-soft: #e7f2e9;
+
+  /* ---------- INK (text) ---------- */
+  --ink-1: #2a3326;
+  --ink-2: #5d796f;
+  --ink-3: #84988a;
+  --on-accent: #ffffff;
+
+  /* ---------- ELEVATION ---------- */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 14px 50px rgba(0, 0, 0, 0.1);
+
+  /* ---------- SEMANTIC ---------- */
+  --success: #1e9e5a;
+  --warning: #b25e00;
+  --danger: #c7263b;
+  --info: #7c0fa8;
+
+  /* ---------- TYPOGRAPHY ---------- */
+  --font-display: var(--font-manrope), -apple-system, BlinkMacSystemFont,
+    "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+  --font-sans: var(--font-manrope), -apple-system, BlinkMacSystemFont,
+    "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Menlo", monospace;
+
+  /* ---------- RADII ---------- */
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 18px;
+  --r-lg: 24px;
+  --r-pill: 980px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-manrope);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  color: var(--ink-1);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+::selection {
+  background: rgba(124, 160, 129, 0.22);
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--hairline);
+  border-radius: 8px;
+}
+
+/* ============================================================
+   Component classes (ported from the prototype markup)
+   ============================================================ */
+
+.eyebrow {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-lg);
+}
+
+.btn {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 15px;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 12px 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+.btn-secondary {
+  background: var(--bg-soft);
+  color: var(--ink-1);
+  border: 1px solid var(--hairline);
+}
+.btn-secondary:hover {
+  background: #eaf2ec;
+}
+.btn-sm {
+  font-size: 13px;
+  padding: 8px 16px;
+}
+
+.link {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  transition: gap 0.2s;
+}
+.link:hover {
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.field label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink-1);
+}
+
+.inp {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--ink-1);
+  background: var(--bg-soft);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  width: 100%;
+}
+.inp::placeholder {
+  color: var(--ink-3);
+}
+.inp:focus {
+  background: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-tint);
+}
+
+/* ============================================================
+   Animations
+   ============================================================ */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.3);
+  }
+}
+@keyframes toastIn {
+  from {
+    transform: translate(-50%, 16px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
 }

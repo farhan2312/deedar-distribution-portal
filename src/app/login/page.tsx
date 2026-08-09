@@ -29,7 +29,7 @@ export default function LoginPage() {
         setError(data.error || "Something went wrong.");
         return;
       }
-      router.push("/dashboard");
+      router.push(data.redirectTo ?? "/dashboard");
       router.refresh();
     } catch {
       setError("Could not reach the server. Please try again.");

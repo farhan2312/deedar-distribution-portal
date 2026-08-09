@@ -1,7 +1,7 @@
 import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import type { User } from "@/db/schema";
+import type { AccessRole, User } from "@/db/schema";
 
 const COOKIE_NAME = "session";
 const SESSION_DURATION_SECONDS = 7 * 24 * 60 * 60; // 7 days
@@ -14,7 +14,7 @@ const encodedSecret = new TextEncoder().encode(secret);
 
 export type SessionPayload = {
   userId: string;
-  role: User["role"];
+  roles: AccessRole[];
 };
 
 async function encrypt(payload: SessionPayload): Promise<string> {
@@ -36,8 +36,8 @@ async function decrypt(token: string): Promise<SessionPayload | null> {
   }
 }
 
-export async function createSession(user: Pick<User, "id" | "role">) {
-  const token = await encrypt({ userId: user.id, role: user.role });
+export async function createSession(user: Pick<User, "id" | "accessRoles">) {
+  const token = await encrypt({ userId: user.id, roles: user.accessRoles });
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,

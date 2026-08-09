@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { verifyPassword } from "@/lib/auth/password";
+import { defaultPathForRoles } from "@/lib/auth/roles";
 import { createSession } from "@/lib/auth/session";
 
 export async function POST(request: Request) {
@@ -23,5 +24,5 @@ export async function POST(request: Request) {
 
   await createSession(user);
 
-  return Response.json({ ok: true, role: user.role });
+  return Response.json({ ok: true, redirectTo: defaultPathForRoles(user.accessRoles) });
 }
