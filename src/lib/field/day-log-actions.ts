@@ -5,11 +5,12 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { dayLogs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { canAccess } from "@/lib/auth/access";
 import { istDateString } from "@/lib/date";
 
 async function requireField() {
   const user = await getCurrentUser();
-  if (!user?.accessRoles.includes("field")) return null;
+  if (!user || !canAccess(user, "field")) return null;
   return user;
 }
 
