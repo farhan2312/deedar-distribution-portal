@@ -3,26 +3,67 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, counters } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { durationLabel, istDayBounds, istDateString } from "@/lib/date";
+import {
+  getCountersVisitedToday,
+  getScopeDepots,
+  getTeamDayLogs,
+  getTeamReps,
+  getVisitsToday,
+  pickDepot,
+} from "@/lib/supervisor/team";
+import { canAccess } from "@/lib/auth/access";
 import { LegendDot } from "@/components/ui/legend-dot";
-import { STATUS_STYLE, TEAM_REPS, splitPct } from "@/lib/portal/mock";
+import { Notice } from "@/components/ui/notice";
+import { DepotPicker } from "../_components/depot-picker";
 
 const DENSITY_COLORS = ["#1E6B3C", "#7AB88A", "#E0B15C", "#C7263B"];
+// Nominal daily visit target per rep — bars are relative to this.
+const DAILY_TARGET = 50;
 
-export default async function SupervisorAnalyticsPage() {
+export default async function SupervisorAnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ depot?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const depotName = user.supervisedDepots[0]?.name ?? user.depot?.name ?? "your depot";
-  const depotIds = user.supervisedDepots.map((d) => d.id);
-  if (user.depot) depotIds.push(user.depot.id);
+  if (!canAccess(user, "supervisor")) {
+    return <Notice title="Analytics">You don&apos;t have Supervisor access.</Notice>;
+  }
 
-  // Real retail density: counters per area in the supervised depots.
-  const areaRows = depotIds.length
-    ? await db
-        .select({ area: areas.name, status: counters.status })
-        .from(counters)
-        .innerJoin(areas, eq(areas.id, counters.areaId))
-        .where(inArray(counters.depotId, depotIds))
-    : [];
+  const { depot: requestedDepot } = await searchParams;
+  const depots = await getScopeDepots(user);
+  const depot = pickDepot(depots, requestedDepot);
+  const depotIds = depot ? [depot.id] : depots.map((d) => d.id);
+
+  const reps = await getTeamReps(user, depot?.id);
+  const repIds = reps.map((r) => r.id);
+  const today = istDateString();
+  const bounds = istDayBounds();
+
+  const [dayLogs, visitMap, coveredToday, areaRows] = await Promise.all([
+    getTeamDayLogs(repIds, today),
+    getVisitsToday(repIds, bounds),
+    getCountersVisitedToday(repIds, bounds),
+    depotIds.length
+      ? db
+          .select({ area: areas.name, status: counters.status })
+          .from(counters)
+          .innerJoin(areas, eq(areas.id, counters.areaId))
+          .where(inArray(counters.depotId, depotIds))
+      : Promise.resolve([]),
+  ]);
+
+  const activeReps = repIds.filter((id) => dayLogs.get(id)?.startAt).length;
+  const openDays = repIds.filter((id) => {
+    const l = dayLogs.get(id);
+    return l?.startAt && !l.endAt;
+  }).length;
+  const totalVisits = [...visitMap.values()].reduce((s, v) => s + v.count, 0);
+  const declining = areaRows.filter((r) => r.status === "declining").length;
+
+  // Retail density: counters per area in scope.
   const byArea = new Map<string, number>();
   for (const r of areaRows) byArea.set(r.area, (byArea.get(r.area) ?? 0) + 1);
   const densityTiles = [...byArea.entries()].map(([area, count]) => ({
@@ -30,24 +71,26 @@ export default async function SupervisorAnalyticsPage() {
     color: DENSITY_COLORS[count >= 4 ? 0 : count >= 2 ? 1 : count >= 1 ? 2 : 3],
   }));
 
-  const totalVisits = TEAM_REPS.reduce((s, r) => s + r.visitsToday, 0);
-  const totalCounterHrs = TEAM_REPS.reduce((s, r) => s + r.counterTimeHrs, 0);
+  const scopeLabel = depot?.name ?? (depots.length > 1 ? "all depots" : depots[0]?.name ?? "your depot");
   const kpis = [
-    { value: String(TEAM_REPS.length), label: "Active reps", trend: "on shift", trendColor: "var(--ink-3)" },
-    { value: String(totalVisits), label: "Visits today", trend: "+12% vs avg", trendColor: "var(--success)" },
-    { value: `${totalCounterHrs.toFixed(1)}h`, label: "Counter time", trend: "steady", trendColor: "var(--ink-3)" },
-    { value: String(areaRows.length), label: "Counters covered", trend: "in depot", trendColor: "var(--ink-3)" },
-    { value: `${areaRows.filter((r) => r.status === "declining").length}`, label: "Declining", trend: "needs attention", trendColor: "var(--danger)" },
-    { value: "96%", label: "Scheme UPI", trend: "auto-paid", trendColor: "var(--success)" },
+    { value: `${activeReps}/${reps.length}`, label: "Active reps", trend: "clocked in today", trendColor: "var(--ink-3)" },
+    { value: String(totalVisits), label: "Visits today", trend: "team total", trendColor: "var(--success)" },
+    { value: String(coveredToday.size), label: "Counters covered", trend: "distinct today", trendColor: "var(--ink-3)" },
+    { value: String(areaRows.length), label: "Counters in scope", trend: "in depot", trendColor: "var(--ink-3)" },
+    { value: String(declining), label: "Declining", trend: "needs attention", trendColor: "var(--danger)" },
+    { value: String(openDays), label: "Open days", trend: openDays ? "not clocked out" : "all closed", trendColor: openDays ? "var(--warning)" : "var(--success)" },
   ];
 
   return (
     <div>
-      <div className="mb-5 flex items-baseline justify-between">
+      <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
         <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-          Analytics — {depotName}
+          Analytics — {scopeLabel}
         </h4>
-        <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>Scoped to your assigned depot/area</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>Reps who report to you</span>
+          {depots.length > 1 && <DepotPicker options={depots} value={depot?.id ?? "all"} />}
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -65,35 +108,34 @@ export default async function SupervisorAnalyticsPage() {
       <div className="grid items-start gap-5 lg:grid-cols-[1.3fr_1fr]">
         <div className="card p-5">
           <h6 className="mb-3.5 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Time on counter vs travel vs idle (today)
+            Visits today by rep
           </h6>
-          {TEAM_REPS.map((r) => {
-            const s = splitPct(r);
-            const st = STATUS_STYLE[r.status];
-            return (
-              <div key={r.name} className="py-2.5" style={{ borderBottom: "1px solid var(--hairline-soft)" }}>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <div className="text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>{r.name}</div>
-                  <span className="chip" style={{ background: st.bg, color: st.color, borderColor: "transparent" }}>
-                    {st.label}
-                  </span>
+          {reps.length === 0 ? (
+            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>No reps report to you yet.</p>
+          ) : (
+            reps.map((r) => {
+              const v = visitMap.get(r.id);
+              const log = dayLogs.get(r.id);
+              const pct = Math.min(100, Math.round(((v?.count ?? 0) / DAILY_TARGET) * 100));
+              const onJob = durationLabel(log?.startAt ?? null, log?.endAt ?? new Date());
+              return (
+                <div key={r.id} className="py-2.5" style={{ borderBottom: "1px solid var(--hairline-soft)" }}>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <div className="text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>{r.name}</div>
+                    <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
+                      {v?.count ?? 0}/{DAILY_TARGET} visits
+                    </span>
+                  </div>
+                  <div className="flex h-2 overflow-hidden rounded-full" style={{ background: "var(--hairline-soft)" }}>
+                    <div style={{ width: `${pct}%`, background: "var(--accent)" }} />
+                  </div>
+                  <div className="mt-1.5 text-[11px]" style={{ color: "var(--ink-3)" }}>
+                    {v?.counters ?? 0} counters covered · {log?.startAt ? `${onJob} on job` : "not started"}
+                  </div>
                 </div>
-                <div className="flex h-2 overflow-hidden rounded-full" style={{ background: "var(--hairline-soft)" }}>
-                  <div style={{ width: `${s.counterPct}%`, background: "var(--accent)" }} />
-                  <div style={{ width: `${s.travelPct}%`, background: "#8CB4C9" }} />
-                  <div style={{ width: `${s.idlePct}%`, background: "#E0B15C" }} />
-                </div>
-                <div className="mt-1.5 text-[11px]" style={{ color: "var(--ink-3)" }}>
-                  {r.visitsToday}/{r.target} visits · {r.counterTimeHrs}h on counter
-                </div>
-              </div>
-            );
-          })}
-          <div className="mt-3 flex gap-4">
-            <LegendDot color="var(--accent)" label="Counter time" square />
-            <LegendDot color="#8CB4C9" label="Travel" square />
-            <LegendDot color="#E0B15C" label="Idle" square />
-          </div>
+              );
+            })
+          )}
         </div>
 
         <div className="card p-5">

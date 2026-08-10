@@ -179,6 +179,17 @@ export async function setUserCnf(userId: string, formData: FormData) {
   revalidatePath("/admin/users");
 }
 
+/** Field rep → which Supervisor (SO) they report to. */
+export async function setUserReportsTo(userId: string, formData: FormData) {
+  await requireAdmin();
+  const reportsToUserId = String(formData.get("reportsToUserId") ?? "") || null;
+  await db
+    .update(users)
+    .set({ reportsToUserId, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+  revalidatePath("/admin/users");
+}
+
 /** Multi-scope: field → which areas (within their one depot) they cover. */
 export async function toggleUserArea(userId: string, areaId: string) {
   await requireAdmin();

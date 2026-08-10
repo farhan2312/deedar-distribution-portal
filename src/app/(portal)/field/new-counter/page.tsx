@@ -3,13 +3,14 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, cnfs, depots } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { canAccess } from "@/lib/auth/access";
 import { Notice } from "@/components/ui/notice";
 import { NewCounterWizard } from "./wizard";
 
 export default async function NewCounterPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!user.accessRoles.includes("field")) {
+  if (!canAccess(user, "field")) {
     return <Notice title="New Counter">You don&apos;t have Field Salesman access.</Notice>;
   }
 

@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { areas, cnfs, depots, userAreas, userDepots, users, type AccessRole } from "@/db/schema";
 import { addUser, removeUser } from "@/lib/admin/actions";
 import { requireAdmin } from "@/lib/admin/guard";
-import { AreaCheckbox, CnfSelect, DepotCheckbox, DepotSelect, RoleCheckbox } from "./controls";
+import { AreaCheckbox, CnfSelect, DepotCheckbox, DepotSelect, RoleCheckbox, SupervisorSelect } from "./controls";
 
 const ROLE_COLS: { role: AccessRole; label: string }[] = [
   { role: "field", label: "Field" },
@@ -28,6 +28,10 @@ export default async function AdminUsersPage() {
 
   const depotOptions = allDepots.map((d) => ({ id: d.id, name: d.name }));
   const cnfOptions = allCnfs.map((c) => ({ id: c.id, name: c.name }));
+  // A field rep reports to a Supervisor (SO) — only supervisors are options.
+  const supervisorOptions = allUsers
+    .filter((u) => u.accessRoles.includes("supervisor"))
+    .map((u) => ({ id: u.id, name: u.name }));
   const areasByDepot = new Map<string, typeof allAreas>();
   for (const a of allAreas) areasByDepot.set(a.depotId, [...(areasByDepot.get(a.depotId) ?? []), a]);
 
@@ -99,17 +103,32 @@ export default async function AdminUsersPage() {
                     </td>
                   ))}
                   <td style={{ minWidth: 220 }}>
-                    {roleSet.has("field") && (
-                      <Mapping label="Depot (Field)">
-                        <DepotSelect userId={u.id} value={u.depotId} options={depotOptions} />
-                        {u.depotId && depotAreas.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {depotAreas.map((a) => (
-                              <AreaCheckbox key={a.id} userId={u.id} areaId={a.id} name={a.name} checked={userAreaSet.get(u.id)?.has(a.id) ?? false} />
-                            ))}
-                          </div>
-                        )}
+                    {roleSet.has("admin") ? (
+                      <Mapping label="Admin">
+                        <Text>Full access — every section. No depot / C&amp;F / area needed.</Text>
                       </Mapping>
+                    ) : (
+                    <>
+                    {roleSet.has("field") && (
+                      <>
+                        <Mapping label="Depot (Field)">
+                          <DepotSelect userId={u.id} value={u.depotId} options={depotOptions} />
+                          {u.depotId && depotAreas.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {depotAreas.map((a) => (
+                                <AreaCheckbox key={a.id} userId={u.id} areaId={a.id} name={a.name} checked={userAreaSet.get(u.id)?.has(a.id) ?? false} />
+                              ))}
+                            </div>
+                          )}
+                        </Mapping>
+                        <Mapping label="Reports to (SO)">
+                          <SupervisorSelect
+                            userId={u.id}
+                            value={u.reportsToUserId}
+                            options={supervisorOptions.filter((s) => s.id !== u.id)}
+                          />
+                        </Mapping>
+                      </>
                     )}
                     {roleSet.has("supervisor") && (
                       <Mapping label="Depots (Supervisor)">
@@ -131,7 +150,8 @@ export default async function AdminUsersPage() {
                       </Mapping>
                     )}
                     {roleSet.has("khq") && <Mapping label="Kanpur HQ"><Text>Company-wide</Text></Mapping>}
-                    {roleSet.has("admin") && <Mapping label="Admin"><Text>Company-wide</Text></Mapping>}
+                    </>
+                    )}
                   </td>
                   <td className="text-center whitespace-nowrap">
                     {u.id !== admin.id ? (

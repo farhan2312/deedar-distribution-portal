@@ -5,6 +5,7 @@ import type { AccessRole } from "@/db/schema";
 import {
   setUserCnf,
   setUserDepot,
+  setUserReportsTo,
   toggleAccessRole,
   toggleUserArea,
   toggleUserDepot,
@@ -124,6 +125,37 @@ export function CnfSelect({
       }}
     >
       <option value="">Select C&amp;F HQ</option>
+      {options.map((o) => (
+        <option key={o.id} value={o.id}>{o.name}</option>
+      ))}
+    </select>
+  );
+}
+
+/** Supervisor (SO) dropdown — which SO a field rep reports to. */
+export function SupervisorSelect({
+  userId,
+  value,
+  options,
+}: {
+  userId: string;
+  value: string | null;
+  options: { id: string; name: string }[];
+}) {
+  const [pending, start] = useTransition();
+  return (
+    <select
+      className="inp"
+      style={{ padding: "5px 8px", fontSize: 12 }}
+      defaultValue={value ?? ""}
+      disabled={pending}
+      onChange={(e) => {
+        const fd = new FormData();
+        fd.set("reportsToUserId", e.target.value);
+        start(() => setUserReportsTo(userId, fd));
+      }}
+    >
+      <option value="">Select supervisor</option>
       {options.map((o) => (
         <option key={o.id} value={o.id}>{o.name}</option>
       ))}

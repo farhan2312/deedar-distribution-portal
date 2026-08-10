@@ -8,14 +8,26 @@ import {
   type DuplicateMatch,
   type NewCounterInput,
 } from "@/lib/field/actions";
+import {
+  checkDuplicateForSupervisor,
+  createCounterBySupervisor,
+} from "@/lib/supervisor/actions";
+import { GpsCapture } from "../_components/gps-capture";
 
 export type AreaOption = { id: string; name: string };
 export type DepotOption = { id: string; name: string; cnfId: string; areas: AreaOption[] };
 export type CnfOption = { id: string; name: string };
 
-type WizardProps =
+/** "field" (default) uses field actions and returns to the beat; "supervisor"
+ * uses SO actions and returns to Assign Beat so the new counter can be handed
+ * out right away. */
+export type WizardVariant = "field" | "supervisor";
+
+type WizardMode =
   | { mode: "locked"; depot: { id: string; name: string }; cnf: { name: string }; areas: AreaOption[] }
   | { mode: "open"; cnfs: CnfOption[]; depots: DepotOption[] };
+
+type WizardProps = WizardMode & { variant?: WizardVariant };
 
 const COUNTER_TYPES: NewCounterInput["type"][] = [
   "Kirana",
@@ -30,6 +42,9 @@ type Step = "duplicate" | "details" | "review";
 
 export function NewCounterWizard(props: WizardProps) {
   const router = useRouter();
+  const isSupervisor = props.variant === "supervisor";
+  const backHref = isSupervisor ? "/supervisor/assign-beat" : "/field/beat";
+  const doneHref = isSupervisor ? "/supervisor/assign-beat" : "/field/beat";
   const [step, setStep] = useState<Step>("duplicate");
   const [draft, setDraft] = useState({
     name: "",
@@ -69,7 +84,9 @@ export function NewCounterWizard(props: WizardProps) {
       return;
     }
     setBusy(true);
-    const match = await checkDuplicate(draft.phone);
+    const match = isSupervisor
+      ? await checkDuplicateForSupervisor(draft.phone)
+      : await checkDuplicate(draft.phone);
     setBusy(false);
     setDup(match);
     if (match) {
@@ -91,7 +108,7 @@ export function NewCounterWizard(props: WizardProps) {
   async function submit() {
     setError("");
     setBusy(true);
-    const res = await createCounter({
+    const payload = {
       name: draft.name,
       phone: draft.phone,
       address: draft.address,
@@ -99,13 +116,16 @@ export function NewCounterWizard(props: WizardProps) {
       areaId: draft.areaId,
       type: draft.type as NewCounterInput["type"],
       gps: draft.gps,
-    });
+    };
+    const res = isSupervisor
+      ? await createCounterBySupervisor(payload)
+      : await createCounter(payload);
     setBusy(false);
     if (!res.ok) {
       setError(res.error);
       return;
     }
-    router.push("/field/beat");
+    router.push(doneHref);
     router.refresh();
   }
 
@@ -117,7 +137,7 @@ export function NewCounterWizard(props: WizardProps) {
         style={{ background: "var(--gradient-cosmic)", color: "#fff" }}
       >
         <button
-          onClick={() => router.push("/field/beat")}
+          onClick={() => router.push(backHref)}
           aria-label="Back"
           className="flex h-9 w-9 flex-none items-center justify-center rounded-full border-0 text-white"
           style={{ background: "rgba(255,255,255,.16)" }}
@@ -299,14 +319,7 @@ export function NewCounterWizard(props: WizardProps) {
               <label className="mb-2.5 block text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>
                 GPS Coordinates *
               </label>
-              <button
-                className="btn btn-primary w-full justify-center py-3"
-                onClick={() =>
-                  setDraft({ ...draft, gps: `25.${700 + Math.floor(Math.random() * 99)}, 76.${100 + Math.floor(Math.random() * 99)}` })
-                }
-              >
-                {draft.gps ? `Captured · ${draft.gps}` : "Capture Current Location"}
-              </button>
+              <GpsCapture value={draft.gps} onCapture={(gps) => setDraft({ ...draft, gps })} />
             </div>
             {error && <ErrorText>{error}</ErrorText>}
             <div className="flex gap-3">

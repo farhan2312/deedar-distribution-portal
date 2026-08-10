@@ -1,80 +1,101 @@
 import { redirect } from "next/navigation";
+import { and, desc, inArray, lt } from "drizzle-orm";
+import { db } from "@/db";
+import { dayLogs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
-import { PageHeader } from "@/components/ui/page-header";
-import { TEAM_DAY_LOG_HISTORY, TEAM_DAY_LOG_TODAY } from "@/lib/portal/mock";
+import { durationLabel, formatISTDate, formatISTTime, istDateString } from "@/lib/date";
+import {
+  getScopeDepots,
+  getTeamDayLogs,
+  getTeamReps,
+  pickDepot,
+} from "@/lib/supervisor/team";
+import { canAccess } from "@/lib/auth/access";
+import { Notice } from "@/components/ui/notice";
+import { DepotPicker } from "../_components/depot-picker";
+import { dayState, DayLogTables, type HistoryRow, type TodayRow } from "../_components/day-log-tables";
 
-export default async function SupervisorDayLogPage() {
+export default async function SupervisorDayLogPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ depot?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const depotName = user.supervisedDepots[0]?.name ?? user.depot?.name ?? "your depot";
+  if (!canAccess(user, "supervisor")) {
+    return <Notice title="Day Log">You don&apos;t have Supervisor access.</Notice>;
+  }
+  const isAdmin = user.accessRoles.includes("admin");
+
+  const { depot: requestedDepot } = await searchParams;
+  const depots = await getScopeDepots(user);
+  const depot = pickDepot(depots, requestedDepot);
+
+  const reps = await getTeamReps(user, depot?.id);
+  const repIds = reps.map((r) => r.id);
+  const repName = new Map(reps.map((r) => [r.id, r.name]));
+
+  const today = istDateString();
+  const [todayLogs, historyRows] = await Promise.all([
+    getTeamDayLogs(repIds, today),
+    repIds.length
+      ? db
+          .select()
+          .from(dayLogs)
+          .where(and(inArray(dayLogs.userId, repIds), lt(dayLogs.logDate, today)))
+          .orderBy(desc(dayLogs.logDate))
+          .limit(80)
+      : Promise.resolve([]),
+  ]);
+
+  const todayRows: TodayRow[] = reps.map((r) => {
+    const log = todayLogs.get(r.id);
+    return {
+      key: r.id,
+      repName: r.name,
+      startLabel: formatISTTime(log?.startAt),
+      endLabel: formatISTTime(log?.endAt),
+      onJobLabel: durationLabel(log?.startAt ?? null, log?.endAt ?? null),
+      state: dayState(log?.startAt ?? null, log?.endAt ?? null),
+      forced: !!log?.endForced,
+    };
+  });
+  const history: HistoryRow[] = historyRows.map((h) => ({
+    key: h.id,
+    repName: repName.get(h.userId) ?? "—",
+    dateLabel: formatISTDate(h.logDate),
+    startLabel: formatISTTime(h.startAt),
+    endLabel: formatISTTime(h.endAt),
+    onJobLabel: durationLabel(h.startAt, h.endAt),
+    state: dayState(h.startAt, h.endAt),
+    forced: !!h.endForced,
+  }));
+
+  const scopeLabel = depot?.name ?? (depots.length > 1 ? "all depots" : depots[0]?.name ?? "your depot");
 
   return (
     <div>
-      <PageHeader
-        title={`Day Log — ${depotName}`}
-        subtitle="Visit start/end time recorded by every salesman active in this area."
-      />
-
-      <SectionLabel>Today</SectionLabel>
-      <div className="table-wrap mb-8">
-        <table className="table">
-          <thead>
-            <tr>
-              {["Salesman", "Start time", "End time", "On Job", "Status"].map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {TEAM_DAY_LOG_TODAY.map((d) => (
-              <tr key={d.name}>
-                <td className="font-semibold">{d.name}</td>
-                <td>{d.start}</td>
-                <td>{d.end}</td>
-                <td>{d.onJob}</td>
-                <td>
-                  <span className="chip" style={{ background: "rgba(30,158,90,.12)", color: "#1E9E5A", borderColor: "transparent" }}>
-                    {d.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+            Day Log — {scopeLabel}
+          </h4>
+          <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
+            {isAdmin
+              ? "Clock-in / clock-out for every field salesman, company-wide."
+              : "Clock-in / clock-out for every salesman who reports to you."}
+          </p>
+        </div>
+        {depots.length > 1 && <DepotPicker options={depots} value={depot?.id ?? "all"} />}
       </div>
 
-      <SectionLabel>Full history — all salesmen</SectionLabel>
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              {["Salesman", "Date", "Start", "End", "On Job", "Status"].map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {TEAM_DAY_LOG_HISTORY.map((h, i) => (
-              <tr key={i}>
-                <td>{h.name}</td>
-                <td>{h.date}</td>
-                <td>{h.start}</td>
-                <td>{h.end}</td>
-                <td>{h.onJob}</td>
-                <td>{h.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {reps.length === 0 ? (
+        <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
+          {isAdmin ? "No field reps yet." : `No field reps report to you${depot ? " in this depot" : ""} yet.`}
+        </p>
+      ) : (
+        <DayLogTables today={todayRows} history={history} />
+      )}
     </div>
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <h6 className="mb-2 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>
-      {children}
-    </h6>
   );
 }

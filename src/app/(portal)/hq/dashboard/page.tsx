@@ -67,7 +67,7 @@ export default async function HqDashboardPage({
 
   const counterRows = depotIds.length
     ? await db
-        .select({ id: counters.id, status: counters.status, depotId: counters.depotId, name: counters.name, area: areas.name, stock: counters.stock, lastVisit: counters.lastVisitAt })
+        .select({ id: counters.id, status: counters.status, depotId: counters.depotId, name: counters.name, area: areas.name, lastVisit: counters.lastVisitAt })
         .from(counters)
         .innerJoin(areas, eq(areas.id, counters.areaId))
         .where(inArray(counters.depotId, depotIds))
@@ -190,7 +190,7 @@ export default async function HqDashboardPage({
           <table className="table">
             <thead>
               <tr>
-                {["Counter", "Area", "Stock stuck at", "Last visit"].map((h) => (
+                {["Counter", "Area", "Last visit"].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -200,7 +200,6 @@ export default async function HqDashboardPage({
                 <tr key={d.id}>
                   <td className="font-semibold">{d.name}</td>
                   <td>{d.area}</td>
-                  <td>{d.stock}</td>
                   <td>{d.lastVisit ? new Date(d.lastVisit).toISOString().slice(0, 10) : "—"}</td>
                 </tr>
               ))}

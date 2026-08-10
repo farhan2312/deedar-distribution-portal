@@ -21,7 +21,9 @@ type PortalShellProps = {
 export function PortalShell({ userName, accessRoles, children }: PortalShellProps) {
   const pathname = usePathname();
   const roleSet = new Set(accessRoles);
-  const sections = NAV_SECTIONS.filter((s) => roleSet.has(s.role));
+  // Admin is unrestricted: it sees every sidebar section, not just "admin".
+  const isAdmin = roleSet.has("admin");
+  const sections = NAV_SECTIONS.filter((s) => isAdmin || roleSet.has(s.role));
   const section = sectionForPath(pathname);
 
   return (

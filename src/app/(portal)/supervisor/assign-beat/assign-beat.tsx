@@ -1,16 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { istDateString } from "@/lib/date";
+import { assignBeat } from "@/lib/supervisor/actions";
 
 export type AssignCounter = {
   id: string;
   name: string;
   type: string;
   area: string;
-  stock: number;
+  depotId: string;
   trend: "Increasing" | "Flat" | "Declining";
 };
-export type RepOption = { id: string; name: string };
+export type RepOption = { id: string; name: string; depotId: string | null };
+export type AssignmentSummary = { repUserId: string; repName: string; beatDate: string; count: number };
 
 const TREND_STYLE: Record<AssignCounter["trend"], { bg: string; color: string }> = {
   Increasing: { bg: "rgba(30,158,90,.12)", color: "#1E9E5A" },
@@ -24,10 +28,14 @@ const TREND_OPTIONS: (AssignCounter["trend"] | "all")[] = ["all", "Increasing", 
 function dateOptions() {
   const out: { value: string; label: string }[] = [];
   for (let i = 1; i <= 7; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    const value = d.toISOString().slice(0, 10);
-    const label = d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+    const instant = new Date(Date.now() + i * 24 * 60 * 60 * 1000);
+    const value = istDateString(instant);
+    const label = instant.toLocaleDateString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
     out.push({ value, label });
   }
   return out;
@@ -37,11 +45,14 @@ export function AssignBeat({
   counters,
   reps,
   areaOptions,
+  initialAssignments,
 }: {
   counters: AssignCounter[];
   reps: RepOption[];
   areaOptions: string[];
+  initialAssignments: AssignmentSummary[];
 }) {
+  const router = useRouter();
   const dates = useMemo(() => dateOptions(), []);
   const [date, setDate] = useState(dates[0].value);
   const [repId, setRepId] = useState(reps[0]?.id ?? "");
@@ -51,11 +62,13 @@ export function AssignBeat({
   const [filterType, setFilterType] = useState("all");
   const [filterTrend, setFilterTrend] = useState<(typeof TREND_OPTIONS)[number]>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [assignments, setAssignments] = useState<
-    { rep: string; count: number; scopeLabel: string; date: string }[]
-  >([]);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startAssign] = useTransition();
+
+  const repDepotId = reps.find((r) => r.id === repId)?.depotId ?? null;
 
   const candidates = counters.filter((c) => {
+    if (repDepotId && c.depotId !== repDepotId) return false;
     if (scope === "area" && area && c.area !== area) return false;
     if (filterType !== "all" && c.type !== filterType) return false;
     if (filterTrend !== "all" && c.trend !== filterTrend) return false;
@@ -66,6 +79,7 @@ export function AssignBeat({
   const allSelected = candidates.length > 0 && candidates.every((c) => selected.has(c.id));
   const repName = reps.find((r) => r.id === repId)?.name ?? "";
   const dateLabel = dates.find((d) => d.value === date)?.label ?? date;
+  const assignmentsForDate = initialAssignments.filter((a) => a.beatDate === date);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -88,12 +102,26 @@ export function AssignBeat({
     });
   }
   function assign() {
-    if (selected.size === 0) return;
-    setAssignments((prev) => [
-      { rep: repName, count: selected.size, scopeLabel: scope === "area" ? `Area: ${area}` : "Whole depot", date: dateLabel },
-      ...prev,
-    ]);
-    setSelected(new Set());
+    if (selected.size === 0 || !repId) return;
+    setError(null);
+    const counterIds = [...selected];
+    startAssign(async () => {
+      const result = await assignBeat(repId, counterIds, date);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setSelected(new Set());
+      router.refresh();
+    });
+  }
+
+  if (reps.length === 0) {
+    return (
+      <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
+        No field reps in your supervised depots yet.
+      </p>
+    );
   }
 
   return (
@@ -118,7 +146,14 @@ export function AssignBeat({
           </div>
           <div className="field">
             <label>Rep</label>
-            <select className="inp" value={repId} onChange={(e) => setRepId(e.target.value)}>
+            <select
+              className="inp"
+              value={repId}
+              onChange={(e) => {
+                setRepId(e.target.value);
+                setSelected(new Set());
+              }}
+            >
               {reps.map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
               ))}
@@ -197,7 +232,6 @@ export function AssignBeat({
                       <div className="font-semibold" style={{ color: "var(--ink-1)" }}>{c.name}</div>
                       <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>{c.type} · {c.area}</div>
                     </td>
-                    <td className="text-right whitespace-nowrap">Stock: {c.stock}</td>
                     <td className="text-right">
                       <span className="chip whitespace-nowrap" style={{ background: ts.bg, color: ts.color, borderColor: "transparent" }}>
                         {c.trend}
@@ -211,23 +245,29 @@ export function AssignBeat({
         )}
       </div>
 
-      <button className="btn btn-primary" onClick={assign} disabled={selected.size === 0}>
-        Assign {selected.size} counters to {repName} — {dateLabel}
+      {error && (
+        <p className="mb-3 text-[13px] font-semibold" style={{ color: "#C7263B" }}>
+          {error}
+        </p>
+      )}
+
+      <button className="btn btn-primary" onClick={assign} disabled={selected.size === 0 || pending}>
+        {pending ? "Assigning…" : `Assign ${selected.size} counters to ${repName} — ${dateLabel}`}
       </button>
 
       <h4 className="mt-8 mb-3 text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
         Assignments for {dateLabel}
       </h4>
-      {assignments.length === 0 ? (
+      {assignmentsForDate.length === 0 ? (
         <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>No beats scheduled yet.</p>
       ) : (
         <div className="space-y-2.5">
-          {assignments.map((row, i) => (
-            <div key={i} className="card flex items-center justify-between p-4">
+          {assignmentsForDate.map((row) => (
+            <div key={`${row.repUserId}__${row.beatDate}`} className="card flex items-center justify-between p-4">
               <div>
-                <div className="text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>{row.rep}</div>
+                <div className="text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>{row.repName}</div>
                 <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
-                  {row.count} counters · {row.scopeLabel} · {row.date}
+                  {row.count} counter{row.count === 1 ? "" : "s"} · {dateLabel}
                 </div>
               </div>
             </div>

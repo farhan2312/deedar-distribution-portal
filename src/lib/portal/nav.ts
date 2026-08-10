@@ -33,7 +33,8 @@ export type NavIcon =
   | "building"
   | "globe"
   | "sitemap"
-  | "userCog";
+  | "userCog"
+  | "alert";
 
 export type NavItem = { href: string; label: string; icon: NavIcon };
 
@@ -61,7 +62,9 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/supervisor/map", label: "Live map", icon: "mapPin" },
       { href: "/supervisor/analytics", label: "Analytics", icon: "barChart" },
       { href: "/supervisor/day-log", label: "Day Log", icon: "calendar" },
+      { href: "/supervisor/exceptions", label: "Exceptions", icon: "alert" },
       { href: "/supervisor/assign-beat", label: "Assign Beat", icon: "users" },
+      { href: "/supervisor/new-counter", label: "New Counter", icon: "plusCircle" },
     ],
   },
   {
