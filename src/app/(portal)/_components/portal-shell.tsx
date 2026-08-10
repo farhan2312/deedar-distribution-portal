@@ -10,6 +10,7 @@ import {
   sectionForPath,
   themeVars,
 } from "@/lib/portal/nav";
+import { NavIconView } from "./nav-icons";
 
 type PortalShellProps = {
   userName: string;
@@ -24,16 +25,16 @@ export function PortalShell({ userName, accessRoles, children }: PortalShellProp
   const section = sectionForPath(pathname);
 
   return (
-    <div className="flex flex-1" style={{ background: "var(--bg)" }}>
-      {/* Sidebar */}
+    <div className="flex h-screen" style={{ background: "var(--bg)" }}>
+      {/* Sidebar — header and footer stay fixed, only the nav list scrolls */}
       <aside
-        className="flex w-[250px] flex-none flex-col overflow-y-auto py-5"
+        className="flex w-[250px] flex-none flex-col overflow-hidden py-5"
         style={{
           background: "#0A0A0A",
           boxShadow: "4px 0 24px rgba(30,20,5,.14)",
         }}
       >
-        <div className="flex items-center gap-2.5 px-5 pb-4">
+        <div className="flex flex-none items-center gap-2.5 px-5 pb-4">
           <span
             className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-[15px] font-bold text-white"
             style={{ background: "var(--accent)" }}
@@ -53,7 +54,7 @@ export function PortalShell({ userName, accessRoles, children }: PortalShellProp
           </div>
         </div>
 
-        <nav className="flex-1">
+        <nav className="sidebar-nav min-h-0 flex-1 overflow-y-auto">
           {sections.map((sec) => {
             const theme = ROLE_THEME[sec.role];
             return (
@@ -77,13 +78,14 @@ export function PortalShell({ userName, accessRoles, children }: PortalShellProp
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="mx-3 my-px block rounded-[12px] px-3.5 py-2 text-[14px] font-semibold transition-all"
+                      className="mx-3 my-px flex items-center gap-2.5 rounded-[12px] px-3.5 py-2 text-[14px] font-semibold transition-all"
                       style={{
                         background: active ? theme.bg : "transparent",
                         color: active ? theme.strong : theme.muted,
                         boxShadow: active ? "0 1px 3px rgba(0,0,0,.12)" : "none",
                       }}
                     >
+                      <NavIconView icon={item.icon} className="h-4 w-4 flex-none" />
                       {item.label}
                     </Link>
                   );
@@ -94,7 +96,7 @@ export function PortalShell({ userName, accessRoles, children }: PortalShellProp
         </nav>
 
         <div
-          className="mt-3 flex items-center gap-2.5 px-5 pt-3.5"
+          className="mt-3 flex flex-none items-center gap-2.5 px-5 pt-3.5"
           style={{ borderTop: "1px solid rgba(255,255,255,.1)" }}
         >
           <span

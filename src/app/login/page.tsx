@@ -53,9 +53,9 @@ export default function LoginPage() {
       </div>
 
       {/* Right form panel */}
-      <div className="flex flex-1 items-center justify-center px-6 py-16 md:py-0">
+      <div className="flex flex-1 items-center justify-center px-6 py-15 md:py-0">
         <div
-          className="w-full max-w-md rounded-3xl bg-white px-10 py-12 border"
+          className="w-full max-w-sm rounded-3xl bg-white px-10 py-8 border"
           style={{ borderColor: "var(--hairline-soft)", boxShadow: "var(--shadow-lg)" }}
         >
           <div className="flex flex-col items-center text-center">
@@ -65,9 +65,6 @@ export default function LoginPage() {
             <span className="mt-4 text-xs font-semibold tracking-widest text-emerald-700">
               WELCOME BACK
             </span>
-            <h2 className="mt-2 text-3xl font-bold text-[#0d3b2e]">
-              Welcome Back
-            </h2>
             <p className="mt-2 text-sm text-zinc-500">
               Login to continue to Deedar Drive
             </p>
@@ -81,6 +78,7 @@ export default function LoginPage() {
                 inputMode="tel"
                 autoComplete="tel"
                 placeholder="Phone number"
+                maxLength={10}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 suppressHydrationWarning
@@ -95,6 +93,7 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 placeholder="Password"
                 value={password}
+                minLength={6}
                 onChange={(e) => setPassword(e.target.value)}
                 suppressHydrationWarning
                 className="w-full bg-transparent text-sm text-zinc-800 outline-none placeholder:text-zinc-400"
@@ -141,7 +140,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="my-6 h-px w-full bg-zinc-100" />
+          <div className="my-4 h-px w-full bg-zinc-100" />
 
           <p className="text-center text-sm text-zinc-500">
             New to Deedar Drive?{" "}

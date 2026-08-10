@@ -20,7 +20,22 @@ export const ROLE_THEME: Record<AccessRole, RoleTheme> = {
   admin: { strong: "#6B5B3E", bg: "#EFE6D2", dot: "#A6926B", muted: "#B3A588" },
 };
 
-export type NavItem = { href: string; label: string };
+export type NavIcon =
+  | "calendar"
+  | "target"
+  | "plusCircle"
+  | "mapPin"
+  | "barChart"
+  | "users"
+  | "grid"
+  | "tag"
+  | "dashboard"
+  | "building"
+  | "globe"
+  | "sitemap"
+  | "userCog";
+
+export type NavItem = { href: string; label: string; icon: NavIcon };
 
 export type NavSection = {
   role: AccessRole;
@@ -34,49 +49,49 @@ export const NAV_SECTIONS: NavSection[] = [
     role: "field",
     title: "Field Salesman",
     items: [
-      { href: "/field/day-log", label: "Day Log" },
-      { href: "/field/beat", label: "Beat" },
-      { href: "/field/new-counter", label: "New Counter" },
+      { href: "/field/day-log", label: "Day Log", icon: "calendar" },
+      { href: "/field/beat", label: "Beat", icon: "target" },
+      { href: "/field/new-counter", label: "New Counter", icon: "plusCircle" },
     ],
   },
   {
     role: "supervisor",
     title: "Supervisor",
     items: [
-      { href: "/supervisor/map", label: "Live map" },
-      { href: "/supervisor/analytics", label: "Analytics" },
-      { href: "/supervisor/day-log", label: "Day Log" },
-      { href: "/supervisor/assign-beat", label: "Assign Beat" },
+      { href: "/supervisor/map", label: "Live map", icon: "mapPin" },
+      { href: "/supervisor/analytics", label: "Analytics", icon: "barChart" },
+      { href: "/supervisor/day-log", label: "Day Log", icon: "calendar" },
+      { href: "/supervisor/assign-beat", label: "Assign Beat", icon: "users" },
     ],
   },
   {
     role: "dealer",
     title: "Dealer",
     items: [
-      { href: "/dealer/counters", label: "Counters" },
-      { href: "/dealer/schemes", label: "Schemes" },
+      { href: "/dealer/counters", label: "Counters", icon: "grid" },
+      { href: "/dealer/schemes", label: "Schemes", icon: "tag" },
     ],
   },
   {
     role: "hq",
     title: "C&F Sales",
     items: [
-      { href: "/hq/dashboard", label: "Dashboard" },
-      { href: "/hq/depots", label: "Depots & Areas" },
+      { href: "/hq/dashboard", label: "Dashboard", icon: "dashboard" },
+      { href: "/hq/depots", label: "Depots & Areas", icon: "building" },
     ],
   },
   {
     role: "khq",
     title: "Kanpur HQ",
-    items: [{ href: "/khq/dashboard", label: "Company Dashboard" }],
+    items: [{ href: "/khq/dashboard", label: "Company Dashboard", icon: "globe" }],
   },
   {
     role: "admin",
     title: "Central Admin",
     items: [
-      { href: "/admin/hierarchy", label: "Hierarchy" },
-      { href: "/admin/users", label: "Users & access" },
-      { href: "/admin/schemes", label: "Scheme codes" },
+      { href: "/admin/hierarchy", label: "Hierarchy", icon: "sitemap" },
+      { href: "/admin/users", label: "Users & access", icon: "userCog" },
+      { href: "/admin/schemes", label: "Scheme codes", icon: "tag" },
     ],
   },
 ];
