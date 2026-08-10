@@ -75,6 +75,7 @@ export async function createCounter(input: NewCounterInput) {
     lat: lat || null,
     lng: lng || null,
     status: "active",
+    createdByUserId: user.id,
   });
 
   return { ok: true as const };

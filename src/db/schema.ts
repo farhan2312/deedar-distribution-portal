@@ -144,6 +144,11 @@ export const counters = pgTable("counters", {
   lng: numeric("lng", { precision: 10, scale: 6 }),
   status: counterStatusEnum("status").notNull().default("active"),
   stock: integer("stock").notNull().default(0),
+  // The field rep who added this counter — they can always visit it in their
+  // beat, even if it sits outside their supervisor-assigned areas.
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   lastVisitAt: timestamp("last_visit_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

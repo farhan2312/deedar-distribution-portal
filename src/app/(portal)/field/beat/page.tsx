@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, counters } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
@@ -13,29 +13,43 @@ export default async function FieldBeatPage() {
   if (!user.accessRoles.includes("field")) {
     return <Notice title="Beat">You don&apos;t have Field Salesman access.</Notice>;
   }
-  if (!user.depot || user.areas.length === 0) {
+  if (!user.depot) {
     return (
       <Notice title="Beat">
-        You aren&apos;t assigned to a depot and area yet — ask your supervisor
-        to map you to one.
+        You aren&apos;t assigned to a depot yet — ask your supervisor to map you
+        to one.
       </Notice>
     );
   }
 
+  // Beat = counters in the supervisor-assigned areas, PLUS any counter this rep
+  // added themselves (so they can always visit their own additions, even if it
+  // sits outside their assigned areas).
   const areaIds = user.areas.map((a) => a.id);
-  const counterList = await db
+  const scope = areaIds.length
+    ? or(inArray(counters.areaId, areaIds), eq(counters.createdByUserId, user.id))
+    : eq(counters.createdByUserId, user.id);
+
+  const rows = await db
     .select({
       id: counters.id,
       name: counters.name,
       type: counters.type,
       areaName: areas.name,
+      createdByUserId: counters.createdByUserId,
     })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
-    .where(inArray(counters.areaId, areaIds));
+    .where(scope);
+
+  const counterList = rows.map((c) => ({
+    ...c,
+    addedByMe: c.createdByUserId === user.id,
+  }));
 
   const firstName = user.name.split(/\s+/)[0];
   const areaLabel = user.areas.map((a) => a.name).join(", ");
+  const selfAddedCount = counterList.filter((c) => c.addedByMe).length;
 
   // Day-log tracking comes later — stats are placeholders for now.
   const visitsToday = 0;
@@ -50,7 +64,8 @@ export default async function FieldBeatPage() {
           Namaste, {firstName}
         </h2>
         <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-          {user.depot.name} · {areaLabel}
+          {user.depot.name}
+          {areaLabel && ` · ${areaLabel}`}
         </p>
       </header>
 
@@ -75,16 +90,18 @@ export default async function FieldBeatPage() {
 
       <div className="mb-3 flex items-baseline justify-between">
         <h4 className="text-[18px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-          Beat
+          Today&apos;s Beat
         </h4>
         <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
           {counterList.length} counter{counterList.length === 1 ? "" : "s"}
+          {selfAddedCount > 0 && ` · ${selfAddedCount} added by you`}
         </span>
       </div>
 
       {counterList.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
-          No counters in your assigned areas yet.
+          No counters in your beat yet — add one from New Counter, or ask your
+          supervisor to assign an area.
         </p>
       ) : (
         <div className="space-y-2">
@@ -97,8 +114,18 @@ export default async function FieldBeatPage() {
                 <PinIcon />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>
-                  {c.name}
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>
+                    {c.name}
+                  </span>
+                  {c.addedByMe && (
+                    <span
+                      className="flex-none rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      style={{ background: "var(--accent-tint)", color: "var(--accent)" }}
+                    >
+                      Added by you
+                    </span>
+                  )}
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>
                   {c.type} · {c.areaName}
