@@ -6,7 +6,7 @@ import { defaultPathForRoles } from "@/lib/auth/roles";
 import { createSession } from "@/lib/auth/session";
 
 export async function POST(request: Request) {
-  const { phone, password } = await request.json();
+  const { phone, password, rememberMe } = await request.json();
 
   if (typeof phone !== "string" || typeof password !== "string") {
     return Response.json({ error: "Phone and password are required." }, { status: 400 });
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid phone number or password." }, { status: 401 });
   }
 
-  await createSession(user);
+  await createSession(user, rememberMe !== false);
 
   return Response.json({ ok: true, redirectTo: defaultPathForRoles(user.accessRoles) });
 }

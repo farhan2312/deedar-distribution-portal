@@ -4,7 +4,8 @@ import { cookies } from "next/headers";
 import type { AccessRole, User } from "@/db/schema";
 
 const COOKIE_NAME = "session";
-const SESSION_DURATION_SECONDS = 7 * 24 * 60 * 60; // 7 days
+const REMEMBERED_DURATION_SECONDS = 7 * 24 * 60 * 60; // 7 days — "Remember me" checked
+const UNREMEMBERED_DURATION_SECONDS = 24 * 60 * 60; // 1 day — "Remember me" unchecked
 
 const secret = process.env.JWT_SECRET;
 if (!secret) {
@@ -17,11 +18,11 @@ export type SessionPayload = {
   roles: AccessRole[];
 };
 
-async function encrypt(payload: SessionPayload): Promise<string> {
+async function encrypt(payload: SessionPayload, durationSeconds: number): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_DURATION_SECONDS}s`)
+    .setExpirationTime(`${durationSeconds}s`)
     .sign(encodedSecret);
 }
 
@@ -36,15 +37,23 @@ async function decrypt(token: string): Promise<SessionPayload | null> {
   }
 }
 
-export async function createSession(user: Pick<User, "id" | "accessRoles">) {
-  const token = await encrypt({ userId: user.id, roles: user.accessRoles });
+/**
+ * `rememberMe` controls both the JWT's own expiry and whether the cookie
+ * persists across browser restarts. Checked: 7-day token + a persistent
+ * cookie (`maxAge` set). Unchecked: 1-day token + a browser-session cookie
+ * (no `maxAge`) — relying on the shorter token expiry too, since not every
+ * browser reliably drops session cookies on close (mobile especially).
+ */
+export async function createSession(user: Pick<User, "id" | "accessRoles">, rememberMe = true) {
+  const duration = rememberMe ? REMEMBERED_DURATION_SECONDS : UNREMEMBERED_DURATION_SECONDS;
+  const token = await encrypt({ userId: user.id, roles: user.accessRoles }, duration);
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: SESSION_DURATION_SECONDS,
     path: "/",
+    ...(rememberMe ? { maxAge: duration } : {}),
   });
 }
 

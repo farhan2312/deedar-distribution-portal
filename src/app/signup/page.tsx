@@ -58,7 +58,7 @@ export default function SignupPage() {
               REQUEST ACCESS
             </span>
             <p className="mt-2 text-sm text-zinc-500">
-              Ask Central Admin to set up your account
+              Create an account to request access to Deedar Drive
             </p>
           </div>
 
@@ -76,6 +76,7 @@ export default function SignupPage() {
           ) : (
             <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
               <FieldInput
+                icon={<UserIcon className="h-5 w-5 shrink-0 text-emerald-700" />}
                 type="text"
                 placeholder="Full name"
                 value={name}
@@ -83,6 +84,7 @@ export default function SignupPage() {
                 autoComplete="name"
               />
               <FieldInput
+                icon={<PhoneIcon className="h-5 w-5 shrink-0 text-emerald-700" />}
                 type="tel"
                 inputMode="tel"
                 placeholder="Phone number"
@@ -92,7 +94,9 @@ export default function SignupPage() {
                 autoComplete="tel"
               />
               <FieldInput
+                icon={<LockIcon className="h-5 w-5 shrink-0 text-emerald-700" />}
                 type="password"
+                revealable
                 placeholder="Password"
                 value={password}
                 onChange={setPassword}
@@ -100,7 +104,9 @@ export default function SignupPage() {
                 autoComplete="new-password"
               />
               <FieldInput
+                icon={<LockIcon className="h-5 w-5 shrink-0 text-emerald-700" />}
                 type="password"
+                revealable
                 placeholder="Confirm password"
                 value={confirmPassword}
                 onChange={setConfirmPassword}
@@ -108,12 +114,13 @@ export default function SignupPage() {
                 autoComplete="new-password"
               />
 
-              <label className="flex flex-col gap-1.5 text-sm text-zinc-600">
-                Role you&apos;re requesting
+              <label className="flex items-center gap-3 rounded-xl border border-zinc-200 px-4 py-3 focus-within:border-[#0d3b2e]">
+                <BriefcaseIcon className="h-5 w-5 shrink-0 text-emerald-700" />
                 <select
-                  className="rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-800 outline-none focus:border-[#0d3b2e]"
+                  className="w-full bg-transparent text-sm text-zinc-800 outline-none"
                   value={role}
                   onChange={(e) => setRole(e.target.value as AccessRole)}
+                  aria-label="Role you're requesting"
                 >
                   {SIGNUP_ROLES.map((r) => (
                     <option key={r} value={r}>{ROLE_LABEL[r]}</option>
@@ -152,6 +159,7 @@ export default function SignupPage() {
 }
 
 function FieldInput({
+  icon,
   type,
   placeholder,
   value,
@@ -160,7 +168,9 @@ function FieldInput({
   minLength,
   inputMode,
   autoComplete,
+  revealable,
 }: {
+  icon: React.ReactNode;
   type: string;
   placeholder: string;
   value: string;
@@ -169,11 +179,15 @@ function FieldInput({
   minLength?: number;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   autoComplete?: string;
+  revealable?: boolean;
 }) {
+  const [reveal, setReveal] = useState(false);
+  const inputType = revealable ? (reveal ? "text" : "password") : type;
   return (
     <label className="flex items-center gap-3 rounded-xl border border-zinc-200 px-4 py-3 focus-within:border-[#0d3b2e]">
+      {icon}
       <input
-        type={type}
+        type={inputType}
         inputMode={inputMode}
         autoComplete={autoComplete}
         placeholder={placeholder}
@@ -184,6 +198,72 @@ function FieldInput({
         suppressHydrationWarning
         className="w-full bg-transparent text-sm text-zinc-800 outline-none placeholder:text-zinc-400"
       />
+      {revealable && (
+        <button
+          type="button"
+          onClick={() => setReveal((v) => !v)}
+          className="shrink-0 text-zinc-400 hover:text-zinc-600"
+          aria-label={reveal ? "Hide password" : "Show password"}
+        >
+          <EyeIcon className="h-5 w-5" open={reveal} />
+        </button>
+      )}
     </label>
+  );
+}
+
+function UserIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function BriefcaseIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M3 12h18" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function PhoneIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.5 21 3 13.5 3 4.5c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.2 1z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="10" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M7 10V7a5 5 0 0 1 10 0v3" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function EyeIcon({ className, open }: { className?: string; open: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
+      {!open && <path d="M4 4l16 16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />}
+    </svg>
   );
 }
