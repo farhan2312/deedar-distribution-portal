@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { primaryRoleLabel } from "@/lib/auth/roles";
 import { PortalShell } from "./_components/portal-shell";
 
 export default async function PortalLayout({
@@ -13,7 +14,12 @@ export default async function PortalLayout({
   }
 
   return (
-    <PortalShell userName={user.name} accessRoles={user.accessRoles}>
+    <PortalShell
+      userName={user.name}
+      phone={user.phone}
+      roleLabel={primaryRoleLabel(user.accessRoles)}
+      accessRoles={user.accessRoles}
+    >
       {children}
     </PortalShell>
   );

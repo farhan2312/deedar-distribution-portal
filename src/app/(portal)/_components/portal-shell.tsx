@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { AccessRole } from "@/db/schema";
-import { logoutAction } from "@/lib/auth/actions";
 import {
   NAV_SECTIONS,
   ROLE_THEME,
@@ -11,14 +10,17 @@ import {
   themeVars,
 } from "@/lib/portal/nav";
 import { NavIconView } from "./nav-icons";
+import { ProfileMenu } from "./profile-menu";
 
 type PortalShellProps = {
   userName: string;
+  phone: string;
+  roleLabel: string;
   accessRoles: AccessRole[];
   children: React.ReactNode;
 };
 
-export function PortalShell({ userName, accessRoles, children }: PortalShellProps) {
+export function PortalShell({ userName, phone, roleLabel, accessRoles, children }: PortalShellProps) {
   const pathname = usePathname();
   const roleSet = new Set(accessRoles);
   // Admin is unrestricted: it sees every sidebar section, not just "admin".
@@ -97,27 +99,7 @@ export function PortalShell({ userName, accessRoles, children }: PortalShellProp
           })}
         </nav>
 
-        <div
-          className="mt-3 flex flex-none items-center gap-2.5 px-5 pt-3.5"
-          style={{ borderTop: "1px solid rgba(255,255,255,.1)" }}
-        >
-          <span
-            className="flex h-8 w-8 flex-none items-center justify-center rounded-full text-[12px] font-bold text-white"
-            style={{ background: "rgba(255,255,255,.12)" }}
-          >
-            {userName.charAt(0).toUpperCase()}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[12.5px] font-medium" style={{ color: "rgba(241,247,242,.85)" }}>
-              {userName}
-            </div>
-            <form action={logoutAction}>
-              <button type="submit" className="text-[12px] font-semibold" style={{ color: "#B9D6BC" }}>
-                Log out
-              </button>
-            </form>
-          </div>
-        </div>
+        <ProfileMenu userName={userName} phone={phone} roleLabel={roleLabel} />
       </aside>
 
       {/* Main content — recolored per role section */}

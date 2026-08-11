@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  accessRequests,
   areas,
   cnfs,
   depots,
@@ -205,6 +206,52 @@ export async function toggleUserArea(userId: string, areaId: string) {
   } else {
     await db.insert(userAreas).values({ userId, areaId });
   }
+  revalidatePath("/admin/users");
+}
+
+// ── Access requests (public "Request Access" signup) ────────────────────
+
+/** Approve a pending request — creates the real `users` row and hands them
+ * the requested role. If the phone got taken between request and review
+ * (e.g. an admin added them manually), the request is auto-rejected instead. */
+export async function approveAccessRequest(requestId: string) {
+  const admin = await requireAdmin();
+  const [request] = await db
+    .select()
+    .from(accessRequests)
+    .where(and(eq(accessRequests.id, requestId), eq(accessRequests.status, "pending")))
+    .limit(1);
+  if (!request) return;
+
+  const inserted = await db
+    .insert(users)
+    .values({
+      name: request.name,
+      phone: request.phone,
+      passwordHash: request.passwordHash,
+      accessRoles: [request.requestedRole],
+    })
+    .onConflictDoNothing({ target: users.phone })
+    .returning({ id: users.id });
+
+  await db
+    .update(accessRequests)
+    .set({
+      status: inserted.length > 0 ? "approved" : "rejected",
+      reviewedByUserId: admin.id,
+      reviewedAt: new Date(),
+    })
+    .where(eq(accessRequests.id, requestId));
+
+  revalidatePath("/admin/users");
+}
+
+export async function rejectAccessRequest(requestId: string) {
+  const admin = await requireAdmin();
+  await db
+    .update(accessRequests)
+    .set({ status: "rejected", reviewedByUserId: admin.id, reviewedAt: new Date() })
+    .where(and(eq(accessRequests.id, requestId), eq(accessRequests.status, "pending")));
   revalidatePath("/admin/users");
 }
 

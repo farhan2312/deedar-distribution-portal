@@ -144,9 +144,9 @@ export default function LoginPage() {
 
           <p className="text-center text-sm text-zinc-500">
             New to Deedar Drive?{" "}
-            <span className="cursor-pointer font-semibold text-emerald-700 hover:text-emerald-800">
+            <Link href="/signup" className="font-semibold text-emerald-700 hover:text-emerald-800">
               Request Access
-            </span>
+            </Link>
           </p>
         </div>
       </div>

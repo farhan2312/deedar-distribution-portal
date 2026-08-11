@@ -119,6 +119,33 @@ export const userAreas = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.areaId] })],
 );
 
+// Public "Request Access" signup: anyone can submit name/phone/password/role;
+// an admin approves (creates the real `users` row) or rejects. Kept as its own
+// table — not a `users` row with a "pending" flag — so unapproved signups
+// never appear in role/depot scoping queries, which all read straight from
+// `users`.
+export const accessRequestStatusEnum = pgEnum("access_request_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const accessRequests = pgTable("access_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 120 }).notNull(),
+  phone: varchar("phone", { length: 10 }).notNull(),
+  passwordHash: text("password_hash").notNull(),
+  requestedRole: accessRoleEnum("requested_role").notNull(),
+  status: accessRequestStatusEnum("status").notNull().default("pending"),
+  reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AccessRequest = typeof accessRequests.$inferSelect;
+
 // ── Counters ─────────────────────────────────────────────────────────
 
 export const counterStatusEnum = pgEnum("counter_status", [
