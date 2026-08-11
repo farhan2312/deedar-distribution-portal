@@ -9,6 +9,8 @@ import {
   sectionForPath,
   themeVars,
 } from "@/lib/portal/nav";
+import { useT } from "@/lib/i18n/provider";
+import { LanguageToggle } from "@/components/language-toggle";
 import { NavIconView } from "./nav-icons";
 import { ProfileMenu } from "./profile-menu";
 
@@ -22,6 +24,7 @@ type PortalShellProps = {
 
 export function PortalShell({ userName, phone, roleLabel, accessRoles, children }: PortalShellProps) {
   const pathname = usePathname();
+  const t = useT();
   const roleSet = new Set(accessRoles);
   // Admin is unrestricted: it sees every sidebar section, not just "admin".
   const isAdmin = roleSet.has("admin");
@@ -53,7 +56,7 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, children 
               Deedar Drive
             </div>
             <div className="text-[10.5px] leading-tight" style={{ color: "rgba(241,247,242,.5)" }}>
-              Distribution Portal
+              {t("Distribution Portal")}
             </div>
           </div>
         </div>
@@ -72,7 +75,7 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, children 
                     className="text-[11px] font-bold uppercase"
                     style={{ letterSpacing: ".06em", color: theme.dot }}
                   >
-                    {sec.title}
+                    {t(sec.title)}
                   </span>
                 </div>
                 {sec.items.map((item) => {
@@ -90,7 +93,7 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, children 
                       }}
                     >
                       <NavIconView icon={item.icon} className="h-4 w-4 flex-none" />
-                      {item.label}
+                      {t(item.label)}
                     </Link>
                   );
                 })}
@@ -99,6 +102,9 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, children 
           })}
         </nav>
 
+        <div className="flex flex-none justify-center px-5 pb-1 pt-3">
+          <LanguageToggle variant="dark" />
+        </div>
         <ProfileMenu userName={userName} phone={phone} roleLabel={roleLabel} />
       </aside>
 

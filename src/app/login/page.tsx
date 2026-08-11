@@ -4,9 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+import { useT } from "@/lib/i18n/provider";
+import { LanguageToggle } from "@/components/language-toggle";
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useT();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -26,13 +29,13 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Something went wrong.");
+        setError(data.error || t("Something went wrong."));
         return;
       }
       router.push(data.redirectTo ?? "/dashboard");
       router.refresh();
     } catch {
-      setError("Could not reach the server. Please try again.");
+      setError(t("Could not reach the server. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -53,7 +56,10 @@ export default function LoginPage() {
       </div>
 
       {/* Right form panel */}
-      <div className="flex flex-1 items-center justify-center px-6 py-15 md:py-0">
+      <div className="relative flex flex-1 items-center justify-center px-6 py-15 md:py-0">
+        <div className="absolute right-6 top-6">
+          <LanguageToggle />
+        </div>
         <div
           className="w-full max-w-sm rounded-3xl bg-white px-10 py-8 border"
           style={{ borderColor: "var(--hairline-soft)", boxShadow: "var(--shadow-lg)" }}
@@ -63,10 +69,10 @@ export default function LoginPage() {
               D
             </span>
             <span className="mt-4 text-xs font-semibold tracking-widest text-emerald-700">
-              WELCOME BACK
+              {t("WELCOME BACK")}
             </span>
             <p className="mt-2 text-sm text-zinc-500">
-              Login to continue to Deedar Drive
+              {t("Login to continue to Deedar Drive")}
             </p>
           </div>
 
@@ -77,7 +83,7 @@ export default function LoginPage() {
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel"
-                placeholder="Phone number"
+                placeholder={t("Phone number")}
                 maxLength={10}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
@@ -91,7 +97,7 @@ export default function LoginPage() {
               <input
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
-                placeholder="Password"
+                placeholder={t("Password")}
                 value={password}
                 minLength={6}
                 onChange={(e) => setPassword(e.target.value)}
@@ -117,10 +123,10 @@ export default function LoginPage() {
                   suppressHydrationWarning
                   className="h-4 w-4 rounded border-zinc-300 text-[#0d3b2e] focus:ring-[#0d3b2e]"
                 />
-                Remember me
+                {t("Remember me")}
               </label>
               <Link href="#" className="font-medium text-emerald-700 hover:text-emerald-800">
-                Forgot password?
+                {t("Forgot password?")}
               </Link>
             </div>
 
@@ -135,7 +141,7 @@ export default function LoginPage() {
               disabled={submitting}
               className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-[#0d3b2e] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#124a3a] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? "Logging in…" : "Login"}
+              {submitting ? t("Logging in…") : t("Login")}
               <ArrowRightIcon className="h-4 w-4" />
             </button>
           </form>
@@ -143,9 +149,9 @@ export default function LoginPage() {
           <div className="my-4 h-px w-full bg-zinc-100" />
 
           <p className="text-center text-sm text-zinc-500">
-            New to Deedar Drive?{" "}
+            {t("New to Deedar Drive?")}{" "}
             <Link href="/signup" className="font-semibold text-emerald-700 hover:text-emerald-800">
-              Request Access
+              {t("Request Access")}
             </Link>
           </p>
         </div>

@@ -6,7 +6,7 @@ import { areas, cnfs, counters, depots, users, visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { formatISTDate } from "@/lib/date";
-import { COMPETITOR_LABEL, isWithinEditWindow } from "@/lib/field/products";
+import { COMPETITOR_LABEL, formatDuration, isWithinEditWindow } from "@/lib/field/products";
 import { Notice } from "@/components/ui/notice";
 
 const TYPE_BADGE = "rgba(178,142,46,.14)";
@@ -57,6 +57,7 @@ export default async function CounterDetailPage({
       rank: visits.rank,
       competitor: visits.competitor,
       remarks: visits.remarks,
+      durationSeconds: visits.durationSeconds,
     })
     .from(visits)
     .innerJoin(users, eq(users.id, visits.userId))
@@ -131,8 +132,15 @@ export default async function CounterDetailPage({
             return (
               <div key={h.id} className="card p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-[15px] font-semibold" style={{ color: "var(--ink-1)" }}>
-                    {formatISTDate(h.visitedAt)}
+                  <div>
+                    <div className="text-[15px] font-semibold" style={{ color: "var(--ink-1)" }}>
+                      {formatISTDate(h.visitedAt)}
+                    </div>
+                    {h.durationSeconds != null && (
+                      <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
+                        Time on counter: <span className="font-semibold tabular-nums" style={{ color: "var(--ink-2)" }}>{formatDuration(h.durationSeconds)}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>

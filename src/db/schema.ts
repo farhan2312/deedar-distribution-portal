@@ -272,8 +272,80 @@ export const visits = pgTable("visits", {
   rank: integer("rank"),
   competitor: competitorPresenceEnum("competitor"),
   remarks: text("remarks"),
+  // Seconds spent on the counter — sampled from the client-side "time on
+  // counter" timer at submit. Null for older rows recorded before the timer
+  // was introduced. Not present for edits (kept from the original visit).
+  durationSeconds: integer("duration_seconds"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ── Depot operations: SKU stock, movements, scheme claims ───────────────
+// The Depot portal (role key `dealer`, shown as "Depot") tracks per-depot
+// inventory of the four product SKUs, an inward/outward movement log, and
+// retailer scheme payouts.
+
+export const stockMovementDirectionEnum = pgEnum("stock_movement_direction", [
+  "inward",
+  "outward",
+]);
+
+// Current on-hand quantity per depot per SKU segment. Unique on (depot, segment).
+export const depotStock = pgTable(
+  "depot_stock",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    depotId: uuid("depot_id")
+      .notNull()
+      .references(() => depots.id, { onDelete: "cascade" }),
+    segment: productSegmentEnum("segment").notNull(),
+    onHand: integer("on_hand").notNull().default(0),
+    lowThreshold: integer("low_threshold").notNull().default(50),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("depot_stock_depot_segment_unique").on(t.depotId, t.segment)],
+);
+
+// Inward (received) / outward (bulk / bora lifting) movement log. Applying a
+// movement adjusts the matching depot_stock.on_hand.
+export const stockMovements = pgTable("stock_movements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  depotId: uuid("depot_id")
+    .notNull()
+    .references(() => depots.id, { onDelete: "cascade" }),
+  segment: productSegmentEnum("segment").notNull(),
+  direction: stockMovementDirectionEnum("direction").notNull(),
+  qty: integer("qty").notNull(),
+  note: text("note"),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const schemeClaimStatusEnum = pgEnum("scheme_claim_status", [
+  "paid",
+  "processing",
+  "rejected",
+]);
+
+// A retailer (counter) scheme payout, paid via UPI. Belongs to a depot.
+export const schemeClaims = pgTable("scheme_claims", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  counterId: uuid("counter_id")
+    .notNull()
+    .references(() => counters.id, { onDelete: "cascade" }),
+  depotId: uuid("depot_id")
+    .notNull()
+    .references(() => depots.id, { onDelete: "cascade" }),
+  code: varchar("code", { length: 40 }).notNull(),
+  value: integer("value").notNull(), // rupees
+  status: schemeClaimStatusEnum("status").notNull().default("processing"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DepotStock = typeof depotStock.$inferSelect;
+export type StockMovement = typeof stockMovements.$inferSelect;
+export type SchemeClaim = typeof schemeClaims.$inferSelect;
 
 export type State = typeof states.$inferSelect;
 export type Cnf = typeof cnfs.$inferSelect;

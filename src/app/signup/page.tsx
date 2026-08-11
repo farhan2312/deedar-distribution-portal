@@ -6,8 +6,11 @@ import Link from "next/link";
 import type { AccessRole } from "@/db/schema";
 import { requestAccess } from "@/lib/auth/signup-actions";
 import { ROLE_LABEL, SIGNUP_ROLES } from "@/lib/auth/roles";
+import { useT } from "@/lib/i18n/provider";
+import { LanguageToggle } from "@/components/language-toggle";
 
 export default function SignupPage() {
+  const t = useT();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -45,7 +48,10 @@ export default function SignupPage() {
       </div>
 
       {/* Right form panel */}
-      <div className="flex flex-1 items-center justify-center px-6 py-15 md:py-0">
+      <div className="relative flex flex-1 items-center justify-center px-6 py-15 md:py-0">
+        <div className="absolute right-6 top-6">
+          <LanguageToggle />
+        </div>
         <div
           className="w-full max-w-sm rounded-3xl bg-white px-10 py-8 border"
           style={{ borderColor: "var(--hairline-soft)", boxShadow: "var(--shadow-lg)" }}
@@ -55,22 +61,21 @@ export default function SignupPage() {
               D
             </span>
             <span className="mt-4 text-xs font-semibold tracking-widest text-emerald-700">
-              REQUEST ACCESS
+              {t("REQUEST ACCESS")}
             </span>
             <p className="mt-2 text-sm text-zinc-500">
-              Create an account to request access to Deedar Drive
+              {t("Ask Central Admin to set up your account")}
             </p>
           </div>
 
           {done ? (
             <div className="mt-8 rounded-xl p-4 text-center" style={{ background: "var(--accent-tint)" }}>
-              <p className="text-sm font-semibold text-zinc-800">Request sent!</p>
+              <p className="text-sm font-semibold text-zinc-800">{t("Request sent!")}</p>
               <p className="mt-1.5 text-sm text-zinc-500">
-                Central Admin will review it. Once approved, log in with your
-                mobile number and the password you just set.
+                {t("Central Admin will review it. Once approved, log in with your mobile number and the password you just set.")}
               </p>
               <Link href="/login" className="mt-4 inline-block text-sm font-semibold text-emerald-700 hover:text-emerald-800">
-                Back to login →
+                {t("Back to login →")}
               </Link>
             </div>
           ) : (
@@ -78,7 +83,7 @@ export default function SignupPage() {
               <FieldInput
                 icon={<UserIcon className="h-5 w-5 shrink-0 text-emerald-700" />}
                 type="text"
-                placeholder="Full name"
+                placeholder={t("Full name")}
                 value={name}
                 onChange={setName}
                 autoComplete="name"
@@ -87,7 +92,7 @@ export default function SignupPage() {
                 icon={<PhoneIcon className="h-5 w-5 shrink-0 text-emerald-700" />}
                 type="tel"
                 inputMode="tel"
-                placeholder="Phone number"
+                placeholder={t("Phone number")}
                 maxLength={10}
                 value={phone}
                 onChange={setPhone}
@@ -97,7 +102,7 @@ export default function SignupPage() {
                 icon={<LockIcon className="h-5 w-5 shrink-0 text-emerald-700" />}
                 type="password"
                 revealable
-                placeholder="Password"
+                placeholder={t("Password")}
                 value={password}
                 onChange={setPassword}
                 minLength={6}
@@ -107,7 +112,7 @@ export default function SignupPage() {
                 icon={<LockIcon className="h-5 w-5 shrink-0 text-emerald-700" />}
                 type="password"
                 revealable
-                placeholder="Confirm password"
+                placeholder={t("Confirm password")}
                 value={confirmPassword}
                 onChange={setConfirmPassword}
                 minLength={6}
@@ -120,7 +125,7 @@ export default function SignupPage() {
                   className="w-full bg-transparent text-sm text-zinc-800 outline-none"
                   value={role}
                   onChange={(e) => setRole(e.target.value as AccessRole)}
-                  aria-label="Role you're requesting"
+                  aria-label={t("Role you're requesting")}
                 >
                   {SIGNUP_ROLES.map((r) => (
                     <option key={r} value={r}>{ROLE_LABEL[r]}</option>
@@ -139,7 +144,7 @@ export default function SignupPage() {
                 disabled={pending}
                 className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-[#0d3b2e] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#124a3a] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {pending ? "Sending…" : "Send request"}
+                {pending ? t("Sending…") : t("Send request")}
               </button>
             </form>
           )}
@@ -147,9 +152,9 @@ export default function SignupPage() {
           <div className="my-4 h-px w-full bg-zinc-100" />
 
           <p className="text-center text-sm text-zinc-500">
-            Already have an account?{" "}
+            {t("Already have an account?")}{" "}
             <Link href="/login" className="font-semibold text-emerald-700 hover:text-emerald-800">
-              Log in
+              {t("Log in")}
             </Link>
           </p>
         </div>

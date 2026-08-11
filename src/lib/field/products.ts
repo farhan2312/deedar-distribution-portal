@@ -1,10 +1,10 @@
 import type { CompetitorPresence, ProductSegment } from "@/db/schema";
 
 export const PRODUCT_SEGMENTS: { value: ProductSegment; label: string }[] = [
-  { value: "DG10", label: "DG10 — Deedar Green 10" },
-  { value: "DG20", label: "DG20 — Deedar Green 20" },
-  { value: "DB20", label: "DB20 — Deedar Blue 20" },
-  { value: "DB40", label: "DB40 — Deedar Blue 40" },
+  { value: "DG10", label: "Deedar Gold 10g" },
+  { value: "DG20", label: "Deedar Gold 20g" },
+  { value: "DB20", label: "Deedar Blue 20g" },
+  { value: "DB40", label: "Deedar Blue 40g" },
 ];
 
 export const SEGMENT_LABEL: Record<ProductSegment, string> = Object.fromEntries(
@@ -14,7 +14,7 @@ export const SEGMENT_LABEL: Record<ProductSegment, string> = Object.fromEntries(
 export const COMPETITOR_OPTIONS: { value: CompetitorPresence; label: string }[] = [
   { value: "none", label: "None" },
   { value: "local", label: "Local Brands" },
-  { value: "national", label: "National Brands" },
+  { value: "national", label: "Other" },
 ];
 
 export const COMPETITOR_LABEL: Record<CompetitorPresence, string> = Object.fromEntries(
@@ -23,6 +23,17 @@ export const COMPETITOR_LABEL: Record<CompetitorPresence, string> = Object.fromE
 
 /** A visit stays editable by its owner for this long after it was recorded. */
 export const VISIT_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Cap on total packets sold across all SKUs in a single visit. */
+export const MAX_VISIT_SOLD = 24;
+
+/** MM:SS from a whole number of seconds (used for "time on counter"). */
+export function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null || seconds < 0) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
 export function isWithinEditWindow(visitedAt: Date, now: Date = new Date()) {
   return now.getTime() - visitedAt.getTime() < VISIT_EDIT_WINDOW_MS;

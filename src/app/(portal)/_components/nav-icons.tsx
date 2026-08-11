@@ -142,6 +142,16 @@ function Alert({ className }: IconProps) {
   );
 }
 
+function Box({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 8 12 3 3 8v8l9 5 9-5V8Z" />
+      <path d="m3 8 9 5 9-5" />
+      <path d="M12 13v8" />
+    </svg>
+  );
+}
+
 const ICONS: Record<NavIcon, (props: IconProps) => React.ReactElement> = {
   calendar: Calendar,
   target: Target,
@@ -157,6 +167,7 @@ const ICONS: Record<NavIcon, (props: IconProps) => React.ReactElement> = {
   sitemap: Sitemap,
   userCog: UserCog,
   alert: Alert,
+  box: Box,
 };
 
 export function NavIconView({ icon, className }: { icon: NavIcon; className?: string }) {

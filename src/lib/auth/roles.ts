@@ -4,7 +4,7 @@ import type { AccessRole } from "@/db/schema";
 export function defaultPathForRoles(roles: readonly AccessRole[]): string {
   if (roles.includes("field")) return "/field/beat";
   if (roles.includes("supervisor")) return "/supervisor/map";
-  if (roles.includes("dealer")) return "/dealer/counters";
+  if (roles.includes("dealer")) return "/depot/counters";
   if (roles.includes("hq")) return "/hq/dashboard";
   if (roles.includes("khq")) return "/khq/dashboard";
   if (roles.includes("admin")) return "/admin/hierarchy";
@@ -14,7 +14,7 @@ export function defaultPathForRoles(roles: readonly AccessRole[]): string {
 export const ROLE_LABEL: Record<AccessRole, string> = {
   field: "Field Salesman",
   supervisor: "Supervisor (SO)",
-  dealer: "Dealer",
+  dealer: "Depot",
   hq: "C&F HQ",
   khq: "Kanpur HQ",
   admin: "Central Admin",

@@ -34,7 +34,8 @@ export type NavIcon =
   | "globe"
   | "sitemap"
   | "userCog"
-  | "alert";
+  | "alert"
+  | "box";
 
 export type NavItem = { href: string; label: string; icon: NavIcon };
 
@@ -69,10 +70,11 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     role: "dealer",
-    title: "Dealer",
+    title: "Depot",
     items: [
-      { href: "/dealer/counters", label: "Counters", icon: "grid" },
-      { href: "/dealer/schemes", label: "Schemes", icon: "tag" },
+      { href: "/depot/counters", label: "Counters", icon: "grid" },
+      { href: "/depot/schemes", label: "Schemes", icon: "tag" },
+      { href: "/depot/stock", label: "Stock", icon: "box" },
     ],
   },
   {
@@ -103,7 +105,7 @@ export const NAV_SECTIONS: NavSection[] = [
 export function sectionForPath(pathname: string): AccessRole {
   if (pathname.startsWith("/field")) return "field";
   if (pathname.startsWith("/supervisor")) return "supervisor";
-  if (pathname.startsWith("/dealer")) return "dealer";
+  if (pathname.startsWith("/depot")) return "dealer";
   if (pathname.startsWith("/hq")) return "hq";
   if (pathname.startsWith("/khq")) return "khq";
   return "admin";

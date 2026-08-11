@@ -31,7 +31,7 @@ export default async function EditVisitPage({
   }
 
   const [counter] = await db
-    .select({ id: counters.id, name: counters.name, areaName: areas.name })
+    .select({ id: counters.id, name: counters.name, type: counters.type, areaName: areas.name })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
     .where(eq(counters.id, id))
@@ -42,7 +42,7 @@ export default async function EditVisitPage({
     <VisitForm
       counterId={counter.id}
       counterName={counter.name}
-      counterArea={counter.areaName}
+      counterArea={`${counter.type} · ${counter.areaName}`}
       visitId={visitId}
       initial={{ items: visit.items, rank: visit.rank, competitor: visit.competitor, remarks: visit.remarks }}
     />

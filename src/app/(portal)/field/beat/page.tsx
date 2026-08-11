@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { and, eq, gte, inArray, lt, or } from "drizzle-orm";
+import { and, eq, gte, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, beatAssignments, counters, visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
@@ -28,63 +28,45 @@ export default async function FieldBeatPage() {
   const { start, end } = istDayBounds();
   const today = istDateString();
 
+  // Today's Beat = ONLY the counters this rep's supervisor assigned for today.
+  // Nothing else surfaces here — not even counters the rep added themselves.
   const todaysAssignments = await db
     .select({ counterId: beatAssignments.counterId })
     .from(beatAssignments)
     .where(and(eq(beatAssignments.repUserId, user.id), eq(beatAssignments.beatDate, today)));
   const assignedIds = todaysAssignments.map((a) => a.counterId);
 
-  // Beat = counters this rep created themselves, UNION counters their
-  // supervisor assigned to them for today. No other source of visibility.
-  // Admin is unrestricted — its "beat" is every counter, company-wide.
-  const scope = isAdmin
-    ? undefined
-    : assignedIds.length
-      ? or(eq(counters.createdByUserId, user.id), inArray(counters.id, assignedIds))
-      : eq(counters.createdByUserId, user.id);
+  const rows = assignedIds.length
+    ? await db
+        .select({
+          id: counters.id,
+          name: counters.name,
+          type: counters.type,
+          areaName: areas.name,
+          depotId: counters.depotId,
+        })
+        .from(counters)
+        .innerJoin(areas, eq(areas.id, counters.areaId))
+        .where(inArray(counters.id, assignedIds))
+    : [];
 
-  const counterQuery = db
-    .select({
-      id: counters.id,
-      name: counters.name,
-      type: counters.type,
-      areaName: areas.name,
-      depotId: counters.depotId,
-      createdByUserId: counters.createdByUserId,
-    })
-    .from(counters)
-    .innerJoin(areas, eq(areas.id, counters.areaId));
-
-  const [rows, todaysVisits, newCounterRows] = await Promise.all([
-    scope ? counterQuery.where(scope) : counterQuery,
-    // Admin's stat tiles reflect the whole company today, not just their own visits.
+  const [todaysVisits, newCounterRows] = await Promise.all([
     db
       .select({ counterId: visits.counterId })
       .from(visits)
-      .where(
-        isAdmin
-          ? and(gte(visits.visitedAt, start), lt(visits.visitedAt, end))
-          : and(eq(visits.userId, user.id), gte(visits.visitedAt, start), lt(visits.visitedAt, end)),
-      ),
+      .where(and(eq(visits.userId, user.id), gte(visits.visitedAt, start), lt(visits.visitedAt, end))),
     db
       .select({ id: counters.id })
       .from(counters)
-      .where(
-        isAdmin
-          ? and(gte(counters.createdAt, start), lt(counters.createdAt, end))
-          : and(eq(counters.createdByUserId, user.id), gte(counters.createdAt, start), lt(counters.createdAt, end)),
-      ),
+      .where(and(eq(counters.createdByUserId, user.id), gte(counters.createdAt, start), lt(counters.createdAt, end))),
   ]);
 
   const visitedIds = new Set(todaysVisits.map((v) => v.counterId));
-  const assignedIdSet = new Set(assignedIds);
   const beat: BeatCounter[] = rows.map((c) => ({
     id: c.id,
     name: c.name,
     type: c.type,
     areaName: c.areaName,
-    addedByMe: c.createdByUserId === user.id,
-    assignedBySO: assignedIdSet.has(c.id),
     canVisit: isAdmin || c.depotId === user.depot?.id,
     visitedToday: visitedIds.has(c.id),
   }));
@@ -92,12 +74,11 @@ export default async function FieldBeatPage() {
   return (
     <BeatClient
       firstName={user.name.split(/\s+/)[0]}
-      depotName={isAdmin ? "All depots" : user.depot!.name}
+      depotName={user.depot?.name ?? "—"}
       reportsTo={user.reportsTo?.name ?? null}
       visitsToday={todaysVisits.length}
       newCountersToday={newCounterRows.length}
       beat={beat}
-      beatLabel={isAdmin ? "All Counters" : "Today's Beat"}
     />
   );
 }

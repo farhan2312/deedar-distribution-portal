@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { endDay, startDay } from "@/lib/field/day-log-actions";
+import { useT } from "@/lib/i18n/provider";
 
 export type HistoryRow = {
   dateLabel: string;
@@ -33,6 +34,7 @@ export function DayLogClient({
   history: HistoryRow[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, start] = useTransition();
 
   function onStart() {
@@ -53,10 +55,10 @@ export function DayLogClient({
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-[26px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            {greeting}, {firstName}! 👋
+            {t(greeting)}, {firstName}! 👋
           </h1>
           <p className="mt-1 text-[14px]" style={{ color: "var(--ink-2)" }}>
-            Let&apos;s track your day and make it count.
+            {t("Let's track your day and make it count.")}
           </p>
         </div>
         <div
@@ -77,26 +79,26 @@ export function DayLogClient({
             </IconBadge>
             <div>
               <div className="text-[17px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-                Today&apos;s Plan
+                {t("Today's Plan")}
               </div>
-              <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>Log your visit timings for today</div>
+              <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("Log your visit timings for today")}</div>
             </div>
           </div>
 
           <PlanRow
             icon={<PlayIcon className="h-4 w-4" style={{ color: "var(--accent)" }} />}
-            label="Visit Start Time"
+            label={t("Visit Start Time")}
             value={startLabel}
-            btnLabel="Start"
+            btnLabel={t("Start")}
             active={!started}
             disabled={started || pending}
             onClick={onStart}
           />
           <PlanRow
             icon={<StopIcon className="h-4 w-4" style={{ color: "var(--accent)" }} />}
-            label="Visit End Time"
+            label={t("Visit End Time")}
             value={endLabel}
-            btnLabel="End"
+            btnLabel={t("End")}
             active={started && !ended}
             disabled={!started || ended || pending}
             onClick={onEnd}
@@ -105,8 +107,7 @@ export function DayLogClient({
 
           {started && ended && (
             <p className="mt-3 text-[13px]" style={{ color: "var(--ink-2)" }}>
-              Day complete — On Job: <strong>{onJobLabel}</strong>, logged for
-              supervisor review.
+              {t("Day complete")} — {t("On job")}: <strong>{onJobLabel}</strong>
             </p>
           )}
         </div>
@@ -118,10 +119,10 @@ export function DayLogClient({
         >
           <TrendIllustration />
           <div className="mt-4 text-[17px] font-bold" style={{ fontFamily: "var(--font-display)" }}>
-            Every visit counts!
+            {t("Every visit counts!")}
           </div>
           <p className="mt-2 text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,.82)" }}>
-            Keep logging your visits and achieve more everyday.
+            {t("Keep logging your visits and achieve more everyday.")}
           </p>
         </div>
       </div>
@@ -134,25 +135,25 @@ export function DayLogClient({
           </IconBadge>
           <div>
             <div className="text-[17px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-              Previous Days
+              {t("Previous Days")}
             </div>
-            <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>Your recent visit history</div>
+            <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("Your recent visit history")}</div>
           </div>
         </div>
 
         {history.length === 0 ? (
           <p className="text-[13.5px]" style={{ color: "var(--ink-3)" }}>
-            No previous day logs yet.
+            {t("No previous day logs yet.")}
           </p>
         ) : (
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Start time</th>
-                  <th>End time</th>
-                  <th>On job</th>
+                  <th>{t("Date")}</th>
+                  <th>{t("Start time")}</th>
+                  <th>{t("End time")}</th>
+                  <th>{t("On job")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -182,10 +183,10 @@ export function DayLogClient({
         </span>
         <div className="flex-1">
           <div className="text-[15px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--accent)" }}>
-            Keep up the great work!
+            {t("Keep up the great work!")}
           </div>
           <p className="text-[13px]" style={{ color: "var(--ink-2)" }}>
-            Consistency today leads to success tomorrow.
+            {t("Consistency today leads to success tomorrow.")}
           </p>
         </div>
         <TrophyIllustration />

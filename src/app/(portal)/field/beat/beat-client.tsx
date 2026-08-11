@@ -4,14 +4,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { searchCounterByPhone, type CounterSearchResult } from "@/lib/field/actions";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { useT } from "@/lib/i18n/provider";
 
 export type BeatCounter = {
   id: string;
   name: string;
   type: string;
   areaName: string;
-  addedByMe: boolean;
-  assignedBySO: boolean;
   canVisit: boolean;
   visitedToday: boolean;
 };
@@ -23,7 +22,6 @@ export function BeatClient({
   visitsToday,
   newCountersToday,
   beat,
-  beatLabel = "Today's Beat",
 }: {
   firstName: string;
   depotName: string;
@@ -31,14 +29,15 @@ export function BeatClient({
   visitsToday: number;
   newCountersToday: number;
   beat: BeatCounter[];
-  beatLabel?: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const [phone, setPhone] = useState("");
   const [result, setResult] = useState<CounterSearchResult | null>(null);
   const [searching, startSearch] = useTransition();
 
-  const selfAddedCount = beat.filter((c) => c.addedByMe).length;
+  // Remaining = counters not yet visited today.
+  const remainingCount = beat.filter((c) => !c.visitedToday).length;
 
   function doSearch() {
     if (!/^\d{10}$/.test(phone)) {
@@ -56,7 +55,7 @@ export function BeatClient({
     <div className="mx-auto max-w-xl" style={{ animation: "fadeUp .3s ease" }}>
       <header className="mb-5">
         <h2 className="text-[26px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-          Namaste, {firstName}
+          {t("Namaste")}, {firstName}
         </h2>
         <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
           {depotName}
@@ -65,14 +64,14 @@ export function BeatClient({
       </header>
 
       <div className="mb-5 grid grid-cols-2 gap-3">
-        <BeatStat label="Visits today" value={visitsToday} target={50} />
-        <BeatStat label="New counters" value={newCountersToday} target={10} />
+        <BeatStat label={t("Visits today")} value={visitsToday} target={50} />
+        <BeatStat label={t("New counters")} value={newCountersToday} target={10} />
       </div>
 
       {/* Search by mobile */}
       <div className="card mb-6 p-5">
         <label className="mb-2 block text-[12px] font-semibold" style={{ color: "var(--ink-2)" }}>
-          Find a counter by mobile number
+          {t("Find a counter by mobile number")}
         </label>
         <div className="flex gap-2">
           <input
@@ -89,7 +88,7 @@ export function BeatClient({
             onKeyDown={(e) => e.key === "Enter" && doSearch()}
           />
           <button className="btn btn-primary whitespace-nowrap" onClick={doSearch} disabled={searching}>
-            {searching ? "Searching…" : "Search"}
+            {searching ? t("Searching…") : t("Search")}
           </button>
         </div>
 
@@ -100,7 +99,7 @@ export function BeatClient({
                 No counter with this number.{" "}
                 <a href="/field/new-counter" className="link">Add it as a new counter →</a>
               </p>
-            ) : (
+            ) : result.canVisit ? (
               <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: "var(--bg-soft)" }}>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>
@@ -110,15 +109,13 @@ export function BeatClient({
                     {result.type} · {result.area} · {result.depotName}
                   </div>
                 </div>
-                {result.canVisit ? (
-                  <button className="btn btn-primary btn-sm" onClick={() => openCounter(result.id)}>
-                    Check in
-                  </button>
-                ) : (
-                  <button className="btn btn-secondary btn-sm" onClick={() => openCounter(result.id)}>
-                    View
-                  </button>
-                )}
+                <button className="btn btn-primary btn-sm" onClick={() => openCounter(result.id)}>
+                  {t("Check in")}
+                </button>
+              </div>
+            ) : (
+              <div className="rounded-xl p-3 text-[13px]" style={{ background: "rgba(178,94,0,.1)", color: "var(--warning)" }}>
+                {t("This mobile is registered to a counter in another depot — you can't access it from here.")}
               </div>
             )}
           </div>
@@ -126,26 +123,23 @@ export function BeatClient({
 
         {!result && (
           <p className="mt-2 text-[11px]" style={{ color: "var(--ink-3)" }}>
-            Found: check in if it&apos;s in your depot. Not found: add it as a new
-            counter.
+            {t("Found in your depot: check in. In another depot: not accessible. Not found: add it as a new counter.")}
           </p>
         )}
       </div>
 
       <div className="mb-3 flex items-baseline justify-between">
         <h4 className="text-[18px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-          {beatLabel}
+          {t("Today's Beat")}
         </h4>
-        <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-          {beat.length} counter{beat.length === 1 ? "" : "s"}
-          {selfAddedCount > 0 && ` · ${selfAddedCount} added by you`}
+        <span className="text-[12px]" style={{ color: "var(--accent)" }}>
+          {remainingCount} {t("remaining")}
         </span>
       </div>
 
       {beat.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
-          No counters in your beat yet — add one from New Counter, or ask your
-          supervisor (SO) to assign you a counter for today.
+          {t("No counters assigned for today yet — your supervisor (SO) sets your daily beat.")}
         </p>
       ) : (
         <div className="space-y-2">
@@ -155,20 +149,8 @@ export function BeatClient({
                 <PinIcon />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>
-                    {c.name}
-                  </span>
-                  {c.addedByMe && (
-                    <span className="flex-none rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "var(--accent-tint)", color: "var(--accent)" }}>
-                      Added by you
-                    </span>
-                  )}
-                  {c.assignedBySO && (
-                    <span className="flex-none rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "var(--bg-soft)", color: "var(--ink-2)" }}>
-                      Assigned by SO
-                    </span>
-                  )}
+                <div className="truncate text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>
+                  {c.name}
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>
                   {c.type} · {c.areaName}
@@ -177,11 +159,11 @@ export function BeatClient({
               <div className="flex flex-none items-center gap-2">
                 {c.visitedToday && (
                   <span className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: "var(--success)" }}>
-                    <CheckIcon /> Visited
+                    <CheckIcon /> {t("Visited")}
                   </span>
                 )}
                 <button className="btn btn-primary btn-sm" onClick={() => openCounter(c.id)}>
-                  {c.visitedToday ? "Open" : "Check in"}
+                  {c.visitedToday ? t("Open") : t("Check in")}
                 </button>
               </div>
             </div>

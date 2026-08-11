@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   checkDuplicate,
@@ -29,14 +29,7 @@ type WizardMode =
 
 type WizardProps = WizardMode & { variant?: WizardVariant };
 
-const COUNTER_TYPES: NewCounterInput["type"][] = [
-  "Kirana",
-  "Paan",
-  "Tea Stall",
-  "Wholesale",
-  "Vegetable Shop",
-  "Others",
-];
+const ALL_COUNTER_TYPES: NewCounterInput["type"][] = ["Kirana", "Paan", "Tea Stall", "Wholesale", "Vegetable Shop", "Others"];
 
 type Step = "duplicate" | "details" | "review";
 
@@ -45,6 +38,12 @@ export function NewCounterWizard(props: WizardProps) {
   const isSupervisor = props.variant === "supervisor";
   const backHref = isSupervisor ? "/supervisor/assign-beat" : "/field/beat";
   const doneHref = isSupervisor ? "/supervisor/assign-beat" : "/field/beat";
+  // Wholesale counters are Supervisor-added only — the field counter form
+  // (used by field reps AND admin alike) never offers it. Only the
+  // Supervisor variant of this wizard does.
+  const counterTypes: NewCounterInput["type"][] = isSupervisor
+    ? ALL_COUNTER_TYPES
+    : ALL_COUNTER_TYPES.filter((t) => t !== "Wholesale");
   const [step, setStep] = useState<Step>("duplicate");
   const [draft, setDraft] = useState({
     name: "",
@@ -57,8 +56,31 @@ export function NewCounterWizard(props: WizardProps) {
     gps: "",
   });
   const [dup, setDup] = useState<DuplicateMatch>(null);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Reactive duplicate check: as soon as the phone hits 10 digits, look it up
+  // (debounced) and surface the match automatically. Anything shorter is
+  // cleared from the onChange handler. All state writes here live inside the
+  // async callback — react-hooks/set-state-in-effect disallows syncing state
+  // in the effect body.
+  useEffect(() => {
+    if (step !== "duplicate" || !/^\d{10}$/.test(draft.phone)) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const match = isSupervisor
+        ? await checkDuplicateForSupervisor(draft.phone)
+        : await checkDuplicate(draft.phone);
+      if (cancelled) return;
+      setDup(match);
+      setChecking(false);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [draft.phone, step, isSupervisor]);
 
   const steps: { key: Step; label: string }[] = [
     { key: "duplicate", label: "Check Duplicate" },
@@ -77,22 +99,14 @@ export function NewCounterWizard(props: WizardProps) {
       : props.depots.find((d) => d.id === draft.depotId)?.areas ?? [];
   const areaName = areaOptions.find((a) => a.id === draft.areaId)?.name ?? "";
 
-  async function goDetails() {
+  function goDetails() {
     setError("");
     if (!/^\d{10}$/.test(draft.phone)) {
       setError("Enter a valid 10-digit mobile number.");
       return;
     }
-    setBusy(true);
-    const match = isSupervisor
-      ? await checkDuplicateForSupervisor(draft.phone)
-      : await checkDuplicate(draft.phone);
-    setBusy(false);
-    setDup(match);
-    if (match) {
-      setError("This mobile number is already a counter.");
-      return;
-    }
+    if (checking) return; // wait for the in-flight lookup
+    if (dup) return; // duplicate card is already visible; button is disabled
     setStep("details");
   }
 
@@ -189,8 +203,22 @@ export function NewCounterWizard(props: WizardProps) {
                 maxLength={10}
                 placeholder="10-digit mobile"
                 value={draft.phone}
-                onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                onChange={(e) => {
+                  const next = e.target.value.replace(/\D/g, "").slice(0, 10);
+                  setDraft({ ...draft, phone: next });
+                  setDup(null);
+                  setError("");
+                  setChecking(/^\d{10}$/.test(next));
+                }}
               />
+              {checking && (
+                <p className="mt-1.5 text-[12px]" style={{ color: "var(--ink-3)" }}>Checking…</p>
+              )}
+              {!checking && !dup && /^\d{10}$/.test(draft.phone) && (
+                <p className="mt-1.5 text-[12px]" style={{ color: "var(--success)" }}>
+                  ✓ New number — no existing counter with this mobile.
+                </p>
+              )}
             </div>
             {dup && (
               <div className="mb-3.5 rounded-xl p-3.5" style={{ background: "rgba(178,94,0,.1)" }}>
@@ -206,9 +234,9 @@ export function NewCounterWizard(props: WizardProps) {
             <button
               className="btn btn-primary mt-2 w-full justify-center py-3.5"
               onClick={goDetails}
-              disabled={busy}
+              disabled={busy || checking || !!dup || !/^\d{10}$/.test(draft.phone)}
             >
-              {busy ? "Checking…" : "Confirm — this is new"}
+              Continue
             </button>
           </>
         )}
@@ -294,7 +322,7 @@ export function NewCounterWizard(props: WizardProps) {
             <div className="field mb-4">
               <label>Type of Counter *</label>
               <div className="flex flex-wrap gap-2">
-                {COUNTER_TYPES.map((t) => {
+                {counterTypes.map((t) => {
                   const active = draft.type === t;
                   return (
                     <button

@@ -20,7 +20,7 @@ export default async function NewVisitPage({
 
   const { id } = await params;
   const [counter] = await db
-    .select({ id: counters.id, name: counters.name, areaName: areas.name, depotId: counters.depotId })
+    .select({ id: counters.id, name: counters.name, type: counters.type, areaName: areas.name, depotId: counters.depotId })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
     .where(eq(counters.id, id))
@@ -37,6 +37,10 @@ export default async function NewVisitPage({
   }
 
   return (
-    <VisitForm counterId={counter.id} counterName={counter.name} counterArea={counter.areaName} />
+    <VisitForm
+      counterId={counter.id}
+      counterName={counter.name}
+      counterArea={`${counter.type} · ${counter.areaName}`}
+    />
   );
 }

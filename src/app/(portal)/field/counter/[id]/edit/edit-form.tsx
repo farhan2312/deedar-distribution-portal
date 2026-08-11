@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateCounter, type EditCounterInput } from "@/lib/field/actions";
 import { GpsCapture } from "../../../_components/gps-capture";
 
-const COUNTER_TYPES: EditCounterInput["type"][] = [
+const ALL_COUNTER_TYPES: EditCounterInput["type"][] = [
   "Kirana",
   "Paan",
   "Tea Stall",
@@ -27,6 +27,15 @@ export function EditCounterForm({
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Wholesale counters are Supervisor-added only — the field counter form
+  // never offers it, for anyone (field rep or admin). If a counter is
+  // ALREADY Wholesale (added elsewhere by a Supervisor), it stays visible
+  // here so its true type isn't hidden/misrepresented, but it can't be
+  // newly selected from this form.
+  const counterTypes = initial.type === "Wholesale"
+    ? ALL_COUNTER_TYPES
+    : ALL_COUNTER_TYPES.filter((t) => t !== "Wholesale");
 
   async function save() {
     setError("");
@@ -76,7 +85,7 @@ export function EditCounterForm({
       <div className="field mb-4">
         <label>Type of Counter *</label>
         <div className="flex flex-wrap gap-2">
-          {COUNTER_TYPES.map((t) => {
+          {counterTypes.map((t) => {
             const active = draft.type === t;
             return (
               <button

@@ -5,12 +5,13 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, counters, depots } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { canAccess } from "@/lib/auth/access";
 
 export type DuplicateMatch = { name: string; type: string; area: string } | null;
 
 export async function checkDuplicate(phone: string): Promise<DuplicateMatch> {
   const user = await getCurrentUser();
-  if (!user?.accessRoles.includes("field")) return null;
+  if (!user || !canAccess(user, "field")) return null;
   if (!/^\d{10}$/.test(phone)) return null;
 
   const [match] = await db
@@ -35,7 +36,7 @@ export type NewCounterInput = {
 
 export async function createCounter(input: NewCounterInput) {
   const user = await getCurrentUser();
-  if (!user?.accessRoles.includes("field")) {
+  if (!user || !canAccess(user, "field")) {
     return { ok: false as const, error: "Not authorized." };
   }
   if (!input.name.trim() || !/^\d{10}$/.test(input.phone)) {
@@ -47,6 +48,12 @@ export async function createCounter(input: NewCounterInput) {
   const isAdmin = user.accessRoles.includes("admin");
   if (!isAdmin && input.depotId !== user.depot?.id) {
     return { ok: false as const, error: "You can only add counters in your own depot." };
+  }
+  // Wholesale counters are Supervisor-added only — this action backs the
+  // field counter form, which never offers Wholesale, for anyone (including
+  // admin) — that's added via the Supervisor form/action instead.
+  if (input.type === "Wholesale") {
+    return { ok: false as const, error: "Wholesale counters are added by your Supervisor, not from the field." };
   }
 
   const [depot] = await db.select().from(depots).where(eq(depots.id, input.depotId)).limit(1);
@@ -93,13 +100,13 @@ export type EditCounterInput = {
 /** Edit a counter's identity — allowed only for counters in the rep's own depot. */
 export async function updateCounter(counterId: string, input: EditCounterInput) {
   const user = await getCurrentUser();
-  if (!user?.accessRoles.includes("field")) {
+  if (!user || !canAccess(user, "field")) {
     return { ok: false as const, error: "Not authorized." };
   }
   if (!input.name.trim()) return { ok: false as const, error: "Name is required." };
 
   const [counter] = await db
-    .select({ id: counters.id, depotId: counters.depotId })
+    .select({ id: counters.id, depotId: counters.depotId, type: counters.type })
     .from(counters)
     .where(eq(counters.id, counterId))
     .limit(1);
@@ -108,6 +115,12 @@ export async function updateCounter(counterId: string, input: EditCounterInput) 
   const isAdmin = user.accessRoles.includes("admin");
   if (!isAdmin && counter.depotId !== user.depot?.id) {
     return { ok: false as const, error: "You can only edit counters in your own depot." };
+  }
+  // This action backs the field counter form, which never offers Wholesale,
+  // for anyone. A caller may keep an existing Wholesale counter Wholesale
+  // (unchanged), but can't convert another type into Wholesale from here.
+  if (input.type === "Wholesale" && counter.type !== "Wholesale") {
+    return { ok: false as const, error: "Wholesale counters are added by your Supervisor, not from the field." };
   }
 
   const [area] = await db.select().from(areas).where(eq(areas.id, input.areaId)).limit(1);
@@ -141,19 +154,27 @@ export type CounterSearchResult =
   | { found: false }
   | {
       found: true;
+      canVisit: true;
       id: string;
       name: string;
       type: string;
       area: string;
       depotName: string;
-      /** true only when the counter is in the rep's own depot (point 1 & 2). */
-      canVisit: boolean;
+    }
+  | {
+      // Match exists but it belongs to a different depot — we intentionally
+      // don't leak the counter's identity to a rep who can't act on it. Just
+      // confirms "this number is taken elsewhere" so they don't try to add it
+      // as new. No id/name/depot returned.
+      found: true;
+      canVisit: false;
     };
 
-/** Point 2: a rep can look up any counter by mobile, but may only visit ones in their depot. */
+/** A rep can look up any counter by mobile, but out-of-depot matches only
+ * confirm existence — no identifying details are returned. Admin sees everything. */
 export async function searchCounterByPhone(phone: string): Promise<CounterSearchResult> {
   const user = await getCurrentUser();
-  if (!user?.accessRoles.includes("field")) return { found: false };
+  if (!user || !canAccess(user, "field")) return { found: false };
   if (!/^\d{10}$/.test(phone)) return { found: false };
 
   const [c] = await db
@@ -174,14 +195,17 @@ export async function searchCounterByPhone(phone: string): Promise<CounterSearch
   if (!c) return { found: false };
 
   const isAdmin = user.accessRoles.includes("admin");
+  const canVisit = isAdmin || c.depotId === user.depot?.id;
+  if (!canVisit) return { found: true, canVisit: false };
+
   return {
     found: true,
+    canVisit: true,
     id: c.id,
     name: c.name,
     type: c.type,
     area: c.area,
     depotName: c.depotName,
-    canVisit: isAdmin || c.depotId === user.depot?.id,
   };
 }
 

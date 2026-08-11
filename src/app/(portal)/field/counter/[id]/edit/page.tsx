@@ -35,7 +35,8 @@ export default async function EditCounterPage({
     .limit(1);
   if (!counter) notFound();
 
-  const canEdit = user.accessRoles.includes("admin") || counter.depotId === user.depot?.id;
+  const isAdmin = user.accessRoles.includes("admin");
+  const canEdit = isAdmin || counter.depotId === user.depot?.id;
   if (!canEdit) {
     return (
       <Notice title="Edit counter">
