@@ -14,8 +14,8 @@ const REQUEST_STATUS_STYLE: Record<string, { label: string; bg: string; color: s
 };
 
 const ROLE_COLS: { role: AccessRole; label: string }[] = [
-  { role: "field", label: "Field" },
-  { role: "supervisor", label: "Supervisor" },
+  { role: "field", label: "Field ISR" },
+  { role: "supervisor", label: "Sales Officer" },
   { role: "dealer", label: "Depot" },
   { role: "hq", label: "C&F HQ" },
   { role: "khq", label: "Kanpur HQ" },
@@ -225,7 +225,7 @@ export default async function AdminUsersPage() {
                     <>
                     {roleSet.has("field") && (
                       <>
-                        <Mapping label="Depot (Field)">
+                        <Mapping label="Depot (Field ISR)">
                           <DepotSelect userId={u.id} value={u.depotId} options={depotOptions} />
                           {u.depotId && depotAreas.length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1">
@@ -245,7 +245,7 @@ export default async function AdminUsersPage() {
                       </>
                     )}
                     {roleSet.has("supervisor") && (
-                      <Mapping label="Depots (Supervisor)">
+                      <Mapping label="Depots (Sales Officer)">
                         <div className="flex flex-wrap gap-1">
                           {allDepots.map((d) => (
                             <DepotCheckbox key={d.id} userId={u.id} depotId={d.id} name={d.name} checked={userDepotSet.get(u.id)?.has(d.id) ?? false} />

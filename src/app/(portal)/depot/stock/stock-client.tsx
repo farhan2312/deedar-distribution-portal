@@ -2,16 +2,35 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { ProductSegment } from "@/db/schema";
+import type { ProductSegment, StockMovementType } from "@/db/schema";
 import { PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
-import { recordMovement } from "@/lib/depot/actions";
+import { closeStockDay, recordMovement } from "@/lib/depot/actions";
 import type { DepotOption, DepotStockData, StockRow } from "@/lib/depot/data";
 import { DepotSelect } from "../_components/depot-select";
 
-function levelOf(row: StockRow): { label: string; color: string } {
-  if (row.onHand === 0) return { label: "Out of stock", color: "var(--danger)" };
-  if (row.onHand < row.lowThreshold) return { label: "Low", color: "var(--warning)" };
-  return { label: "In stock", color: "var(--success)" };
+const SEGMENTS: ProductSegment[] = PRODUCT_SEGMENTS.map((p) => p.value);
+
+const MOVEMENT_TYPES: { value: StockMovementType; label: string }[] = [
+  { value: "inward", label: "Inward from C&F" },
+  { value: "outward_retail", label: "Outward — Retail counters" },
+  { value: "outward_wholesale", label: "Outward — Wholesale counters" },
+  { value: "returns", label: "Returns / damage" },
+  { value: "manual", label: "Manual adjustment" },
+];
+
+const TYPE_LABEL: Record<StockMovementType, string> = {
+  inward: "Inward from C&F",
+  outward_retail: "Outward — Retail",
+  outward_wholesale: "Outward — Wholesale",
+  returns: "Returns / damage",
+  manual: "Manual adjustment",
+};
+
+/** Two states, matching the prototype: below threshold is "Low stock". */
+function levelOf(row: StockRow) {
+  return row.onHand < row.lowThreshold
+    ? { label: "Low stock", color: "var(--danger)", bg: "rgba(199,38,59,.1)" }
+    : { label: "Healthy", color: "var(--success)", bg: "rgba(30,158,90,.12)" };
 }
 
 export function DepotStockClient({
@@ -24,26 +43,57 @@ export function DepotStockClient({
   data: DepotStockData;
 }) {
   const router = useRouter();
+  const [type, setType] = useState<StockMovementType>("inward");
   const [segment, setSegment] = useState<ProductSegment>("DG10");
-  const [direction, setDirection] = useState<"inward" | "outward">("inward");
+  const [repUserId, setRepUserId] = useState("");
+  const [wholesaleCounterId, setWholesaleCounterId] = useState("");
   const [qty, setQty] = useState("");
+  const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
+  const locked = data.todayClosed;
+  const isOutwardRetail = type === "outward_retail";
+  const isOutwardWholesale = type === "outward_wholesale";
+  const isManual = type === "manual";
+
   function submit() {
     setError(null);
-    const n = Math.floor(Number(qty));
-    if (!Number.isFinite(n) || n <= 0) {
-      setError("Enter a quantity greater than zero.");
+    const n = Math.trunc(Number(qty));
+    if (!Number.isFinite(n) || n === 0) {
+      setError("Enter a quantity.");
       return;
     }
     start(async () => {
-      const res = await recordMovement({ depotId: depot.id, segment, direction, qty: n });
+      const res = await recordMovement({
+        depotId: depot.id,
+        segment,
+        type,
+        qty: n,
+        note,
+        repUserId: isOutwardRetail ? repUserId : null,
+        wholesaleCounterId: isOutwardWholesale ? wholesaleCounterId : null,
+      });
       if (!res.ok) {
         setError(res.error);
         return;
       }
       setQty("");
+      setNote("");
+      setRepUserId("");
+      setWholesaleCounterId("");
+      router.refresh();
+    });
+  }
+
+  function closeDay() {
+    setError(null);
+    start(async () => {
+      const res = await closeStockDay(depot.id);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -53,7 +103,7 @@ export function DepotStockClient({
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h4 className="text-[20px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Depot Stock — {depot.name}
+            Depot Stock
           </h4>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
             Daily inward / outward movement, tracked per SKU.
@@ -68,144 +118,243 @@ export function DepotStockClient({
         <StatCard label="Movements today" value={String(data.movementsToday)} />
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[1.4fr_1fr]">
-        <div>
-          <h4 className="mb-3 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Stock by SKU
-          </h4>
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  {["SKU", "Product", "On hand", "Level", "Status"].map((h) => (
-                    <th key={h}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} style={{ color: "var(--ink-3)" }}>No stock recorded for this depot yet.</td>
-                  </tr>
-                ) : (
-                  data.rows.map((r) => {
-                    const lvl = levelOf(r);
-                    const pct = data.maxOnHand > 0 ? Math.round((r.onHand / data.maxOnHand) * 100) : 0;
-                    return (
-                      <tr key={r.segment}>
-                        <td className="font-semibold">{r.segment}</td>
-                        <td style={{ color: "var(--ink-2)" }}>{SEGMENT_LABEL[r.segment]}</td>
-                        <td className="font-semibold">{r.onHand}</td>
-                        <td style={{ width: "30%" }}>
-                          <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--hairline)" }}>
-                            <div style={{ width: `${pct}%`, height: "100%", background: lvl.color }} />
-                          </div>
-                        </td>
-                        <td>
-                          <span className="chip" style={{ background: "transparent", color: lvl.color, borderColor: "transparent", padding: 0, fontWeight: 600 }}>
-                            {lvl.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {data.recent.length > 0 && (
-            <>
-              <h4 className="mb-3 mt-7 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-                Recent movements
-              </h4>
-              <div className="space-y-2">
-                {data.recent.map((m) => (
-                  <div key={m.id} className="card flex items-center justify-between p-3.5">
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="chip"
-                        style={{
-                          background: m.direction === "inward" ? "rgba(30,158,90,.1)" : "rgba(178,94,0,.1)",
-                          color: m.direction === "inward" ? "var(--success)" : "var(--warning)",
-                          borderColor: "transparent",
-                        }}
-                      >
-                        {m.direction === "inward" ? "+ In" : "− Out"}
-                      </span>
-                      <div>
-                        <div className="text-[13.5px] font-semibold" style={{ color: "var(--ink-1)" }}>
-                          {m.segment} · {m.qty} pkts
-                        </div>
-                        <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-                          {m.note ?? "—"}
-                          {m.by ? ` · ${m.by}` : ""}
-                        </div>
+      {/* Stock by SKU */}
+      <h4 className="mb-3 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+        Stock by SKU
+      </h4>
+      <div className="table-wrap mb-7">
+        <table className="table">
+          <thead>
+            <tr>
+              {["SKU", "Product", "On hand", "Level", "Status"].map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ color: "var(--ink-3)" }}>No stock recorded for this depot yet.</td>
+              </tr>
+            ) : (
+              data.rows.map((r) => {
+                const lvl = levelOf(r);
+                const pct = data.maxOnHand > 0 ? Math.round((r.onHand / data.maxOnHand) * 100) : 0;
+                return (
+                  <tr key={r.segment}>
+                    <td className="font-semibold">{r.segment}</td>
+                    <td style={{ color: "var(--ink-2)" }}>{SEGMENT_LABEL[r.segment]}</td>
+                    <td className="font-semibold">{r.onHand}</td>
+                    <td style={{ width: "30%", minWidth: 160 }}>
+                      <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--hairline)" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: lvl.color }} />
                       </div>
-                    </div>
-                    <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>{m.whenLabel}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+                    </td>
+                    <td>
+                      <span className="chip" style={{ background: lvl.bg, color: lvl.color, borderColor: "transparent" }}>
+                        {lvl.label}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Record a movement */}
+      <div className="card mb-7 max-w-xl p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h6 className="text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+            Record a stock movement
+          </h6>
+          <button
+            className="btn btn-secondary"
+            style={{ fontSize: 12, padding: "7px 12px" }}
+            onClick={closeDay}
+            disabled={locked || pending}
+          >
+            Close today&apos;s stock
+          </button>
         </div>
 
-        {/* Record a movement */}
-        <div className="card p-5">
-          <h4 className="mb-3 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Record a movement
-          </h4>
+        <div
+          className="mb-3.5 rounded-xl px-3 py-2 text-[12px] font-semibold"
+          style={
+            locked
+              ? { background: "rgba(30,158,90,.12)", color: "var(--success)" }
+              : { background: "var(--bg-soft)", color: "var(--ink-2)" }
+          }
+        >
+          {locked
+            ? `Closed by ${data.todayClosedBy ?? "—"} · ${data.todayClosedAtLabel ?? ""} — no further edits today.`
+            : "Open for today — record movements as they happen."}
+        </div>
 
-          <div className="field mb-3">
-            <label>SKU</label>
-            <select className="inp" value={segment} onChange={(e) => setSegment(e.target.value as ProductSegment)}>
-              {PRODUCT_SEGMENTS.map((p) => (
-                <option key={p.value} value={p.value}>{p.label}</option>
+        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="field">
+            <label>Movement type</label>
+            <select className="inp" value={type} disabled={locked} onChange={(e) => setType(e.target.value as StockMovementType)}>
+              {MOVEMENT_TYPES.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
           </div>
-
-          <div className="field mb-3">
-            <label>Direction</label>
-            <div className="flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
-              {(["inward", "outward"] as const).map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setDirection(d)}
-                  className="flex-1 rounded-full py-2 text-[13px] font-semibold transition-colors"
-                  style={{
-                    background: direction === d ? "var(--accent)" : "transparent",
-                    color: direction === d ? "#fff" : "var(--ink-2)",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  {d === "inward" ? "Inward (received)" : "Outward (lifted)"}
-                </button>
+          <div className="field">
+            <label>SKU</label>
+            <select className="inp" value={segment} disabled={locked} onChange={(e) => setSegment(e.target.value as ProductSegment)}>
+              {SEGMENTS.map((s) => (
+                <option key={s} value={s}>{s}</option>
               ))}
-            </div>
+            </select>
           </div>
+        </div>
 
-          <div className="field mb-4">
-            <label>Quantity (packets)</label>
+        {isOutwardRetail && (
+          <div className="field mb-3">
+            <label>Field Salesman ISR *</label>
+            <select className="inp" value={repUserId} disabled={locked} onChange={(e) => setRepUserId(e.target.value)}>
+              <option value="">Select salesman</option>
+              {data.reps.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {isOutwardWholesale && (
+          <div className="field mb-3">
+            <label>Wholesale counter *</label>
+            <select className="inp" value={wholesaleCounterId} disabled={locked} onChange={(e) => setWholesaleCounterId(e.target.value)}>
+              <option value="">Select wholesale counter</option>
+              {data.wholesaleCounters.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="mb-3.5 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_2fr]">
+          <div className="field">
+            <label>{isManual ? "Quantity (+/−)" : "Quantity"}</label>
             <input
               className="inp"
               type="number"
-              min={1}
               inputMode="numeric"
-              placeholder="e.g. 100"
+              placeholder={isManual ? "e.g. -20" : "e.g. 50"}
               value={qty}
+              disabled={locked}
               onChange={(e) => setQty(e.target.value)}
             />
           </div>
-
-          {error && <p className="mb-3 text-[13px] font-semibold" style={{ color: "var(--danger)" }}>{error}</p>}
-
-          <button className="btn btn-primary w-full justify-center" onClick={submit} disabled={pending}>
-            {pending ? "Saving…" : "Record movement"}
-          </button>
+          <div className="field">
+            <label>Note</label>
+            <input
+              className="inp"
+              type="text"
+              placeholder="e.g. Truck no. / counter name / reason"
+              value={note}
+              disabled={locked}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
         </div>
+
+        {error && <p className="mb-3 text-[13px] font-semibold" style={{ color: "var(--danger)" }}>{error}</p>}
+
+        <button className="btn btn-primary" onClick={submit} disabled={locked || pending}>
+          {pending ? "Saving…" : "Record movement"}
+        </button>
+      </div>
+
+      {/* Daily movement log */}
+      <h4 className="mb-3 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+        Daily movement log
+      </h4>
+      <div className="table-wrap mb-7">
+        <table className="table">
+          <thead>
+            <tr>
+              {["Date", "SKU", "Type", "Qty", "To / by", "Note", "Logged by"].map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.movements.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ color: "var(--ink-3)" }}>No movements recorded yet.</td>
+              </tr>
+            ) : (
+              data.movements.map((m) => (
+                <tr key={m.id}>
+                  <td className="whitespace-nowrap">{m.whenLabel}</td>
+                  <td className="font-semibold">{m.segment}</td>
+                  <td className="whitespace-nowrap">{TYPE_LABEL[m.type]}</td>
+                  <td
+                    className="font-semibold tabular-nums"
+                    style={{ color: m.qty < 0 ? "var(--danger)" : "var(--success)" }}
+                  >
+                    {m.qty > 0 ? `+${m.qty}` : m.qty}
+                  </td>
+                  <td style={{ color: "var(--accent)" }}>{m.toLabel ?? "—"}</td>
+                  <td style={{ color: "var(--ink-2)" }}>{m.note ?? "—"}</td>
+                  <td style={{ color: "var(--ink-2)" }}>{m.by ?? "—"}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Historic closing balance */}
+      <h4 className="mb-1 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+        Historic stock (daily closing balance)
+      </h4>
+      <p className="mb-3 text-[13px]" style={{ color: "var(--ink-3)" }}>
+        Logged automatically at each movement — kept for trend analysis.
+      </p>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              {["Date", ...SEGMENTS, "Total", "Status"].map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.history.length === 0 ? (
+              <tr>
+                <td colSpan={SEGMENTS.length + 3} style={{ color: "var(--ink-3)" }}>
+                  No closing balances yet — record a movement to start the log.
+                </td>
+              </tr>
+            ) : (
+              data.history.map((h) => (
+                <tr key={h.date}>
+                  <td className="whitespace-nowrap">{h.dateLabel}</td>
+                  {SEGMENTS.map((s) => (
+                    <td key={s}>{h.closing[s] ?? 0}</td>
+                  ))}
+                  <td className="font-semibold">{h.total}</td>
+                  <td className="whitespace-nowrap">
+                    {h.closed ? (
+                      <span className="chip" style={{ background: "rgba(30,158,90,.12)", color: "var(--success)", borderColor: "transparent" }}>
+                        Closed by {h.closedBy ?? "—"} · {h.closedAtLabel ?? ""}
+                      </span>
+                    ) : (
+                      <span className="chip" style={{ background: "var(--bg-soft)", color: "var(--ink-3)", borderColor: "transparent" }}>
+                        Open
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

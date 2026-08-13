@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   checkDuplicate,
   createCounter,
-  type DuplicateMatch,
   type NewCounterInput,
 } from "@/lib/field/actions";
 import {
@@ -55,7 +54,12 @@ export function NewCounterWizard(props: WizardProps) {
     type: "" as NewCounterInput["type"] | "",
     gps: "",
   });
-  const [dup, setDup] = useState<DuplicateMatch>(null);
+  // A phone is a counter's unique id, so a match means the outlet already
+  // exists — a field rep is then routed to add a visit (id + canVisit set),
+  // while a supervisor just sees it's taken.
+  const [dup, setDup] = useState<
+    { name: string; type: string; area: string; id?: string; depotName?: string; canVisit?: boolean } | null
+  >(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -227,7 +231,25 @@ export function NewCounterWizard(props: WizardProps) {
                 </div>
                 <div className="text-[13px]" style={{ color: "var(--ink-1)" }}>
                   {dup.name} · {dup.type} · {dup.area}
+                  {dup.depotName && ` · ${dup.depotName}`}
                 </div>
+                {dup.id && dup.canVisit && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm mt-2.5"
+                    onClick={() => {
+                      router.push(`/field/counter/${dup.id}`);
+                      router.refresh();
+                    }}
+                  >
+                    Add a visit to this counter →
+                  </button>
+                )}
+                {dup.id && dup.canVisit === false && (
+                  <p className="mt-2 text-[12px]" style={{ color: "var(--ink-2)" }}>
+                    It&apos;s in another depot, so you can&apos;t add a visit to it from here.
+                  </p>
+                )}
               </div>
             )}
             {error && !dup && <ErrorText>{error}</ErrorText>}

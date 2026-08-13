@@ -110,6 +110,7 @@ export function DayLogClient({
               {t("Day complete")} — {t("On job")}: <strong>{onJobLabel}</strong>
             </p>
           )}
+
         </div>
 
         {/* Motivational card */}

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CompetitorPresence, ProductSegment, VisitItem } from "@/db/schema";
 import { createVisit, updateVisit, type VisitInput } from "@/lib/field/visit-actions";
-import { COMPETITOR_OPTIONS, MAX_VISIT_SOLD, PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
+import { COMPETITOR_OPTIONS, MAX_SOLD_PER_SKU, PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
 
 const SEGMENTS: ProductSegment[] = PRODUCT_SEGMENTS.map((p) => p.value);
 type SegMap = Record<ProductSegment, number>;
@@ -61,20 +61,15 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
   }, [isEdit]);
 
   const totalSold = SEGMENTS.reduce((s, seg) => s + sold[seg], 0);
-  const soldCapReached = totalSold >= MAX_VISIT_SOLD;
-  const soldOverCap = totalSold > MAX_VISIT_SOLD;
+  // Cap is per SKU, not combined — flag if any single segment is at its limit.
+  const anyAtCap = SEGMENTS.some((seg) => sold[seg] >= MAX_SOLD_PER_SKU);
 
   function bumpSold(seg: ProductSegment, delta: number) {
-    setSold((prev) => {
-      const next = Math.max(0, prev[seg] + delta);
-      if (delta > 0) {
-        // Prevent the increment from taking the combined total over the cap.
-        const others = SEGMENTS.reduce((s, k) => (k === seg ? s : s + prev[k]), 0);
-        const room = Math.max(0, MAX_VISIT_SOLD - others);
-        return { ...prev, [seg]: Math.min(next, room) };
-      }
-      return { ...prev, [seg]: next };
-    });
+    // Each segment is independently capped at MAX_SOLD_PER_SKU.
+    setSold((prev) => ({
+      ...prev,
+      [seg]: Math.min(MAX_SOLD_PER_SKU, Math.max(0, prev[seg] + delta)),
+    }));
   }
   function setStockValue(seg: ProductSegment, raw: string) {
     const n = Math.max(0, Math.floor(Number(raw)) || 0);
@@ -145,11 +140,8 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
           <h6 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>
             Packets sold &amp; stock at counter
           </h6>
-          <span
-            className="text-[11px] font-semibold"
-            style={{ color: soldOverCap ? "var(--danger)" : soldCapReached ? "var(--warning)" : "var(--ink-3)" }}
-          >
-            {totalSold}/{MAX_VISIT_SOLD} sold
+          <span className="text-[11px] font-semibold" style={{ color: "var(--ink-3)" }}>
+            {totalSold} sold
           </span>
         </div>
 
@@ -163,7 +155,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
                   value={sold[seg]}
                   onDec={() => bumpSold(seg, -1)}
                   onInc={() => bumpSold(seg, 1)}
-                  incDisabled={soldCapReached}
+                  incDisabled={sold[seg] >= MAX_SOLD_PER_SKU}
                 />
                 <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>Stock</span>
                 <input
@@ -179,9 +171,9 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
             </div>
           ))}
         </div>
-        {soldCapReached && (
-          <p className="mt-2 text-[11.5px]" style={{ color: soldOverCap ? "var(--danger)" : "var(--warning)" }}>
-            Max {MAX_VISIT_SOLD} packets combined per visit.
+        {anyAtCap && (
+          <p className="mt-2 text-[11.5px]" style={{ color: "var(--warning)" }}>
+            Max {MAX_SOLD_PER_SKU} packets sold per SKU.
           </p>
         )}
 
@@ -216,7 +208,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
           <button className="btn btn-secondary flex-1 justify-center py-3.5" onClick={() => router.push(`/field/counter/${counterId}`)} disabled={busy}>
             Cancel
           </button>
-          <button className="btn btn-primary flex-1 justify-center py-3.5" onClick={submit} disabled={busy || soldOverCap}>
+          <button className="btn btn-primary flex-1 justify-center py-3.5" onClick={submit} disabled={busy}>
             {busy ? "Saving…" : isEdit ? "Save changes" : "Submit visit"}
           </button>
         </div>

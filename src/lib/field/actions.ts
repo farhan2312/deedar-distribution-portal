@@ -9,19 +9,43 @@ import { canAccess } from "@/lib/auth/access";
 
 export type DuplicateMatch = { name: string; type: string; area: string } | null;
 
-export async function checkDuplicate(phone: string): Promise<DuplicateMatch> {
+/** A duplicate as seen by a field rep — includes the counter id and whether
+ * it's in the rep's own depot, so the wizard can offer "add a visit instead"
+ * rather than just blocking. */
+export type FieldDuplicateMatch =
+  | { id: string; name: string; type: string; area: string; depotName: string; canVisit: boolean }
+  | null;
+
+export async function checkDuplicate(phone: string): Promise<FieldDuplicateMatch> {
   const user = await getCurrentUser();
   if (!user || !canAccess(user, "field")) return null;
   if (!/^\d{10}$/.test(phone)) return null;
 
   const [match] = await db
-    .select({ name: counters.name, type: counters.type, area: areas.name })
+    .select({
+      id: counters.id,
+      name: counters.name,
+      type: counters.type,
+      area: areas.name,
+      depotId: counters.depotId,
+      depotName: depots.name,
+    })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
+    .innerJoin(depots, eq(depots.id, counters.depotId))
     .where(eq(counters.phone, phone))
     .limit(1);
+  if (!match) return null;
 
-  return match ?? null;
+  const isAdmin = user.accessRoles.includes("admin");
+  return {
+    id: match.id,
+    name: match.name,
+    type: match.type,
+    area: match.area,
+    depotName: match.depotName,
+    canVisit: isAdmin || match.depotId === user.depot?.id,
+  };
 }
 
 export type NewCounterInput = {

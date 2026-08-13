@@ -11,6 +11,8 @@ export type AssignCounter = {
   type: string;
   area: string;
   depotId: string;
+  /** Total stock observed at this counter's most recent visit (0 if none). */
+  stock: number;
   trend: "Increasing" | "Flat" | "Declining";
 };
 export type RepOption = { id: string; name: string; depotId: string | null };
@@ -44,12 +46,10 @@ function dateOptions() {
 export function AssignBeat({
   counters,
   reps,
-  areaOptions,
   initialAssignments,
 }: {
   counters: AssignCounter[];
   reps: RepOption[];
-  areaOptions: string[];
   initialAssignments: AssignmentSummary[];
 }) {
   const router = useRouter();
@@ -67,8 +67,20 @@ export function AssignBeat({
 
   const repDepotId = reps.find((r) => r.id === repId)?.depotId ?? null;
 
-  const candidates = counters.filter((c) => {
-    if (repDepotId && c.depotId !== repDepotId) return false;
+  // Everything below is scoped to the selected rep's depot: a beat can only
+  // contain counters from the rep's own depot (assignBeat enforces the same
+  // rule server-side), so the Area list is derived from those counters rather
+  // than spanning every supervised depot.
+  const depotCounters = useMemo(
+    () => (repDepotId ? counters.filter((c) => c.depotId === repDepotId) : []),
+    [counters, repDepotId],
+  );
+  const areaOptions = useMemo(
+    () => [...new Set(depotCounters.map((c) => c.area))].sort((a, b) => a.localeCompare(b)),
+    [depotCounters],
+  );
+
+  const candidates = depotCounters.filter((c) => {
     if (scope === "area" && area && c.area !== area) return false;
     if (filterType !== "all" && c.type !== filterType) return false;
     if (filterTrend !== "all" && c.trend !== filterTrend) return false;
@@ -151,6 +163,9 @@ export function AssignBeat({
               value={repId}
               onChange={(e) => {
                 setRepId(e.target.value);
+                // Areas belong to the previous rep's depot — clear them along
+                // with the selection, or the list silently filters to nothing.
+                setArea("");
                 setSelected(new Set());
               }}
             >
@@ -231,6 +246,10 @@ export function AssignBeat({
                     <td>
                       <div className="font-semibold" style={{ color: "var(--ink-1)" }}>{c.name}</div>
                       <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>{c.type} · {c.area}</div>
+                    </td>
+                    <td className="whitespace-nowrap text-right">
+                      <div className="text-[13px] font-semibold tabular-nums" style={{ color: "var(--ink-1)" }}>{c.stock}</div>
+                      <div className="text-[11px]" style={{ color: "var(--ink-3)" }}>stock</div>
                     </td>
                     <td className="text-right">
                       <span className="chip whitespace-nowrap" style={{ background: ts.bg, color: ts.color, borderColor: "transparent" }}>

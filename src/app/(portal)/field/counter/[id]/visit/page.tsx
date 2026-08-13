@@ -15,7 +15,7 @@ export default async function NewVisitPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Add visit">You don&apos;t have Field Salesman access.</Notice>;
+    return <Notice title="Add visit">You don&apos;t have Field Salesman ISR access.</Notice>;
   }
 
   const { id } = await params;

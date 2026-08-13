@@ -45,9 +45,10 @@ async function main() {
       .limit(1);
     if (existingMoves.length === 0) {
       const moves = [
-        { depotId: depot.id, segment: "DG10" as ProductSegment, direction: "inward" as const, qty: 200, note: "Factory dispatch received" },
-        { depotId: depot.id, segment: "DB20" as ProductSegment, direction: "outward" as const, qty: 60, note: "Bora lifting — wholesale" },
-        { depotId: depot.id, segment: "DG20" as ProductSegment, direction: "outward" as const, qty: 18, note: "Counter bulk order" },
+        // qty is signed — outward movements are negative.
+        { depotId: depot.id, segment: "DG10" as ProductSegment, type: "inward" as const, qty: 200, note: "Factory dispatch received" },
+        { depotId: depot.id, segment: "DB20" as ProductSegment, type: "outward_wholesale" as const, qty: -60, note: "Bora lifting — wholesale" },
+        { depotId: depot.id, segment: "DG20" as ProductSegment, type: "outward_retail" as const, qty: -18, note: "Field beat lifting" },
       ];
       await db.insert(stockMovements).values(moves);
       movementRows += moves.length;

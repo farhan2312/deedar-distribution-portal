@@ -23,7 +23,7 @@ export default async function SupervisorDayLogPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="Day Log">You don&apos;t have Supervisor access.</Notice>;
+    return <Notice title="Day Log">You don&apos;t have Sales Officer access.</Notice>;
   }
   const isAdmin = user.accessRoles.includes("admin");
 

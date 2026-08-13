@@ -16,7 +16,7 @@ export default async function EditVisitPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Edit visit">You don&apos;t have Field Salesman access.</Notice>;
+    return <Notice title="Edit visit">You don&apos;t have Field Salesman ISR access.</Notice>;
   }
 
   const { id, visitId } = await params;

@@ -24,8 +24,9 @@ export const COMPETITOR_LABEL: Record<CompetitorPresence, string> = Object.fromE
 /** A visit stays editable by its owner for this long after it was recorded. */
 export const VISIT_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** Cap on total packets sold across all SKUs in a single visit. */
-export const MAX_VISIT_SOLD = 24;
+/** Max packets sold PER SKU (product segment) in a single visit — applied to
+ * each segment independently, not to the combined total. */
+export const MAX_SOLD_PER_SKU = 24;
 
 /** MM:SS from a whole number of seconds (used for "time on counter"). */
 export function formatDuration(seconds: number | null | undefined): string {
@@ -37,4 +38,11 @@ export function formatDuration(seconds: number | null | undefined): string {
 
 export function isWithinEditWindow(visitedAt: Date, now: Date = new Date()) {
   return now.getTime() - visitedAt.getTime() < VISIT_EDIT_WINDOW_MS;
+}
+
+/** Earliest `visited_at` still inside the edit window — a query lower bound so
+ * a field rep's visit history only lists their editable visits. In a helper
+ * (not a component) so the time read doesn't trip react-hooks/purity. */
+export function editableVisitCutoff(now: Date = new Date()): Date {
+  return new Date(now.getTime() - VISIT_EDIT_WINDOW_MS);
 }

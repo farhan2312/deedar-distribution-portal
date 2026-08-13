@@ -1,18 +1,20 @@
 import "server-only";
-import { and, asc, desc, eq, gte, lt } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import type { AccessRole, ProductSegment } from "@/db/schema";
+import type { AccessRole, ProductSegment, StockMovementType } from "@/db/schema";
 import {
   areas,
   counters,
   depots,
   depotStock,
+  depotStockDays,
   schemeClaims,
   stockMovements,
   users,
   visits,
 } from "@/db/schema";
-import { formatISTDate, istDayBounds } from "@/lib/date";
+import { formatISTDate, formatISTTime, istDateString, istDayBounds } from "@/lib/date";
 
 export type ScopeUser = {
   accessRoles: AccessRole[];
@@ -81,13 +83,15 @@ export async function getDepotCountersData(depotId: string): Promise<DepotCounte
       .innerJoin(counters, eq(counters.id, visits.counterId))
       .where(eq(counters.depotId, depotId))
       .orderBy(desc(visits.visitedAt)),
+    // "Bulk sales" = bora lifting by wholesale counters. Retail outward goes
+    // to a field rep's beat and is already counted as salesman market sales.
     db
       .select({ qty: stockMovements.qty })
       .from(stockMovements)
       .where(
         and(
           eq(stockMovements.depotId, depotId),
-          eq(stockMovements.direction, "outward"),
+          eq(stockMovements.type, "outward_wholesale"),
           gte(stockMovements.createdAt, bounds.start),
           lt(stockMovements.createdAt, bounds.end),
         ),
@@ -100,7 +104,8 @@ export async function getDepotCountersData(depotId: string): Promise<DepotCounte
     if (!latestStock.has(v.counterId)) latestStock.set(v.counterId, v.stock); // rows are newest-first
     if (v.visitedAt >= bounds.start && v.visitedAt < bounds.end) marketSales += v.sold;
   }
-  const bulkSales = outwardToday.reduce((s, m) => s + m.qty, 0);
+  // qty is signed (outward is negative) — report it as a positive packet count.
+  const bulkSales = outwardToday.reduce((s, m) => s + Math.abs(m.qty), 0);
 
   const rows: DepotCounterRow[] = counterRows.map((c) => ({
     id: c.id,
@@ -179,11 +184,26 @@ export type StockRow = {
 export type MovementRow = {
   id: string;
   segment: ProductSegment;
-  direction: "inward" | "outward";
+  type: StockMovementType;
+  /** Signed: negative means the stock left the depot. */
   qty: number;
   note: string | null;
+  /** Who the stock went to — rep name or wholesale counter, if applicable. */
+  toLabel: string | null;
+  /** Who recorded it. */
   by: string | null;
   whenLabel: string;
+};
+
+/** One day's frozen-or-running closing balance, for the history table. */
+export type StockDayRow = {
+  date: string;
+  dateLabel: string;
+  closing: Partial<Record<ProductSegment, number>>;
+  total: number;
+  closed: boolean;
+  closedBy: string | null;
+  closedAtLabel: string | null;
 };
 
 export type DepotStockData = {
@@ -192,38 +212,73 @@ export type DepotStockData = {
   lowCount: number;
   movementsToday: number;
   maxOnHand: number;
-  recent: MovementRow[];
+  /** Today's movement log (the "Daily movement log" table). */
+  movements: MovementRow[];
+  /** Daily closing balances, newest first. */
+  history: StockDayRow[];
+  /** True once the day is closed — the UI locks all recording. */
+  todayClosed: boolean;
+  todayClosedBy: string | null;
+  todayClosedAtLabel: string | null;
+  /** Field reps assignable on an outward_retail movement. */
+  reps: { id: string; name: string }[];
+  /** Wholesale counters assignable on an outward_wholesale movement. */
+  wholesaleCounters: { id: string; name: string }[];
 };
 
 export async function getDepotStockData(depotId: string): Promise<DepotStockData> {
-  const bounds = istDayBounds();
-  const [stockRows, todayCount, recentRows] = await Promise.all([
+  const today = istDateString();
+  const rep = alias(users, "movement_rep");
+  const closer = alias(users, "day_closer");
+
+  const [stockRows, movementRows, dayRows, repRows, wholesaleRows] = await Promise.all([
     db.select().from(depotStock).where(eq(depotStock.depotId, depotId)),
-    db
-      .select({ id: stockMovements.id })
-      .from(stockMovements)
-      .where(
-        and(
-          eq(stockMovements.depotId, depotId),
-          gte(stockMovements.createdAt, bounds.start),
-          lt(stockMovements.createdAt, bounds.end),
-        ),
-      ),
+    // Whole log, newest first — the page shows today plus recent history.
     db
       .select({
         id: stockMovements.id,
         segment: stockMovements.segment,
-        direction: stockMovements.direction,
+        type: stockMovements.type,
         qty: stockMovements.qty,
         note: stockMovements.note,
+        repName: rep.name,
+        counterName: counters.name,
         by: users.name,
         createdAt: stockMovements.createdAt,
       })
       .from(stockMovements)
       .leftJoin(users, eq(users.id, stockMovements.createdByUserId))
+      .leftJoin(rep, eq(rep.id, stockMovements.repUserId))
+      .leftJoin(counters, eq(counters.id, stockMovements.wholesaleCounterId))
       .where(eq(stockMovements.depotId, depotId))
       .orderBy(desc(stockMovements.createdAt))
-      .limit(8),
+      .limit(25),
+    db
+      .select({
+        stockDate: depotStockDays.stockDate,
+        closing: depotStockDays.closing,
+        total: depotStockDays.total,
+        closed: depotStockDays.closed,
+        closedAt: depotStockDays.closedAt,
+        closedBy: closer.name,
+      })
+      .from(depotStockDays)
+      .leftJoin(closer, eq(closer.id, depotStockDays.closedByUserId))
+      .where(eq(depotStockDays.depotId, depotId))
+      .orderBy(desc(depotStockDays.stockDate))
+      .limit(14),
+    db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .where(
+        and(eq(users.depotId, depotId), sql`'field' = ANY(${users.accessRoles}::text[])`),
+      )
+      .orderBy(asc(users.name)),
+    db
+      .select({ id: counters.id, name: counters.name })
+      .from(counters)
+      .where(and(eq(counters.depotId, depotId), eq(counters.type, "Wholesale")))
+      .orderBy(asc(counters.name)),
   ]);
 
   const bySeg = new Map(stockRows.map((r) => [r.segment, r]));
@@ -236,21 +291,38 @@ export async function getDepotStockData(depotId: string): Promise<DepotStockData
   const lowCount = rows.filter((r) => r.onHand < r.lowThreshold).length;
   const maxOnHand = rows.reduce((m, r) => Math.max(m, r.onHand), 0);
 
+  const todayRow = dayRows.find((d) => d.stockDate === today);
+
   return {
     rows,
     total,
     lowCount,
-    movementsToday: todayCount.length,
+    movementsToday: movementRows.filter((m) => istDateString(m.createdAt) === today).length,
     maxOnHand,
-    recent: recentRows.map((r) => ({
-      id: r.id,
-      segment: r.segment,
-      direction: r.direction,
-      qty: r.qty,
-      note: r.note,
-      by: r.by,
-      whenLabel: formatISTDate(r.createdAt),
+    movements: movementRows.map((m) => ({
+      id: m.id,
+      segment: m.segment,
+      type: m.type,
+      qty: m.qty,
+      note: m.note,
+      toLabel: m.repName ? `Salesman: ${m.repName}` : m.counterName,
+      by: m.by,
+      whenLabel: `${formatISTDate(m.createdAt)} ${formatISTTime(m.createdAt)}`,
     })),
+    history: dayRows.map((d) => ({
+      date: d.stockDate,
+      dateLabel: formatISTDate(d.stockDate),
+      closing: d.closing,
+      total: d.total,
+      closed: d.closed,
+      closedBy: d.closedBy,
+      closedAtLabel: d.closedAt ? formatISTTime(d.closedAt) : null,
+    })),
+    todayClosed: todayRow?.closed ?? false,
+    todayClosedBy: todayRow?.closedBy ?? null,
+    todayClosedAtLabel: todayRow?.closedAt ? formatISTTime(todayRow.closedAt) : null,
+    reps: repRows,
+    wholesaleCounters: wholesaleRows,
   };
 }
 

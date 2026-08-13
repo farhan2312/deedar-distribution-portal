@@ -12,7 +12,7 @@ import {
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
-import { isWithinEditWindow, MAX_VISIT_SOLD } from "./products";
+import { isWithinEditWindow, MAX_SOLD_PER_SKU } from "./products";
 
 const SEGMENTS: ProductSegment[] = ["DG10", "DG20", "DB20", "DB40"];
 const COMPETITORS: CompetitorPresence[] = ["none", "local", "national"];
@@ -34,10 +34,10 @@ function validate(input: VisitInput): string | null {
   if (items.length === 0) return "Add at least one product with a segment.";
   for (const i of items) {
     if (i.stock < 0 || i.sold < 0) return "Stock and sold cannot be negative.";
-  }
-  const totalSold = items.reduce((s, i) => s + i.sold, 0);
-  if (totalSold > MAX_VISIT_SOLD) {
-    return `Total packets sold across all SKUs can't exceed ${MAX_VISIT_SOLD}.`;
+    // Sold is capped PER SKU (segment), not across the whole visit.
+    if (i.sold > MAX_SOLD_PER_SKU) {
+      return `Packets sold per SKU can't exceed ${MAX_SOLD_PER_SKU}.`;
+    }
   }
   // Rank is optional (the form offers "N/A"); if given it must be ≥ 1.
   if (input.rank != null && input.rank < 1) return "Deedar rank must be at least 1.";

@@ -34,8 +34,8 @@ const HI: Record<string, string> = {
   "Log in": "लॉगिन करें",
 
   // ── Sidebar: section titles ──
-  "Field Salesman": "फील्ड सेल्समैन",
-  Supervisor: "सुपरवाइज़र",
+  "Field Salesman ISR": "फील्ड सेल्समैन ISR",
+  "Sales Officer": "सेल्स ऑफिसर",
   Depot: "डिपो",
   "C&F Sales": "C&F बिक्री",
   "Kanpur HQ": "कानपुर मुख्यालय",
@@ -49,6 +49,7 @@ const HI: Record<string, string> = {
   Analytics: "एनालिटिक्स",
   Exceptions: "अपवाद",
   "Assign Beat": "बीट सौंपें",
+  "Assignment Summary": "असाइनमेंट सारांश",
   Counters: "दुकानें",
   Schemes: "स्कीम",
   Stock: "स्टॉक",
@@ -60,6 +61,64 @@ const HI: Record<string, string> = {
   "Scheme codes": "स्कीम कोड",
   "Log out": "लॉग आउट",
   "Distribution Portal": "वितरण पोर्टल",
+  "Bug Tracker": "बग ट्रैकर",
+
+  // ── Bug notification bell ──
+  "Bug notifications": "बग सूचनाएँ",
+  "Bug reports": "बग रिपोर्ट",
+  "Your reports": "आपकी रिपोर्ट",
+  active: "सक्रिय",
+  "No bug reports yet.": "अभी तक कोई बग रिपोर्ट नहीं।",
+  "You haven't reported anything yet.": "आपने अभी तक कुछ रिपोर्ट नहीं किया।",
+  "Open Bug Tracker": "बग ट्रैकर खोलें",
+  // Bug statuses stay English on purpose — they mirror the admin Bug Tracker,
+  // and "Open" already means the Beat action ("खोलें") in this English-as-key
+  // dictionary, so a status entry would collide with it.
+
+  // ── Live location pill (top bar) ──
+  "Sharing location": "लोकेशन साझा हो रही है",
+  "Connecting…": "कनेक्ट हो रहा है…",
+  "Location blocked": "लोकेशन अवरुद्ध",
+  "Location unavailable": "लोकेशन उपलब्ध नहीं",
+  "Your Sales Officer can see you on the map while your day is open.":
+    "जब तक आपका दिन खुला है, आपके सेल्स ऑफिसर आपको मैप पर देख सकते हैं।",
+  "Allow location access so your Sales Officer can see your position.":
+    "लोकेशन एक्सेस दें ताकि आपके सेल्स ऑफिसर आपकी स्थिति देख सकें।",
+
+  // ── Report a Bug ──
+  "Report a Bug": "समस्या दर्ज करें",
+  "Tell us what went wrong — it goes straight to the admin's Bug Tracker.":
+    "बताइए क्या गलत हुआ — यह सीधे एडमिन के बग ट्रैकर में जाएगा।",
+  "Your report went straight to the admin's Bug Tracker.":
+    "आपकी रिपोर्ट सीधे एडमिन के बग ट्रैकर में चली गई।",
+  "Thanks!": "धन्यवाद!",
+  Type: "प्रकार",
+  Bug: "बग",
+  Feature: "सुझाव",
+  Title: "शीर्षक",
+  "Short summary of the issue": "समस्या का संक्षिप्त विवरण",
+  "What happened?": "क्या हुआ?",
+  "Steps to reproduce, what you expected, what actually happened…":
+    "कैसे दोहराएँ, आपने क्या अपेक्षा की, वास्तव में क्या हुआ…",
+  Severity: "गंभीरता",
+  Low: "कम",
+  Medium: "मध्यम",
+  High: "अधिक",
+  Critical: "गंभीर",
+  "Page / where": "पेज / कहाँ",
+  "Screenshot (optional)": "स्क्रीनशॉट (वैकल्पिक)",
+  "Click to attach — or paste a screenshot (Ctrl/⌘+V)":
+    "अटैच करने के लिए क्लिक करें — या स्क्रीनशॉट पेस्ट करें (Ctrl/⌘+V)",
+  "Screenshot attached": "स्क्रीनशॉट जोड़ा गया",
+  Remove: "हटाएँ",
+  Cancel: "रद्द करें",
+  "Submit Bug": "बग भेजें",
+  "Submit Feature": "सुझाव भेजें",
+  "Give it a short title.": "एक संक्षिप्त शीर्षक दें।",
+  "That image is too large — keep it under about 1 MB.":
+    "यह छवि बहुत बड़ी है — इसे लगभग 1 MB से कम रखें।",
+  Done: "हो गया",
+  Close: "बंद करें",
 
   // ── Field: Beat ──
   Namaste: "नमस्ते",
@@ -74,8 +133,8 @@ const HI: Record<string, string> = {
   Search: "खोजें",
   "Searching…": "खोज रहे हैं…",
   View: "देखें",
-  "No counters assigned for today yet — your supervisor (SO) sets your daily beat.":
-    "आज के लिए अभी कोई दुकान असाइन नहीं — आपका सुपरवाइज़र (SO) आपका दैनिक बीट तय करता है।",
+  "No counters assigned for today yet — your Sales Officer (SO) sets your daily beat.":
+    "आज के लिए अभी कोई दुकान असाइन नहीं — आपका सेल्स ऑफिसर (SO) आपका दैनिक बीट तय करता है।",
 
   // ── Field: Day Log ──
   "Good morning": "सुप्रभात",

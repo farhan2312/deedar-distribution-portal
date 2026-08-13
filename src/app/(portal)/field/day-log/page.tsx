@@ -19,7 +19,7 @@ export default async function FieldDayLogPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Day Log">You don&apos;t have Field Salesman access.</Notice>;
+    return <Notice title="Day Log">You don&apos;t have Field Salesman ISR access.</Notice>;
   }
 
   const today = istDateString();

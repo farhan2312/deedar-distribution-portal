@@ -36,11 +36,16 @@ export async function assignBeat(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(beatDate)) return { ok: false, error: "Invalid date." };
 
   const [rep] = await db
-    .select({ id: users.id, depotId: users.depotId })
+    .select({ id: users.id, depotId: users.depotId, accessRoles: users.accessRoles })
     .from(users)
     .where(eq(users.id, repUserId))
     .limit(1);
   if (!rep?.depotId) return { ok: false, error: "Rep not found or has no depot." };
+  // A beat can only be handed to a field rep — never a depot manager/SO who
+  // happens to share the depot.
+  if (!rep.accessRoles.includes("field")) {
+    return { ok: false, error: "Beats can only be assigned to field reps." };
+  }
 
   if (!isAdmin) {
     const supervised = supervisedDepotIds(user);

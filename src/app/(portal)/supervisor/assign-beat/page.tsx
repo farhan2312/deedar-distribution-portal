@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, beatAssignments, counters, users } from "@/db/schema";
+import { areas, beatAssignments, counters, users, visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { getScopeDepots } from "@/lib/supervisor/team";
@@ -13,7 +13,7 @@ export default async function AssignBeatPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="Assign Beat">You don&apos;t have Supervisor access.</Notice>;
+    return <Notice title="Assign Beat">You don&apos;t have Sales Officer access.</Notice>;
   }
 
   const depotIds = (await getScopeDepots(user)).map((d) => d.id);
@@ -33,13 +33,30 @@ export default async function AssignBeatPage() {
         .where(inArray(counters.depotId, depotIds))
     : [];
 
-  // Field reps in the supervised depots become assignable.
+  // Only FIELD reps (ISRs) in the supervised depots are assignable — a beat is
+  // a field-visit list. Depot managers, SOs, etc. share the same depotId but
+  // must not appear here.
   const repRows = depotIds.length
-    ? await db
-        .select({ id: users.id, name: users.name, depotId: users.depotId })
-        .from(users)
-        .where(inArray(users.depotId, depotIds))
+    ? (
+        await db
+          .select({ id: users.id, name: users.name, depotId: users.depotId, accessRoles: users.accessRoles })
+          .from(users)
+          .where(inArray(users.depotId, depotIds))
+      ).filter((u) => u.accessRoles.includes("field"))
     : [];
+
+  // Latest-visit stock per candidate counter (the total stock observed at its
+  // most recent visit; 0 if never visited).
+  const counterIds = counterRows.map((c) => c.id);
+  const visitRows = counterIds.length
+    ? await db
+        .select({ counterId: visits.counterId, stock: visits.stock, visitedAt: visits.visitedAt })
+        .from(visits)
+        .where(inArray(visits.counterId, counterIds))
+        .orderBy(desc(visits.visitedAt))
+    : [];
+  const stockByCounter = new Map<string, number>();
+  for (const v of visitRows) if (!stockByCounter.has(v.counterId)) stockByCounter.set(v.counterId, v.stock);
 
   const candidateCounters: AssignCounter[] = counterRows.map((c) => ({
     id: c.id,
@@ -47,6 +64,7 @@ export default async function AssignBeatPage() {
     type: c.type,
     area: c.area,
     depotId: c.depotId,
+    stock: stockByCounter.get(c.id) ?? 0,
     trend: c.status === "declining" ? "Declining" : c.status === "dormant" ? "Flat" : "Increasing",
   }));
 
@@ -54,7 +72,6 @@ export default async function AssignBeatPage() {
     ? repRows.map((r) => ({ id: r.id, name: r.name, depotId: r.depotId }))
     : [];
 
-  const areaOptions = [...new Set(counterRows.map((c) => c.area))];
 
   // Real assignment history (today onward) — shown per selected date in the client.
   const repIds = repRows.map((r) => r.id);
@@ -91,7 +108,6 @@ export default async function AssignBeatPage() {
     <AssignBeat
       counters={candidateCounters}
       reps={reps}
-      areaOptions={areaOptions}
       initialAssignments={initialAssignments}
     />
   );

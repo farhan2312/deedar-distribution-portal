@@ -53,7 +53,7 @@ export function BeatClient({
 
   return (
     <div className="mx-auto max-w-xl" style={{ animation: "fadeUp .3s ease" }}>
-      <header className="mb-5">
+    {/*  <header className="mb-5">
         <h2 className="text-[26px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
           {t("Namaste")}, {firstName}
         </h2>
@@ -61,7 +61,7 @@ export function BeatClient({
           {depotName}
           {reportsTo && ` · reports to ${reportsTo}`}
         </p>
-      </header>
+      </header>*/}
 
       <div className="mb-5 grid grid-cols-2 gap-3">
         <BeatStat label={t("Visits today")} value={visitsToday} target={50} />
@@ -139,7 +139,7 @@ export function BeatClient({
 
       {beat.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
-          {t("No counters assigned for today yet — your supervisor (SO) sets your daily beat.")}
+          {t("No counters assigned for today yet — your Sales Officer (SO) sets your daily beat.")}
         </p>
       ) : (
         <div className="space-y-2">

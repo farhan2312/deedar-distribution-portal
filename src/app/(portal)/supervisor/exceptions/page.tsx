@@ -18,7 +18,7 @@ export default async function SupervisorExceptionsPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="Exceptions">You don&apos;t have Supervisor access.</Notice>;
+    return <Notice title="Exceptions">You don&apos;t have Sales Officer access.</Notice>;
   }
 
   const { depot: requestedDepot } = await searchParams;

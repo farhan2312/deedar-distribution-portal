@@ -15,7 +15,7 @@ export default async function SupervisorNewCounterPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="New Counter">You don&apos;t have Supervisor access.</Notice>;
+    return <Notice title="New Counter">You don&apos;t have Sales Officer access.</Notice>;
   }
 
   const depotOptions = await getScopeDepots(user);

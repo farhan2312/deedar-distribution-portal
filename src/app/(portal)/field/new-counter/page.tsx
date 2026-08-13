@@ -11,7 +11,7 @@ export default async function NewCounterPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="New Counter">You don&apos;t have Field Salesman access.</Notice>;
+    return <Notice title="New Counter">You don&apos;t have Field Salesman ISR access.</Notice>;
   }
 
   const isAdmin = user.accessRoles.includes("admin");
@@ -42,7 +42,7 @@ export default async function NewCounterPage() {
   if (!user.depot) {
     return (
       <Notice title="New Counter">
-        You aren&apos;t assigned to a depot yet — ask your supervisor to map
+        You aren&apos;t assigned to a depot yet — ask your Sales Officer to map
         you to one.
       </Notice>
     );

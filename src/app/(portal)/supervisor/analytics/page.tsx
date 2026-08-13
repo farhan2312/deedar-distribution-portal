@@ -29,7 +29,7 @@ export default async function SupervisorAnalyticsPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="Analytics">You don&apos;t have Supervisor access.</Notice>;
+    return <Notice title="Analytics">You don&apos;t have Sales Officer access.</Notice>;
   }
 
   const { depot: requestedDepot } = await searchParams;

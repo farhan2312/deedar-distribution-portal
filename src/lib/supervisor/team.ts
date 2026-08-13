@@ -158,6 +158,24 @@ export async function getVisitsToday(
   return out;
 }
 
+/**
+ * Total stock observed at each counter's MOST RECENT visit (any rep, any
+ * date). Counters never visited are absent from the map — callers default
+ * them to 0.
+ */
+export async function getLatestVisitStock(counterIds: string[]): Promise<Map<string, number>> {
+  if (counterIds.length === 0) return new Map();
+  const rows = await db
+    .select({ counterId: visits.counterId, stock: visits.stock })
+    .from(visits)
+    .where(inArray(visits.counterId, counterIds))
+    .orderBy(desc(visits.visitedAt));
+
+  const out = new Map<string, number>();
+  for (const r of rows) if (!out.has(r.counterId)) out.set(r.counterId, r.stock); // newest-first
+  return out;
+}
+
 /** Distinct counter ids the team visited within the window (map coloring + coverage KPI). */
 export async function getCountersVisitedToday(
   repIds: string[],

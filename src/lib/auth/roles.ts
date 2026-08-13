@@ -12,8 +12,8 @@ export function defaultPathForRoles(roles: readonly AccessRole[]): string {
 }
 
 export const ROLE_LABEL: Record<AccessRole, string> = {
-  field: "Field Salesman",
-  supervisor: "Supervisor (SO)",
+  field: "Field Salesman ISR",
+  supervisor: "Sales Officer (SO)",
   dealer: "Depot",
   hq: "C&F HQ",
   khq: "Kanpur HQ",

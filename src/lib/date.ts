@@ -56,6 +56,17 @@ export function formatISTDateLong(instant: Date = new Date()): string {
   });
 }
 
+/**
+ * `count` consecutive IST calendar days starting at `from` (default today),
+ * as "YYYY-MM-DD". Lives here so callers don't read the clock inline — doing
+ * that inside a component body trips react-hooks/purity.
+ */
+export function istDateRange(count: number, from: Date = new Date()): string[] {
+  return Array.from({ length: count }, (_, i) =>
+    istDateString(new Date(from.getTime() + i * 24 * 60 * 60 * 1000)),
+  );
+}
+
 /** Time-of-day greeting based on the current IST hour. */
 export function istGreeting(instant: Date = new Date()): string {
   const h = new Date(instant.getTime() + IST_OFFSET_MS).getUTCHours();

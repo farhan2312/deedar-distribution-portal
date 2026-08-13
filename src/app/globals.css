@@ -16,6 +16,8 @@
   --accent-hover: #5d796f;
   --accent-press: #2a3326;
   --accent-tint: rgba(124, 160, 129, 0.14);
+  /* "r, g, b" of --accent, so the sidebar's active pill can build rgba() glows. */
+  --accent-rgb: 124, 160, 129;
   --gradient-cosmic: linear-gradient(120deg, #7ca081 0%, #5d796f 55%, #2a3326 100%);
 
   /* ---------- CANVAS — soft lavender-white ---------- */
@@ -85,6 +87,29 @@
     background: var(--hairline);
     border-radius: 8px;
   }
+}
+
+/* Collapsible sections use native <details>. Tailwind's list-none covers most
+   browsers; Safari needs this pseudo-element rule to drop the disclosure
+   triangle so our own chevron is the only marker. */
+summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Sidebar: deep navy slab (kept from the glass pass — only the colour). */
+.sidebar-glass {
+  background: linear-gradient(180deg, #141a2c 0%, #0e1121 100%);
+  box-shadow: 4px 0 24px rgba(20, 16, 50, 0.18);
+}
+
+/* Active nav item — accent gradient pill with a soft glow beneath it. */
+.nav-active {
+  background: linear-gradient(135deg, rgba(var(--nav-rgb), 0.95) 0%, rgba(var(--nav-rgb), 0.62) 100%);
+  box-shadow: 0 8px 20px -6px rgba(var(--nav-rgb), 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.nav-idle:hover {
+  background: rgba(255, 255, 255, 0.07);
 }
 
 /* Sidebar nav has its own scrollbar styling — a subtle light thumb that
@@ -268,6 +293,24 @@
     transform: scale(1.3);
   }
 }
+/* Notification bell: rests tilted, then swings a couple of times per cycle. */
+@keyframes bellSwing {
+  0%,
+  60%,
+  100% {
+    transform: rotate(-18deg);
+  }
+  70% {
+    transform: rotate(8deg);
+  }
+  80% {
+    transform: rotate(-12deg);
+  }
+  90% {
+    transform: rotate(4deg);
+  }
+}
+
 @keyframes toastIn {
   from {
     transform: translate(-50%, 16px);

@@ -279,15 +279,60 @@ export const visits = pgTable("visits", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── Bug / feature reports ───────────────────────────────────────────────
+// Filed from the "Report a Bug" button in the top bar; reviewed by admin in
+// the Bug Tracker.
+export const bugTypeEnum = pgEnum("bug_type", ["bug", "feature"]);
+export const bugSeverityEnum = pgEnum("bug_severity", ["low", "medium", "high", "critical"]);
+export const bugStatusEnum = pgEnum("bug_status", ["open", "in_progress", "resolved", "closed"]);
+
+export const bugReports = pgTable("bug_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  type: bugTypeEnum("type").notNull().default("bug"),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description"),
+  severity: bugSeverityEnum("severity").notNull().default("medium"),
+  /** Route the reporter was on, prefilled from the client but editable. */
+  page: varchar("page", { length: 300 }),
+  /** Optional screenshot as a data URL. Kept in a separate column that list
+   * queries never SELECT, so large images don't bloat the tracker listing. */
+  screenshot: text("screenshot"),
+  reportedByUserId: uuid("reported_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  status: bugStatusEnum("status").notNull().default("open"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type BugReport = typeof bugReports.$inferSelect;
+export type BugType = (typeof bugTypeEnum.enumValues)[number];
+export type BugSeverity = (typeof bugSeverityEnum.enumValues)[number];
+export type BugStatus = (typeof bugStatusEnum.enumValues)[number];
+
+// ── Realtime location ───────────────────────────────────────────────────
+// LATEST known position per field rep — exactly one row per user, UPDATEd in
+// place by the WebSocket service. Deliberately NOT a location history table:
+// nothing in the app needs a GPS breadcrumb trail, so we don't retain one.
+export const repLocations = pgTable("rep_locations", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  lat: numeric("lat", { precision: 10, scale: 6 }).notNull(),
+  lng: numeric("lng", { precision: 10, scale: 6 }).notNull(),
+  accuracyM: integer("accuracy_m"),
+  // Device clock time of the GPS fix vs. our own receive time — the latter is
+  // what "is this device still alive" checks should use.
+  recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type RepLocation = typeof repLocations.$inferSelect;
+
 // ── Depot operations: SKU stock, movements, scheme claims ───────────────
 // The Depot portal (role key `dealer`, shown as "Depot") tracks per-depot
 // inventory of the four product SKUs, an inward/outward movement log, and
 // retailer scheme payouts.
-
-export const stockMovementDirectionEnum = pgEnum("stock_movement_direction", [
-  "inward",
-  "outward",
-]);
 
 // Current on-hand quantity per depot per SKU segment. Unique on (depot, segment).
 export const depotStock = pgTable(
@@ -305,22 +350,67 @@ export const depotStock = pgTable(
   (t) => [uniqueIndex("depot_stock_depot_segment_unique").on(t.depotId, t.segment)],
 );
 
-// Inward (received) / outward (bulk / bora lifting) movement log. Applying a
-// movement adjusts the matching depot_stock.on_hand.
+/** How stock left or entered the depot. Drives both the sign of `qty` and
+ * which extra field is required (rep for retail, counter for wholesale). */
+export const stockMovementTypeEnum = pgEnum("stock_movement_type", [
+  "inward", // received from C&F
+  "outward_retail", // lifted by a field rep for their beat
+  "outward_wholesale", // bora lifting by a wholesale counter
+  "returns", // returns / damage
+  "manual", // manual adjustment; qty may be negative
+]);
+
+// Movement log. `qty` is SIGNED (negative = stock left the depot) so the
+// running balance is a plain sum. Applying a movement adjusts the matching
+// depot_stock.on_hand and re-stamps that day's closing balance.
 export const stockMovements = pgTable("stock_movements", {
   id: uuid("id").primaryKey().defaultRandom(),
   depotId: uuid("depot_id")
     .notNull()
     .references(() => depots.id, { onDelete: "cascade" }),
   segment: productSegmentEnum("segment").notNull(),
-  direction: stockMovementDirectionEnum("direction").notNull(),
+  type: stockMovementTypeEnum("type").notNull(),
   qty: integer("qty").notNull(),
   note: text("note"),
+  /** Required for outward_retail — which Field Salesman ISR took the stock. */
+  repUserId: uuid("rep_user_id").references(() => users.id, { onDelete: "set null" }),
+  /** Required for outward_wholesale — which wholesale counter it went to. */
+  wholesaleCounterId: uuid("wholesale_counter_id").references(() => counters.id, {
+    onDelete: "set null",
+  }),
+  /** Who logged it (the "Logged by" column). */
   createdByUserId: uuid("created_by_user_id").references(() => users.id, {
     onDelete: "set null",
   }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Daily closing balance per depot — written on every movement, then frozen
+// when the depot closes the day ("no further edits today"). Kept for trend
+// analysis, so this one IS a history table (unlike rep_locations).
+export const depotStockDays = pgTable(
+  "depot_stock_days",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    depotId: uuid("depot_id")
+      .notNull()
+      .references(() => depots.id, { onDelete: "cascade" }),
+    stockDate: date("stock_date").notNull(), // IST calendar day
+    /** Per-SKU closing balance, e.g. { DG10: 420, DG20: 214, ... }. */
+    closing: jsonb("closing").$type<Partial<Record<ProductSegment, number>>>().notNull().default({}),
+    total: integer("total").notNull().default(0),
+    closed: boolean("closed").notNull().default(false),
+    closedByUserId: uuid("closed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("depot_stock_days_depot_date_unique").on(t.depotId, t.stockDate)],
+);
+
+export type DepotStockDay = typeof depotStockDays.$inferSelect;
+export type StockMovementType = (typeof stockMovementTypeEnum.enumValues)[number];
 
 export const schemeClaimStatusEnum = pgEnum("scheme_claim_status", [
   "paid",

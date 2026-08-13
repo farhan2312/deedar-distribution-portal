@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, cnfs, counters, depots, users, visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { formatISTDate } from "@/lib/date";
-import { COMPETITOR_LABEL, formatDuration, isWithinEditWindow } from "@/lib/field/products";
+import { COMPETITOR_LABEL, editableVisitCutoff, formatDuration, isWithinEditWindow } from "@/lib/field/products";
 import { Notice } from "@/components/ui/notice";
 
 const TYPE_BADGE = "rgba(178,142,46,.14)";
@@ -19,7 +19,7 @@ export default async function CounterDetailPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Counter">You don&apos;t have Field Salesman access.</Notice>;
+    return <Notice title="Counter">You don&apos;t have Field Salesman ISR access.</Notice>;
   }
 
   const { id } = await params;
@@ -47,6 +47,17 @@ export default async function CounterDetailPage({
   const isAdmin = user.accessRoles.includes("admin");
   const canVisit = isAdmin || counter.depotId === user.depot?.id;
 
+  // A field rep only sees their OWN visits, and only ones still inside the 24h
+  // edit window — the history list is effectively "your recently editable
+  // visits", not an audit trail of every rep. Admin keeps the full history.
+  const historyWhere = isAdmin
+    ? eq(visits.counterId, id)
+    : and(
+        eq(visits.counterId, id),
+        eq(visits.userId, user.id),
+        gte(visits.visitedAt, editableVisitCutoff()),
+      );
+
   const history = await db
     .select({
       id: visits.id,
@@ -61,7 +72,7 @@ export default async function CounterDetailPage({
     })
     .from(visits)
     .innerJoin(users, eq(users.id, visits.userId))
-    .where(eq(visits.counterId, id))
+    .where(historyWhere)
     .orderBy(desc(visits.visitedAt));
 
   const gps = counter.lat && counter.lng ? `${counter.lat}, ${counter.lng}` : "—";
@@ -120,11 +131,15 @@ export default async function CounterDetailPage({
 
       {/* Visit history */}
       <h4 className="mb-3 text-[13px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>
-        Visit history ({history.length})
+        {isAdmin ? "Visit history" : "Your visits · editable 24h"} ({history.length})
       </h4>
 
       {history.length === 0 ? (
-        <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>No visits recorded yet.</p>
+        <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
+          {isAdmin
+            ? "No visits recorded yet."
+            : "No editable visits — your visits drop off here 24 hours after you record them."}
+        </p>
       ) : (
         <div className="space-y-3">
           {history.map((h) => {

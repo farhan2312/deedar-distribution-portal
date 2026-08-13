@@ -15,7 +15,7 @@ export default async function EditCounterPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Edit counter">You don&apos;t have Field Salesman access.</Notice>;
+    return <Notice title="Edit counter">You don&apos;t have Field Salesman ISR access.</Notice>;
   }
 
   const { id } = await params;
