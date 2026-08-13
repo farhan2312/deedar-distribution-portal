@@ -41,11 +41,11 @@ export function BugTracker({ reports }: { reports: BugRow[] }) {
 
   return (
     <div>
-      <h4 className="page-title">Bug Tracker</h4>
-      <p className="page-subtitle mb-5">
-        Reports filed from the &ldquo;Report a Bug&rdquo; button across the portal.
-        {openCount > 0 && ` ${openCount} still open.`}
-      </p>
+      {openCount > 0 && (
+        <p className="mb-5 text-[13px] font-medium" style={{ color: "var(--ink-2)" }}>
+          {openCount} still open.
+        </p>
+      )}
 
       <div className="mb-4 inline-flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
         {(["all", ...STATUSES] as const).map((s) => {

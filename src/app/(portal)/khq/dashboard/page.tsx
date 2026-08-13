@@ -85,11 +85,6 @@ export default async function KhqDashboardPage() {
 
   return (
     <div>
-      <h4 className="page-title">Kanpur HQ — Company Dashboard</h4>
-      <p className="page-subtitle mb-6">
-        Company-wide view across every state, C&amp;F HQ, depot and area.
-      </p>
-
       <div className="mb-6 grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         {stats.map((s) => (
           <StatCard key={s.label} label={s.label} value={s.value} danger={s.danger} />

@@ -44,8 +44,11 @@ export default async function HqDepotsPage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-1 flex flex-wrap items-center gap-2.5">
-        <h4 className="page-title">Depots &amp; Areas — {selectedCnf.name}</h4>
+      <div className="mb-6 flex flex-wrap items-center gap-2.5">
+        {/* Page title comes from the shell; this carries the C&F in scope. */}
+        <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+          {selectedCnf.name}
+        </h4>
         {isAdmin && allCnfs.length > 1 && (
           <>
             <span className="flex-1" />
@@ -54,10 +57,6 @@ export default async function HqDepotsPage({
           </>
         )}
       </div>
-      <p className="page-subtitle mb-6">
-        Central Admin sets up states and C&amp;F HQs; from here you add the
-        depots and areas under a C&amp;F.
-      </p>
 
       <div className="mb-7 grid gap-5 sm:grid-cols-2">
         <div className="card p-5">

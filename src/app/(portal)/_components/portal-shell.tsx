@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { AccessRole } from "@/db/schema";
 import {
   breadcrumbForPath,
+  navItemForPath,
   NAV_SECTIONS,
   ROLE_THEME,
   sectionForPath,
@@ -40,6 +41,11 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
   const sections = NAV_SECTIONS.filter((s) => isAdmin || roleSet.has(s.role));
   const section = sectionForPath(pathname);
   const crumb = breadcrumbForPath(pathname);
+  // Every sidebar-listed page gets the same icon + title header, sourced from
+  // the nav config so a page can never drift from its sidebar entry. Routes
+  // with no nav entry (/dashboard, /account/*, counter detail pages) render
+  // their own bespoke headers instead.
+  const navItem = navItemForPath(pathname);
 
   return (
     <div className="flex h-screen" style={{ background: "var(--bg)", ...themeVars(ROLE_THEME[section]) }}>
@@ -138,7 +144,17 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
             <BugBell initial={bugInbox} />
           </div>
         </div>
-        <div className="mx-auto max-w-6xl px-8 py-8">{children}</div>
+        {/* Wide by default so tables/dashboards use the body; narrow pages
+            (New Counter, Beat, forms) self-center via their own `mx-auto max-w-*`. */}
+        <div className="mx-auto max-w-[1600px] px-8 py-8">
+          {navItem && !navItem.customHeader && (
+            <div className="mb-6">
+              <h1 className="page-title">{t(navItem.label)}</h1>
+              {navItem.blurb && <p className="page-subtitle max-w-2xl">{t(navItem.blurb)}</p>}
+            </div>
+          )}
+          {children}
+        </div>
       </main>
     </div>
   );

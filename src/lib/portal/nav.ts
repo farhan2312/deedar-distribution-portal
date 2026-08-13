@@ -43,7 +43,19 @@ export type NavIcon =
   | "bug"
   | "clipboard";
 
-export type NavItem = { href: string; label: string; icon: NavIcon };
+export type NavItem = {
+  href: string;
+  label: string;
+  icon: NavIcon;
+  /** One-line description shown under the title in the page header (portal
+   * shell). Keeps the title + subtitle together as one grouped unit so a page
+   * body never has to render an orphaned subtitle. */
+  blurb?: string;
+  /** When true the portal shell renders NO auto-header for this route — the
+   * page draws its own (e.g. to put stat cards on the same row as the title).
+   * The page is then responsible for the icon + title itself. */
+  customHeader?: boolean;
+};
 
 export type NavSection = {
   role: AccessRole;
@@ -57,55 +69,96 @@ export const NAV_SECTIONS: NavSection[] = [
     role: "field",
     title: "Field Salesman ISR",
     items: [
-      { href: "/field/day-log", label: "Day Log", icon: "calendar" },
-      { href: "/field/beat", label: "Beat", icon: "target" },
-      { href: "/field/new-counter", label: "New Counter", icon: "plusCircle" },
+      { href: "/field/day-log", label: "Day Log", icon: "calendar", customHeader: true },
+      { href: "/field/beat", label: "Beat", icon: "target", customHeader: true },
+      { href: "/field/new-counter", label: "New Counter", icon: "plusCircle", customHeader: true },
     ],
   },
   {
     role: "supervisor",
     title: "Sales Officer",
     items: [
-      { href: "/supervisor/map", label: "Live map", icon: "mapPin" },
-      { href: "/supervisor/analytics", label: "Analytics", icon: "barChart" },
-      { href: "/supervisor/day-log", label: "Day Log", icon: "calendar" },
-      { href: "/supervisor/exceptions", label: "Exceptions", icon: "alert" },
-      { href: "/supervisor/assign-beat", label: "Assign Beat", icon: "users" },
-      { href: "/supervisor/assignments", label: "Assignment Summary", icon: "clipboard" },
-      { href: "/supervisor/new-counter", label: "New Counter", icon: "plusCircle" },
+      { href: "/supervisor/map", label: "Live map", icon: "mapPin", customHeader: true },
+      { href: "/supervisor/analytics", label: "Analytics", icon: "barChart", customHeader: true },
+      { href: "/supervisor/day-log", label: "Day Log", icon: "calendar", customHeader: true },
+      {
+        // Draws its own header so the depot picker sits on the title row.
+        href: "/supervisor/exceptions",
+        label: "Exceptions",
+        icon: "alert",
+        customHeader: true,
+      },
+      { href: "/supervisor/assign-beat", label: "Assign Beat", icon: "users", customHeader: true },
+      {
+        href: "/supervisor/assignments",
+        label: "Assignment Summary",
+        icon: "clipboard",
+        blurb: "Every daily beat assignment scheduled across the week.",
+      },
+      { href: "/supervisor/new-counter", label: "New Counter", icon: "plusCircle", customHeader: true },
     ],
   },
   {
     role: "dealer",
     title: "Depot",
     items: [
-      { href: "/depot/counters", label: "Counters", icon: "grid" },
-      { href: "/depot/schemes", label: "Schemes", icon: "tag" },
-      { href: "/depot/stock", label: "Stock", icon: "box" },
+      { href: "/depot/counters", label: "Counters", icon: "grid", customHeader: true },
+      { href: "/depot/schemes", label: "Schemes", icon: "tag", customHeader: true },
+      { href: "/depot/stock", label: "Stock", icon: "box", customHeader: true },
     ],
   },
   {
     role: "hq",
     title: "C&F Sales",
     items: [
-      { href: "/hq/dashboard", label: "Dashboard", icon: "dashboard" },
-      { href: "/hq/map", label: "Live map", icon: "mapPin" },
-      { href: "/hq/depots", label: "Depots & Areas", icon: "building" },
+      { href: "/hq/dashboard", label: "Dashboard", icon: "dashboard", customHeader: true },
+      { href: "/hq/map", label: "Live map", icon: "mapPin", customHeader: true },
+      { href: "/hq/depots", label: "Depots & Areas", icon: "building", customHeader: true },
     ],
   },
   {
     role: "khq",
     title: "Kanpur HQ",
-    items: [{ href: "/khq/dashboard", label: "Company Dashboard", icon: "globe" }],
+    items: [
+      {
+        href: "/khq/dashboard",
+        label: "Company Dashboard",
+        icon: "globe",
+        blurb: "Company-wide view across every state, C&F HQ, depot and area.",
+      },
+    ],
   },
   {
     role: "admin",
     title: "Central Admin",
     items: [
-      { href: "/admin/hierarchy", label: "Hierarchy", icon: "sitemap" },
-      { href: "/admin/users", label: "Users & access", icon: "userCog" },
-      { href: "/admin/schemes", label: "Scheme codes", icon: "tag" },
-      { href: "/admin/bugs", label: "Bug Tracker", icon: "bug" },
+      {
+        href: "/admin/hierarchy",
+        label: "Hierarchy",
+        icon: "sitemap",
+        blurb: "Central Admin sets up down to C&F HQ; each C&F Manager then adds their own depots and areas.",
+      },
+      {
+        href: "/admin/users",
+        label: "Users & access",
+        icon: "userCog",
+        blurb: "Central Admin adds every user and controls which sections they see in their sidebar.",
+        // Draws its own header so the Total-users / Pending-requests stat cards
+        // sit on the same row as the title instead of dropping below it.
+        customHeader: true,
+      },
+      {
+        href: "/admin/schemes",
+        label: "Scheme codes",
+        icon: "tag",
+        blurb: "Unique, one-time-redeemable codes printed on packs/cartons.",
+      },
+      {
+        href: "/admin/bugs",
+        label: "Bug Tracker",
+        icon: "bug",
+        blurb: "Reports filed from the “Report a Bug” button across the portal.",
+      },
     ],
   },
 ];
@@ -121,15 +174,12 @@ export function sectionForPath(pathname: string): AccessRole {
 }
 
 /**
- * Breadcrumb for the top bar: the role section, then the page. Falls back to
- * a title-cased last path segment for routes with no nav entry (detail pages
- * like /field/counter/[id]).
+ * The sidebar entry a route belongs to (longest matching href wins), or null
+ * for routes with no nav entry — detail pages like /field/counter/[id], plus
+ * /dashboard and /account/*, which render their own bespoke headers. Drives
+ * the automatic page header (icon + title) in the portal shell.
  */
-export function breadcrumbForPath(pathname: string): { section: string; page: string } {
-  const role = sectionForPath(pathname);
-  const section = NAV_SECTIONS.find((s) => s.role === role);
-
-  // Longest matching nav href wins, so /field/counter/x maps to its parent.
+export function navItemForPath(pathname: string): NavItem | null {
   let best: NavItem | null = null;
   for (const s of NAV_SECTIONS) {
     for (const item of s.items) {
@@ -138,6 +188,19 @@ export function breadcrumbForPath(pathname: string): { section: string; page: st
       }
     }
   }
+  return best;
+}
+
+/**
+ * Breadcrumb for the top bar: the role section, then the page. Falls back to
+ * a title-cased last path segment for routes with no nav entry (detail pages
+ * like /field/counter/[id]).
+ */
+export function breadcrumbForPath(pathname: string): { section: string; page: string } {
+  const role = sectionForPath(pathname);
+  const section = NAV_SECTIONS.find((s) => s.role === role);
+
+  const best = navItemForPath(pathname);
   if (best) return { section: section?.title ?? "Deedar Drive", page: best.label };
 
   const last = pathname.split("/").filter(Boolean).pop() ?? "";

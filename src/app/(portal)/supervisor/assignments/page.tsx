@@ -87,12 +87,11 @@ export default async function AssignmentSummaryPage() {
 
   return (
     <div>
-      <h4 className="page-title">Assignment Summary</h4>
-      <p className="page-subtitle mb-5">
-        Every daily beat assignment scheduled across the week.
-        {upcoming.length > 0 &&
-          ` ${upcoming.length} beat${upcoming.length === 1 ? "" : "s"} · ${totalCounters} counters.`}
-      </p>
+      {upcoming.length > 0 && (
+        <p className="mb-5 text-[13px] font-medium" style={{ color: "var(--ink-2)" }}>
+          {upcoming.length} beat{upcoming.length === 1 ? "" : "s"} · {totalCounters} counters scheduled.
+        </p>
+      )}
 
       {upcoming.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>

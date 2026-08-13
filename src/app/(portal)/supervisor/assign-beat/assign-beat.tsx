@@ -139,7 +139,7 @@ export function AssignBeat({
   return (
     <div>
       <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        Assign daily beat
+        Assign Daily Beat
       </h4>
       <p className="mt-0.5 mb-5 text-[13px]" style={{ color: "var(--ink-3)" }}>
         Build a set of counters and hand them to a sales rep — schedule 1 day

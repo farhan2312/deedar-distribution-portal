@@ -71,14 +71,15 @@ export default async function SupervisorDayLogPage({
     forced: !!h.endForced,
   }));
 
-  const scopeLabel = depot?.name ?? (depots.length > 1 ? "all depots" : depots[0]?.name ?? "your depot");
+  const scopeLabel = depot?.name ?? (depots.length > 1 ? "All Depots" : depots[0]?.name ?? "Your Depot");
 
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
+          {/* Page title comes from the shell; this carries the scope in view. */}
           <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Day Log — {scopeLabel}
+            {scopeLabel}
           </h4>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
             {isAdmin

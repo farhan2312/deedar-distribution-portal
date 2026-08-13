@@ -53,12 +53,11 @@ export default async function SupervisorExceptionsPage({
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Exceptions — open day logs
-          </h4>
-          <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
+      {/* Own header (nav `customHeader`) so the depot picker sits on the title row. */}
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="page-title">Exceptions</h1>
+          <p className="page-subtitle max-w-2xl">
             Reps who clocked in but never clocked out. Force-close the day with the
             correct end time on their behalf.
           </p>

@@ -98,7 +98,7 @@ export default async function SupervisorMapPage({
     };
   });
 
-  const scopeLabel = depot?.name ?? (depots.length > 1 ? "all depots" : depots[0]?.name ?? "your depot");
+  const scopeLabel = depot?.name ?? (depots.length > 1 ? "All Depots" : depots[0]?.name ?? "Your Depot");
 
   return (
     <TeamMapView

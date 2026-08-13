@@ -54,12 +54,6 @@ export default async function AdminHierarchyPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h4 className="page-title">Organisation hierarchy</h4>
-      <p className="page-subtitle mb-5">
-        Central Admin sets up down to C&amp;F HQ; each C&amp;F Manager then adds
-        their own depots and areas.
-      </p>
-
       <div className="card mb-5 p-4">
         <div className="text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
           Headquarters

@@ -84,8 +84,9 @@ export default async function SupervisorAnalyticsPage({
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
+        {/* Page title comes from the shell; this carries the scope in view. */}
         <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-          Analytics — {scopeLabel}
+          {scopeLabel}
         </h4>
         <div className="flex items-center gap-3">
           <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>Reps who report to you</span>

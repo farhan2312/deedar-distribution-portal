@@ -101,19 +101,31 @@ export async function deleteArea(id: string) {
 
 // ── Users & access ───────────────────────────────────────────────────────
 
-export async function addUser(formData: FormData) {
+export type AddUserResult = { ok: true; message: string } | { ok: false; message: string };
+
+export async function addUser(formData: FormData): Promise<AddUserResult> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
-  if (!name || !/^\d{10}$/.test(phone)) return;
+  if (!name || !/^\d{10}$/.test(phone)) {
+    return { ok: false, message: "Enter a name and a valid 10-digit mobile number." };
+  }
 
   // First login: password is the phone number, same as the field-rep bootstrap pattern.
   const passwordHash = await hashPassword(phone);
-  await db
+  const inserted = await db
     .insert(users)
     .values({ name, phone, passwordHash, accessRoles: [] })
-    .onConflictDoNothing({ target: users.phone });
+    .onConflictDoNothing({ target: users.phone })
+    .returning({ id: users.id });
+
+  // No row back ⇒ the phone was already taken (conflict target skipped the insert).
+  if (inserted.length === 0) {
+    return { ok: false, message: `A user with mobile ${phone} already exists.` };
+  }
+
   revalidatePath("/admin/users");
+  return { ok: true, message: `${name} added — password is their mobile number until first login. Assign access below.` };
 }
 
 export async function removeUser(userId: string) {

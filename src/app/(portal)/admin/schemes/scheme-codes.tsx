@@ -8,10 +8,6 @@ export function SchemeCodes({ initialCount }: { initialCount: number }) {
 
   return (
     <div>
-      <h4 className="page-title">Scheme code batches</h4>
-      <p className="page-subtitle mb-5">
-        Unique, one-time-redeemable codes printed on packs/cartons.
-      </p>
       <div className="mb-5 max-w-xs">
         <StatCard label="Codes generated to date" value={count.toLocaleString("en-IN")} />
       </div>

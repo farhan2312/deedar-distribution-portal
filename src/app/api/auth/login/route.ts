@@ -12,8 +12,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "Phone and password are required." }, { status: 400 });
   }
 
+  // Select only what login needs — never pull the whole row (defence in depth
+  // so the password hash can't be accidentally echoed in a future refactor).
   const [user] = await db
-    .select()
+    .select({
+      id: users.id,
+      passwordHash: users.passwordHash,
+      accessRoles: users.accessRoles,
+    })
     .from(users)
     .where(eq(users.phone, phone.trim()))
     .limit(1);
