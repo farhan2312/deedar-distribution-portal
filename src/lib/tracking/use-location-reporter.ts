@@ -12,8 +12,9 @@ import {
   type ServerToClientEvents,
 } from "./protocol";
 import { issueRepTicket } from "./actions";
+import { getDeviceId } from "./device-id";
 
-export type ReporterState = "off" | "connecting" | "live" | "denied" | "error";
+export type ReporterState = "off" | "connecting" | "live" | "denied" | "error" | "blocked";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "http://localhost:4001";
 
@@ -95,14 +96,16 @@ export function useLocationReporter(enabled: boolean) {
     async function connect() {
       // Ticket first: every setState below then happens after an await, i.e.
       // never synchronously inside the effect body.
-      const res = await issueRepTicket();
+      const res = await issueRepTicket(getDeviceId());
       if (cancelledRef.current) return;
       if (typeof navigator === "undefined" || !navigator.geolocation) {
         setState("error");
         return;
       }
       if (!res.ok) {
-        setState("error");
+        // Another device owns today's tracking — don't open a socket at all,
+        // so this login never becomes a second pin on the SO/C&F map.
+        setState(res.code === "other_device" ? "blocked" : "error");
         return;
       }
       setState("connecting");
@@ -156,10 +159,18 @@ export function useLocationReporter(enabled: boolean) {
       socket.on("connect_error", async () => {
         if (cancelledRef.current) return;
         setState("connecting");
-        const fresh = await issueRepTicket();
+        const fresh = await issueRepTicket(getDeviceId());
         if (cancelledRef.current) return;
-        if (fresh.ok) socket.auth = { ticket: fresh.ticket };
-        else setState("error");
+        if (fresh.ok) {
+          socket.auth = { ticket: fresh.ticket };
+        } else if (fresh.code === "other_device") {
+          // Ownership moved to another device mid-session — stop retrying here.
+          stopWatching();
+          socket.disconnect();
+          setState("blocked");
+        } else {
+          setState("error");
+        }
       });
 
       socket.on("trackingError", () => {

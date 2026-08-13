@@ -22,6 +22,7 @@ export function LiveLocationPill({ active }: { active: boolean }) {
     connecting: { label: t("Connecting…"), bg: "rgba(224,177,92,.2)", color: "#B25E00", pulse: false },
     denied: { label: t("Location blocked"), bg: "rgba(199,38,59,.1)", color: "#C7263B", pulse: false },
     error: { label: t("Location unavailable"), bg: "rgba(199,38,59,.1)", color: "#C7263B", pulse: false },
+    blocked: { label: t("Shared on another device"), bg: "var(--bg-soft)", color: "var(--ink-3)", pulse: false },
     off: { label: t("Off"), bg: "var(--bg-soft)", color: "var(--ink-3)", pulse: false },
   }[state];
 
@@ -40,7 +41,9 @@ export function LiveLocationPill({ active }: { active: boolean }) {
       title={
         state === "denied"
           ? t("Allow location access so your Sales Officer can see your position.")
-          : t("Your Sales Officer can see you on the map while your day is open.")
+          : state === "blocked"
+            ? t("You started today's day on another device — location is shared from there.")
+            : t("Your Sales Officer can see you on the map while your day is open.")
       }
     >
       <PinIcon className="h-3.5 w-3.5 flex-none" style={{ color: style.color }} />

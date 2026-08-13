@@ -209,6 +209,12 @@ export const dayLogs = pgTable(
     endedByUserId: uuid("ended_by_user_id").references((): AnyPgColumn => users.id, {
       onDelete: "set null",
     }),
+    // Device/session that STARTED the day, and therefore owns live location
+    // sharing for it. If the same account logs in on a second device, that
+    // device gets no tracking ticket (see `issueRepTicket`) — so only the
+    // day-starter's device streams to the SO/C&F map, never two at once.
+    // Null on rows started before this was introduced (treated as unclaimed).
+    trackingDeviceId: text("tracking_device_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

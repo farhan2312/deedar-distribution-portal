@@ -14,13 +14,22 @@ async function requireField() {
   return user;
 }
 
-/** Stamp today's (IST) start time — once per day. */
-export async function startDay() {
+/**
+ * Stamp today's (IST) start time — once per day.
+ *
+ * `deviceId` (from the browser's localStorage) is recorded as the day's
+ * tracking owner: only this device can then mint a location-sharing ticket,
+ * so a second login on the same account never adds a second pin to the map.
+ * The first device to start the day wins — a later start call (the day is
+ * already open) does NOT reassign ownership.
+ */
+export async function startDay(deviceId?: string) {
   const user = await requireField();
   if (!user) return { ok: false as const, error: "Not authorized." };
 
   const now = new Date();
   const logDate = istDateString(now);
+  const trackingDeviceId = deviceId?.trim() || null;
 
   const [existing] = await db
     .select()
@@ -28,15 +37,15 @@ export async function startDay() {
     .where(and(eq(dayLogs.userId, user.id), eq(dayLogs.logDate, logDate)))
     .limit(1);
 
-  if (existing?.startAt) return { ok: true as const }; // already started
+  if (existing?.startAt) return { ok: true as const }; // already started, owner unchanged
 
   if (existing) {
     await db
       .update(dayLogs)
-      .set({ startAt: now, updatedAt: now })
+      .set({ startAt: now, trackingDeviceId, updatedAt: now })
       .where(eq(dayLogs.id, existing.id));
   } else {
-    await db.insert(dayLogs).values({ userId: user.id, logDate, startAt: now });
+    await db.insert(dayLogs).values({ userId: user.id, logDate, startAt: now, trackingDeviceId });
   }
 
   revalidatePath("/field/day-log");

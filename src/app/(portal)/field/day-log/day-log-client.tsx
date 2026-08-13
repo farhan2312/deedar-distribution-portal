@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { endDay, startDay } from "@/lib/field/day-log-actions";
+import { getDeviceId } from "@/lib/tracking/device-id";
 import { useT } from "@/lib/i18n/provider";
 
 export type HistoryRow = {
@@ -38,8 +39,9 @@ export function DayLogClient({
   const [pending, start] = useTransition();
 
   function onStart() {
+    const deviceId = getDeviceId();
     start(async () => {
-      await startDay();
+      await startDay(deviceId);
       router.refresh();
     });
   }
