@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { STALE_AFTER_MS, type RepPosition } from "@/lib/tracking/protocol";
+import { distanceMeters, STALE_AFTER_MS, type RepPosition } from "@/lib/tracking/protocol";
 
 export type CounterPin = {
   id: string;
@@ -89,6 +89,71 @@ function repIcon(name: string, stale: boolean): L.DivIcon {
   });
 }
 
+// ── Live-marker interpolation ───────────────────────────────────────────
+// Fixes arrive sparsely by design (the rep sends on ~50 m of movement plus a
+// 60 s heartbeat), so a raw setLatLng per fix makes markers teleport. We tween
+// between fixes on the client instead — purely cosmetic, the rep-side policy,
+// the socket and the stored position are all untouched.
+//
+// The tween drives `marker.setLatLng()` rather than a CSS transform/transition
+// on the icon: Leaflet owns those transforms for its own pan/zoom, so animating
+// them directly makes markers drift away from their coordinates while the user
+// drags the map. Re-setting the latlng each frame lets Leaflet re-project, so
+// the marker stays pinned to real ground even mid-pan.
+
+/** Below this a fix is the same place — GPS jitter or the heartbeat re-sending
+ * the last fix. Snap silently so a parked rep never visibly drifts. */
+const STATIONARY_M = 5;
+/** Past this, gliding would invent a path the rep never took — snap instead. */
+const SNAP_DISTANCE_M = 1500;
+/** Same idea on the time axis: after a silence this long (lost signal, or a
+ * suspended tab) the route in between is unknown, so don't animate it. */
+const SNAP_GAP_MS = 3 * 60_000;
+/** ~1 s for the sender's 50 m movement threshold — the common case. */
+const MS_PER_METER = 20;
+const MIN_DURATION_MS = 250;
+/** Hard ceiling: a marker must always settle, and should land before the next
+ * fix is due rather than lagging permanently behind the rep. */
+const MAX_DURATION_MS = 2500;
+
+type RepMarker = {
+  marker: L.Marker;
+  /** In-flight rAF handle, or null once the marker has settled. */
+  frame: number | null;
+  /** The fix the marker is heading to (or resting on). */
+  target: { lat: number; lng: number };
+  /** `updatedAt` of that fix — gap detection at the source. */
+  targetAt: number;
+  /** When we last applied a fix locally — gap detection at our end, which is
+   * what catches a browser that was suspended and resumed. */
+  renderedAt: number;
+  /** Whether the icon is currently drawn in its stale styling. */
+  stale: boolean;
+};
+
+/**
+ * Tween `entry.marker` to `to` over `duration`, linearly.
+ *
+ * Starts from the marker's *live* position (`getLatLng()`), not the previous
+ * fix, so superseding an in-flight tween never snaps the marker backwards.
+ */
+function animateMarker(entry: RepMarker, to: { lat: number; lng: number }, duration: number) {
+  const from = entry.marker.getLatLng();
+  const start = performance.now();
+
+  const step = (frameTime: number) => {
+    // rAF timestamps share performance.now()'s clock.
+    const t = Math.min(1, (frameTime - start) / duration);
+    entry.marker.setLatLng([
+      from.lat + (to.lat - from.lat) * t,
+      from.lng + (to.lng - from.lng) * t,
+    ]);
+    entry.frame = t < 1 ? requestAnimationFrame(step) : null;
+  };
+
+  entry.frame = requestAnimationFrame(step);
+}
+
 /**
  * Leaflet map: every geo-tagged counter plus live rep markers that move as
  * WebSocket updates arrive. Imperative Leaflet (not react-leaflet) so marker
@@ -105,7 +170,7 @@ export function LiveMap({
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const repLayerRef = useRef<Map<string, L.Marker>>(new Map());
+  const repLayerRef = useRef<Map<string, RepMarker>>(new Map());
   const fittedRef = useRef(false);
 
   const repNames = useMemo(() => new Map(reps.map((r) => [r.id, r.name])), [reps]);
@@ -131,6 +196,11 @@ export function LiveMap({
 
     const repLayer = repLayerRef.current;
     return () => {
+      // Stop every tween before the map goes away, so no frame fires against a
+      // removed marker.
+      for (const entry of repLayer.values()) {
+        if (entry.frame !== null) cancelAnimationFrame(entry.frame);
+      }
       map.remove();
       mapRef.current = null;
       repLayer.clear();
@@ -149,22 +219,74 @@ export function LiveMap({
       if (!name) continue; // not one of ours — ignore
       const stale = now - pos.updatedAt > STALE_AFTER_MS;
       const existing = layer.get(userId);
-      if (existing) {
-        existing.setLatLng([pos.lat, pos.lng]);
-        existing.setIcon(repIcon(name, stale));
-      } else {
+
+      // First sighting: place it, don't fly it in from nowhere.
+      if (!existing) {
         const marker = L.marker([pos.lat, pos.lng], {
           icon: repIcon(name, stale),
           zIndexOffset: 1000,
         }).addTo(map);
-        layer.set(userId, marker);
+        layer.set(userId, {
+          marker,
+          frame: null,
+          target: { lat: pos.lat, lng: pos.lng },
+          targetAt: pos.updatedAt,
+          renderedAt: now,
+          stale,
+        });
+        continue;
       }
+
+      // setIcon swaps the marker's DOM node, so only redraw when the icon would
+      // actually differ — doing it per update would flicker mid-tween.
+      if (existing.stale !== stale) {
+        existing.marker.setIcon(repIcon(name, stale));
+        existing.stale = stale;
+      }
+
+      // Effectively unchanged (heartbeat re-send or GPS jitter): record the fix
+      // but leave the marker where it is, so a parked rep stays put.
+      const moved = distanceMeters(existing.target.lat, existing.target.lng, pos.lat, pos.lng);
+      if (moved < STATIONARY_M) {
+        existing.target = { lat: pos.lat, lng: pos.lng };
+        existing.targetAt = pos.updatedAt;
+        existing.renderedAt = now;
+        continue;
+      }
+
+      // A newer fix supersedes whatever is in flight. Cancelling first means
+      // `animateMarker` reads the marker's real mid-tween position as its start.
+      if (existing.frame !== null) {
+        cancelAnimationFrame(existing.frame);
+        existing.frame = null;
+      }
+
+      // Gap checks at both ends: the source clock (silence between fixes) and
+      // ours (a suspended/backgrounded tab that just woke up).
+      const sourceGap = pos.updatedAt - existing.targetAt;
+      const localGap = now - existing.renderedAt;
+      const snap = moved > SNAP_DISTANCE_M || sourceGap > SNAP_GAP_MS || localGap > SNAP_GAP_MS;
+
+      if (snap) {
+        existing.marker.setLatLng([pos.lat, pos.lng]);
+      } else {
+        const duration = Math.min(
+          MAX_DURATION_MS,
+          Math.max(MIN_DURATION_MS, moved * MS_PER_METER),
+        );
+        animateMarker(existing, { lat: pos.lat, lng: pos.lng }, duration);
+      }
+
+      existing.target = { lat: pos.lat, lng: pos.lng };
+      existing.targetAt = pos.updatedAt;
+      existing.renderedAt = now;
     }
 
     // Drop markers for reps that are no longer reported.
-    for (const [userId, marker] of layer) {
+    for (const [userId, entry] of layer) {
       if (!positions.has(userId)) {
-        marker.remove();
+        if (entry.frame !== null) cancelAnimationFrame(entry.frame);
+        entry.marker.remove();
         layer.delete(userId);
       }
     }
