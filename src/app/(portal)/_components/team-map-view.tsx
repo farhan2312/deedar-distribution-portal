@@ -1,5 +1,6 @@
 import { LegendDot } from "@/components/ui/legend-dot";
 import { LiveMapPanel } from "./live-map-panel";
+import { COUNTER_COLORS, REP_LIVE_COLOR } from "./map-colors";
 import type { CounterPin, RepMeta } from "./live-map";
 
 /**
@@ -69,10 +70,10 @@ export function TeamMapView({
           {scopeLabel} — counter map
         </h4>
         <div className="flex flex-wrap items-center gap-3.5">
-          <LegendDot color="var(--success)" label="Visited today" />
-          <LegendDot color="var(--ink-3)" label="Pending" />
-          <LegendDot color="var(--danger)" label="Declining" />
-          <LegendDot color="#2E5FA3" label="Rep (live)" />
+          <LegendDot color={COUNTER_COLORS.visited} label="Visited today" />
+          <LegendDot color={COUNTER_COLORS.pending} label="Pending" />
+          <LegendDot color={COUNTER_COLORS.counter} label="Counters" />
+          <LegendDot color={REP_LIVE_COLOR} label="Rep (live)" />
         </div>
       </div>
 

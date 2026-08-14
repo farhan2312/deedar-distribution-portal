@@ -439,6 +439,24 @@ export const schemeClaims = pgTable("scheme_claims", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── Rate limiting ───────────────────────────────────────────────────────
+// Fixed-window counters for the two publicly reachable entry points (login and
+// "Request Access"). Postgres-backed rather than in-memory because Next runs
+// across instances, where a per-process Map would let an attacker simply spread
+// attempts around. One row per (key, window); old rows are pruned opportunistically.
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    // Bucket identity, e.g. "login:ip:1.2.3.4" or "login:phone:9000000001".
+    key: text("key").notNull(),
+    // Start of the fixed window this row counts; part of the PK so a new window
+    // is a new row and expiry needs no background job.
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.windowStart] })],
+);
+
 export type DepotStock = typeof depotStock.$inferSelect;
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type SchemeClaim = typeof schemeClaims.$inferSelect;

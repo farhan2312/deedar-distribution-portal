@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { AccessRole, DayLog } from "@/db/schema";
-import { areas, counters, dayLogs, depots, users, visits } from "@/db/schema";
+import { areas, beatAssignments, counters, dayLogs, depots, users, visits } from "@/db/schema";
 
 /** The subset of the current user needed to scope a supervisor's team. */
 export type ScopeUser = {
@@ -187,6 +187,25 @@ export async function getCountersVisitedToday(
     .from(visits)
     .where(
       and(inArray(visits.userId, repIds), gte(visits.visitedAt, bounds.start), lt(visits.visitedAt, bounds.end)),
+    );
+  return new Set(rows.map((r) => r.counterId));
+}
+
+/**
+ * Counters a Supervisor has put on a rep's beat for the given IST day. Keyed by
+ * counter id (not rep) — the map only cares whether a counter is assigned today,
+ * not to whom. `counterIds` bounds the query to the counters actually on screen.
+ */
+export async function getCountersAssignedToday(
+  counterIds: string[],
+  logDate: string,
+): Promise<Set<string>> {
+  if (counterIds.length === 0) return new Set();
+  const rows = await db
+    .select({ counterId: beatAssignments.counterId })
+    .from(beatAssignments)
+    .where(
+      and(inArray(beatAssignments.counterId, counterIds), eq(beatAssignments.beatDate, logDate)),
     );
   return new Set(rows.map((r) => r.counterId));
 }

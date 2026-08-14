@@ -4,8 +4,15 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accessRequests, users, type AccessRole } from "@/db/schema";
+import { checkRateLimit, clientIp } from "@/lib/security/rate-limit";
 import { hashPassword } from "./password";
 import { SIGNUP_ROLES } from "./roles";
+
+/** Anyone can reach this without an account, and every accepted call writes a
+ * row an admin has to review — so cap it, or the pending-approvals queue can be
+ * flooded. Server actions are POST endpoints reachable without our UI, so the
+ * limit has to live here rather than in the form. */
+const SIGNUP_LIMIT = { limit: 5, windowMs: 60 * 60 * 1000 };
 
 export type RequestAccessInput = {
   name: string;
@@ -19,6 +26,12 @@ type Result = { ok: true } | { ok: false; error: string };
 
 /** Public "Request Access" — anyone can submit; an admin approves/rejects. */
 export async function requestAccess(input: RequestAccessInput): Promise<Result> {
+  const ip = await clientIp();
+  const limited = await checkRateLimit(`signup:ip:${ip}`, SIGNUP_LIMIT);
+  if (!limited.ok) {
+    return { ok: false, error: "Too many requests. Try again later." };
+  }
+
   const name = input.name.trim();
   if (!name) return { ok: false, error: "Enter your full name." };
   if (!/^\d{10}$/.test(input.phone)) {

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { distanceMeters, STALE_AFTER_MS, type RepPosition } from "@/lib/tracking/protocol";
+import { COUNTER_COLORS } from "./map-colors";
 
 export type CounterPin = {
   id: string;
@@ -11,10 +12,12 @@ export type CounterPin = {
   /** Counter type, e.g. "Tea Stall". */
   type: string;
   area: string;
-  status: string;
   lat: number;
   lng: number;
+  /** A rep visited it today → green. */
   visited: boolean;
+  /** On a rep's beat for today but not visited yet → grey ("pending"). */
+  assigned: boolean;
   /** Stock seen at the most recent visit. */
   stock: number;
   /** Formatted date of the last visit, or null if never visited. */
@@ -39,28 +42,35 @@ function esc(s: string): string {
   );
 }
 
-/** Counter detail card shown when a pin is clicked. */
+function counterColor(p: CounterPin): string {
+  if (p.visited) return COUNTER_COLORS.visited;
+  if (p.assigned) return COUNTER_COLORS.pending;
+  return COUNTER_COLORS.counter;
+}
+
+/** Human label for the pin's current state. */
+function counterStatusLabel(c: CounterPin): string {
+  if (c.visited) return "Visited today";
+  if (c.assigned) return "Pending — assigned today";
+  return "Counter";
+}
+
+/** Counter detail card shown when a pin is clicked. A thin left-edge bar in the
+ * pin's status colour ties the card back to the dot. */
 function counterPopup(c: CounterPin): string {
+  const color = counterColor(c);
   const meta = [c.type, c.area].filter(Boolean).map(esc).join(" · ");
   const facts = [`Stock: ${c.stock}`, c.lastVisitLabel ? `Last visit: ${esc(c.lastVisitLabel)}` : null]
     .filter(Boolean)
     .join(" · ");
   return (
-    `<div style="min-width:150px;font-family:var(--font-sans)">` +
+    `<div style="min-width:150px;border-left:3px solid ${color};padding-left:10px;font-family:var(--font-sans)">` +
     `<div style="font:700 13.5px/1.3 inherit;color:#221f3a">${esc(c.name)}</div>` +
     `<div style="font-size:11.5px;color:#8a88a3;margin-top:2px">${meta}</div>` +
     `<div style="font-size:11.5px;color:#5d5b76;margin-top:3px">${facts}</div>` +
-    (c.visited
-      ? `<div style="font-size:11.5px;font-weight:600;color:#1E9E5A;margin-top:4px">Visited today</div>`
-      : "") +
+    `<div style="font-size:11.5px;font-weight:600;color:${color};margin-top:4px">${counterStatusLabel(c)}</div>` +
     `</div>`
   );
-}
-
-function counterColor(p: CounterPin): string {
-  if (p.visited) return "#1E9E5A";
-  if (p.status === "declining") return "#C7263B";
-  return "#8A8F98";
 }
 
 function dotIcon(color: string, size: number): L.DivIcon {

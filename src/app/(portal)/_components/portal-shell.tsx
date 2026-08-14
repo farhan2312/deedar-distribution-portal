@@ -32,6 +32,7 @@ type PortalShellProps = {
   children: React.ReactNode;
 };
 
+
 export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingActive, bugInbox, children }: PortalShellProps) {
   const pathname = usePathname();
   const t = useT();

@@ -7,6 +7,7 @@ import { canAccess } from "@/lib/auth/access";
 import { resolveSelectedCnf } from "@/lib/hq/scope";
 import { durationLabel, formatISTDate, formatISTTime, istDateString, istDayBounds } from "@/lib/date";
 import {
+  getCountersAssignedToday,
   getCountersVisitedToday,
   getLatestVisitStock,
   getTeamDayLogs,
@@ -75,7 +76,6 @@ export default async function HqLiveMapPage({
             id: counters.id,
             name: counters.name,
             type: counters.type,
-            status: counters.status,
             area: areas.name,
             lat: counters.lat,
             lng: counters.lng,
@@ -88,17 +88,21 @@ export default async function HqLiveMapPage({
   ]);
 
   const geoCounters = counterRows.filter((c) => c.lat != null && c.lng != null);
-  const stockByCounter = await getLatestVisitStock(geoCounters.map((c) => c.id));
+  const geoIds = geoCounters.map((c) => c.id);
+  const [stockByCounter, assignedCounterIds] = await Promise.all([
+    getLatestVisitStock(geoIds),
+    getCountersAssignedToday(geoIds, today),
+  ]);
 
   const mapCounters: CounterPin[] = geoCounters.map((c) => ({
     id: c.id,
     name: c.name,
     type: c.type,
     area: c.area,
-    status: c.status,
     lat: Number(c.lat),
     lng: Number(c.lng),
     visited: visitedCounterIds.has(c.id),
+    assigned: assignedCounterIds.has(c.id),
     stock: stockByCounter.get(c.id) ?? 0,
     lastVisitLabel: c.lastVisitAt ? formatISTDate(c.lastVisitAt) : null,
   }));

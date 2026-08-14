@@ -264,6 +264,27 @@ summary::-webkit-details-marker {
   }
 }
 
+/* Loading skeleton block — shimmers while a route's content streams in. */
+.skeleton {
+  background: var(--hairline-soft);
+  border-radius: 6px;
+  animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+@keyframes skeletonPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
 /* ============================================================
    Animations
    ============================================================ */
