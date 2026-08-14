@@ -1,102 +1,308 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq, inArray, type SQL } from "drizzle-orm";
+import type { PgTable } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
   accessRequests,
   areas,
   cnfs,
+  counters,
   depots,
   states,
   userAreas,
   userDepots,
   users,
+  visits,
   type AccessRole,
 } from "@/db/schema";
+import { getCurrentUser } from "@/lib/auth/dal";
 import { hashPassword } from "@/lib/auth/password";
+import { deleteFailure, insertFailure, type WriteResult } from "@/lib/db-errors";
 import { requireAdmin } from "./guard";
-
-function friendlyDeleteError(e: unknown, what: string): never {
-  if (e && typeof e === "object" && "code" in e && (e as { code?: string }).code === "23503") {
-    throw new Error(`Can't delete this ${what} — remove everything under it first.`);
-  }
-  throw e;
-}
 
 // ── Hierarchy: State → C&F HQ → Depot → Area ────────────────────────────
 
-export async function addState(formData: FormData) {
+/** Hierarchy actions RETURN failures instead of throwing (the convention used
+ * across this codebase). A thrown error in a server action is unhandled: Next
+ * renders its error screen and — in production — redacts the message entirely,
+ * so a friendly "remove everything under it first" never reaches the admin.
+ * Error→message mapping lives in `@/lib/db-errors`, shared with the HQ actions. */
+export type HierarchyResult = WriteResult;
+
+/** COUNT(*) for a table under a condition — used to name what blocks a delete. */
+async function countWhere(table: PgTable, where: SQL): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(table).where(where);
+  return row?.n ?? 0;
+}
+
+// ── Cascade deletes ─────────────────────────────────────────────────────
+//
+// Deleting a node removes everything beneath it. Only the RESTRICT edges have
+// to be walked by hand (states←cnfs←depots←{areas,counters}, areas←counters);
+// everything under a counter — visits, beat assignments, scheme claims — is
+// already ON DELETE CASCADE in the schema and goes automatically.
+//
+// USER ACCOUNTS ARE NEVER DELETED: users.depot_id / users.cnf_id are SET NULL,
+// so a rep whose depot is removed simply becomes unassigned.
+
+/** What a cascade delete would destroy — shown in the dialog before confirming. */
+export type DeleteImpact = {
+  cnfs: number;
+  depots: number;
+  areas: number;
+  counters: number;
+  /** Visit history attached to those counters — the part that can't be re-created. */
+  visits: number;
+};
+
+export type HierarchyKind = "state" | "cnf" | "depot" | "area";
+
+/** Depot ids in scope for a node (empty for an area, which sits under one). */
+async function depotIdsFor(kind: HierarchyKind, id: string): Promise<string[]> {
+  if (kind === "depot") return [id];
+  if (kind === "cnf") {
+    const rows = await db.select({ id: depots.id }).from(depots).where(eq(depots.cnfId, id));
+    return rows.map((r) => r.id);
+  }
+  if (kind === "state") {
+    const cnfRows = await db.select({ id: cnfs.id }).from(cnfs).where(eq(cnfs.stateId, id));
+    if (cnfRows.length === 0) return [];
+    const rows = await db
+      .select({ id: depots.id })
+      .from(depots)
+      .where(inArray(depots.cnfId, cnfRows.map((r) => r.id)));
+    return rows.map((r) => r.id);
+  }
+  return [];
+}
+
+/**
+ * Counts everything a delete would remove, so the confirmation can be specific
+ * ("3 depots, 12 areas, 47 counters and 210 visits") instead of a vague warning.
+ */
+export async function getDeleteImpact(kind: HierarchyKind, id: string): Promise<DeleteImpact> {
+  // Not requireAdmin(): the C&F "Depots & Areas" screen shows this preview too,
+  // and that page serves non-admin HQ users. They're scoped to their own C&F —
+  // anything else reports zeros rather than leaking another C&F's structure.
+  const user = await getCurrentUser();
+  const empty: DeleteImpact = { cnfs: 0, depots: 0, areas: 0, counters: 0, visits: 0 };
+  if (!user) return empty;
+
+  if (!user.accessRoles.includes("admin")) {
+    if (!user.accessRoles.includes("hq") || !user.cnf) return empty;
+    if (!(await isUnderCnf(kind, id, user.cnf.id))) return empty;
+  }
+
+  if (kind === "area") {
+    const [counterCount, visitCount] = await Promise.all([
+      countWhere(counters, eq(counters.areaId, id)),
+      countVisitsWhere(eq(counters.areaId, id)),
+    ]);
+    return { cnfs: 0, depots: 0, areas: 0, counters: counterCount, visits: visitCount };
+  }
+
+  const depotIds = await depotIdsFor(kind, id);
+  const cnfCount =
+    kind === "state" ? await countWhere(cnfs, eq(cnfs.stateId, id)) : kind === "cnf" ? 1 : 0;
+
+  if (depotIds.length === 0) {
+    return { cnfs: cnfCount, depots: 0, areas: 0, counters: 0, visits: 0 };
+  }
+
+  const [areaCount, counterCount, visitCount] = await Promise.all([
+    countWhere(areas, inArray(areas.depotId, depotIds)),
+    countWhere(counters, inArray(counters.depotId, depotIds)),
+    countVisitsWhere(inArray(counters.depotId, depotIds)),
+  ]);
+
+  return {
+    cnfs: cnfCount,
+    depots: kind === "depot" ? 1 : depotIds.length,
+    areas: areaCount,
+    counters: counterCount,
+    visits: visitCount,
+  };
+}
+
+/** Is this hierarchy node inside the given C&F? Gates the impact preview for
+ * non-admin HQ users, who may only inspect their own structure. */
+async function isUnderCnf(kind: HierarchyKind, id: string, cnfId: string): Promise<boolean> {
+  if (kind === "cnf") return id === cnfId;
+  if (kind === "depot") {
+    const [d] = await db.select({ cnfId: depots.cnfId }).from(depots).where(eq(depots.id, id)).limit(1);
+    return d?.cnfId === cnfId;
+  }
+  if (kind === "area") {
+    const [row] = await db
+      .select({ cnfId: depots.cnfId })
+      .from(areas)
+      .innerJoin(depots, eq(depots.id, areas.depotId))
+      .where(eq(areas.id, id))
+      .limit(1);
+    return row?.cnfId === cnfId;
+  }
+  return false; // a whole state is never in one C&F's remit
+}
+
+/** Visits attached to counters matching `where` — joined so we never have to
+ * materialise a long list of counter ids. */
+async function countVisitsWhere(where: SQL): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(visits)
+    .innerJoin(counters, eq(counters.id, visits.counterId))
+    .where(where);
+  return row?.n ?? 0;
+}
+
+/** Removes every counter + area under the given depots, in FK-safe order. */
+async function purgeDepots(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  depotIds: string[],
+) {
+  if (depotIds.length === 0) return;
+  // Counters first (areas RESTRICT on them), then areas, then the depots.
+  await tx.delete(counters).where(inArray(counters.depotId, depotIds));
+  await tx.delete(areas).where(inArray(areas.depotId, depotIds));
+  await tx.delete(depots).where(inArray(depots.id, depotIds));
+}
+
+export async function addState(formData: FormData): Promise<HierarchyResult> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const country = String(formData.get("country") ?? "").trim() || "India";
-  if (!name) return;
-  await db.insert(states).values({ name, country });
+  if (!name) return { ok: false, error: "Enter a state name." };
+  try {
+    await db.insert(states).values({ name, country });
+  } catch (e) {
+    return insertFailure(e, "state");
+  }
   revalidatePath("/admin/hierarchy");
+  return { ok: true };
 }
 
-export async function addCnf(stateId: string, formData: FormData) {
+export async function addCnf(stateId: string, formData: FormData): Promise<HierarchyResult> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name || !stateId) return;
-  await db.insert(cnfs).values({ name, stateId });
+  if (!name) return { ok: false, error: "Enter a C&F HQ name." };
+  if (!stateId) return { ok: false, error: "Pick a state." };
+
+  // `cnfs.state_id` is UNIQUE — the model is one C&F HQ per state. Check first
+  // so a second one gives this precise message rather than a bare "name already
+  // exists" from the unique violation (which would be misleading).
+  const [taken] = await db
+    .select({ name: cnfs.name })
+    .from(cnfs)
+    .where(eq(cnfs.stateId, stateId))
+    .limit(1);
+  if (taken) {
+    return { ok: false, error: `That state already has a C&F HQ (${taken.name}) — only one is allowed.` };
+  }
+
+  try {
+    await db.insert(cnfs).values({ name, stateId });
+  } catch (e) {
+    return insertFailure(e, "C&F HQ");
+  }
   revalidatePath("/admin/hierarchy");
+  return { ok: true };
 }
 
-export async function addDepot(cnfId: string, formData: FormData) {
+export async function addDepot(cnfId: string, formData: FormData): Promise<HierarchyResult> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name || !cnfId) return;
-  await db.insert(depots).values({ name, cnfId });
+  if (!name) return { ok: false, error: "Enter a depot name." };
+  if (!cnfId) return { ok: false, error: "Missing C&F HQ." };
+  try {
+    await db.insert(depots).values({ name, cnfId });
+  } catch (e) {
+    return insertFailure(e, "depot");
+  }
   revalidatePath("/admin/hierarchy");
+  return { ok: true };
 }
 
-export async function addArea(depotId: string, formData: FormData) {
+export async function addArea(depotId: string, formData: FormData): Promise<HierarchyResult> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name || !depotId) return;
-  await db.insert(areas).values({ name, depotId });
-  revalidatePath("/admin/hierarchy");
-}
-
-export async function deleteState(id: string) {
-  await requireAdmin();
+  if (!name) return { ok: false, error: "Enter an area name." };
+  if (!depotId) return { ok: false, error: "Missing depot." };
   try {
-    await db.delete(states).where(eq(states.id, id));
+    await db.insert(areas).values({ name, depotId });
   } catch (e) {
-    friendlyDeleteError(e, "state");
+    return insertFailure(e, "area");
   }
   revalidatePath("/admin/hierarchy");
+  return { ok: true };
 }
 
-export async function deleteCnf(id: string) {
+export async function deleteState(id: string): Promise<HierarchyResult> {
   await requireAdmin();
   try {
-    await db.delete(cnfs).where(eq(cnfs.id, id));
+    await db.transaction(async (tx) => {
+      const cnfRows = await tx.select({ id: cnfs.id }).from(cnfs).where(eq(cnfs.stateId, id));
+      const cnfIds = cnfRows.map((r) => r.id);
+      if (cnfIds.length > 0) {
+        const depotRows = await tx
+          .select({ id: depots.id })
+          .from(depots)
+          .where(inArray(depots.cnfId, cnfIds));
+        await purgeDepots(tx, depotRows.map((r) => r.id));
+        await tx.delete(cnfs).where(inArray(cnfs.id, cnfIds));
+      }
+      await tx.delete(states).where(eq(states.id, id));
+    });
   } catch (e) {
-    friendlyDeleteError(e, "C&F HQ");
+    return deleteFailure(e, "state");
   }
   revalidatePath("/admin/hierarchy");
+  return { ok: true };
 }
 
-export async function deleteDepot(id: string) {
+export async function deleteCnf(id: string): Promise<HierarchyResult> {
   await requireAdmin();
   try {
-    await db.delete(depots).where(eq(depots.id, id));
+    await db.transaction(async (tx) => {
+      const depotRows = await tx.select({ id: depots.id }).from(depots).where(eq(depots.cnfId, id));
+      await purgeDepots(tx, depotRows.map((r) => r.id));
+      await tx.delete(cnfs).where(eq(cnfs.id, id));
+    });
   } catch (e) {
-    friendlyDeleteError(e, "depot");
+    return deleteFailure(e, "C&F HQ");
   }
   revalidatePath("/admin/hierarchy");
+  return { ok: true };
 }
 
-export async function deleteArea(id: string) {
+export async function deleteDepot(id: string): Promise<HierarchyResult> {
   await requireAdmin();
   try {
-    await db.delete(areas).where(eq(areas.id, id));
+    await db.transaction(async (tx) => {
+      await purgeDepots(tx, [id]);
+    });
   } catch (e) {
-    friendlyDeleteError(e, "area");
+    return deleteFailure(e, "depot");
   }
   revalidatePath("/admin/hierarchy");
+  return { ok: true };
+}
+
+export async function deleteArea(id: string): Promise<HierarchyResult> {
+  await requireAdmin();
+  try {
+    await db.transaction(async (tx) => {
+      // Counters RESTRICT the area, so they go first; their visits/beat rows
+      // cascade away with them.
+      await tx.delete(counters).where(eq(counters.areaId, id));
+      await tx.delete(areas).where(eq(areas.id, id));
+    });
+  } catch (e) {
+    return deleteFailure(e, "area");
+  }
+  revalidatePath("/admin/hierarchy");
+  return { ok: true };
 }
 
 // ── Users & access ───────────────────────────────────────────────────────
@@ -111,11 +317,12 @@ export async function addUser(formData: FormData): Promise<AddUserResult> {
     return { ok: false, message: "Enter a name and a valid 10-digit mobile number." };
   }
 
-  // First login: password is the phone number, same as the field-rep bootstrap pattern.
+  // First login: password is the phone number, same as the field-rep bootstrap
+  // pattern — so force a reset before they can use the app (mustChangePassword).
   const passwordHash = await hashPassword(phone);
   const inserted = await db
     .insert(users)
-    .values({ name, phone, passwordHash, accessRoles: [] })
+    .values({ name, phone, passwordHash, accessRoles: [], mustChangePassword: true })
     .onConflictDoNothing({ target: users.phone })
     .returning({ id: users.id });
 

@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { getScopeDepots } from "@/lib/supervisor/team";
 import { istDateString } from "@/lib/date";
+import { counterTypeLabel } from "@/lib/field/counter-types";
 import { Notice } from "@/components/ui/notice";
 import { AssignBeat, type AssignCounter, type AssignmentSummary, type RepOption } from "./assign-beat";
 
@@ -24,6 +25,7 @@ export default async function AssignBeatPage() {
           id: counters.id,
           name: counters.name,
           type: counters.type,
+          typeOther: counters.typeOther,
           area: areas.name,
           status: counters.status,
           depotId: counters.depotId,
@@ -62,6 +64,7 @@ export default async function AssignBeatPage() {
     id: c.id,
     name: c.name,
     type: c.type,
+    typeLabel: counterTypeLabel(c.type, c.typeOther),
     area: c.area,
     depotId: c.depotId,
     stock: stockByCounter.get(c.id) ?? 0,

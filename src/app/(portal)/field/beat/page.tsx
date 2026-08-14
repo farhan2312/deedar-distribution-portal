@@ -5,6 +5,7 @@ import { areas, beatAssignments, counters, visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { istDateString, istDayBounds } from "@/lib/date";
+import { counterTypeLabel } from "@/lib/field/counter-types";
 import { Notice } from "@/components/ui/notice";
 import { BeatClient, type BeatCounter } from "./beat-client";
 
@@ -42,6 +43,7 @@ export default async function FieldBeatPage() {
           id: counters.id,
           name: counters.name,
           type: counters.type,
+          typeOther: counters.typeOther,
           areaName: areas.name,
           depotId: counters.depotId,
         })
@@ -65,7 +67,7 @@ export default async function FieldBeatPage() {
   const beat: BeatCounter[] = rows.map((c) => ({
     id: c.id,
     name: c.name,
-    type: c.type,
+    type: counterTypeLabel(c.type, c.typeOther),
     areaName: c.areaName,
     canVisit: isAdmin || c.depotId === user.depot?.id,
     visitedToday: visitedIds.has(c.id),

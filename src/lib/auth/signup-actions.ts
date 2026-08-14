@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { accessRequests, users, type AccessRole } from "@/db/schema";
 import { checkRateLimit, clientIp } from "@/lib/security/rate-limit";
 import { hashPassword } from "./password";
+import { validatePasswordLength } from "./password-policy";
 import { SIGNUP_ROLES } from "./roles";
 
 /** Anyone can reach this without an account, and every accepted call writes a
@@ -34,12 +35,14 @@ export async function requestAccess(input: RequestAccessInput): Promise<Result> 
 
   const name = input.name.trim();
   if (!name) return { ok: false, error: "Enter your full name." };
+  // Unbounded until now: this is a public endpoint writing straight to a `text`
+  // column, so cap it rather than accept a megabyte "name".
+  if (name.length > 80) return { ok: false, error: "Name is too long." };
   if (!/^\d{10}$/.test(input.phone)) {
     return { ok: false, error: "Enter a valid 10-digit mobile number." };
   }
-  if (input.password.length < 6) {
-    return { ok: false, error: "Password must be at least 6 characters." };
-  }
+  const pwError = validatePasswordLength(input.password);
+  if (pwError) return { ok: false, error: pwError };
   if (input.password !== input.confirmPassword) {
     return { ok: false, error: "Passwords don't match." };
   }

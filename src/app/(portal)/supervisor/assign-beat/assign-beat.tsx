@@ -8,7 +8,11 @@ import { assignBeat } from "@/lib/supervisor/actions";
 export type AssignCounter = {
   id: string;
   name: string;
+  /** The raw enum value — what the type FILTER matches against. */
   type: string;
+  /** What's actually shown for the type (the manual label when type is
+   * "Others" and one was entered, else same as `type`). */
+  typeLabel: string;
   area: string;
   depotId: string;
   /** Total stock observed at this counter's most recent visit (0 if none). */
@@ -245,7 +249,7 @@ export function AssignBeat({
                     </td>
                     <td>
                       <div className="font-semibold" style={{ color: "var(--ink-1)" }}>{c.name}</div>
-                      <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>{c.type} · {c.area}</div>
+                      <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>{c.typeLabel} · {c.area}</div>
                     </td>
                     <td className="whitespace-nowrap text-right">
                       <div className="text-[13px] font-semibold tabular-nums" style={{ color: "var(--ink-1)" }}>{c.stock}</div>

@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { formatISTDate } from "@/lib/date";
 import { COMPETITOR_LABEL, editableVisitCutoff, formatDuration, isWithinEditWindow } from "@/lib/field/products";
+import { counterTypeLabel } from "@/lib/field/counter-types";
 import { Notice } from "@/components/ui/notice";
 
 const TYPE_BADGE = "rgba(178,142,46,.14)";
@@ -29,6 +30,7 @@ export default async function CounterDetailPage({
       name: counters.name,
       phone: counters.phone,
       type: counters.type,
+      typeOther: counters.typeOther,
       areaName: areas.name,
       cnfName: cnfs.name,
       depotId: counters.depotId,
@@ -47,9 +49,10 @@ export default async function CounterDetailPage({
   const isAdmin = user.accessRoles.includes("admin");
   const canVisit = isAdmin || counter.depotId === user.depot?.id;
 
-  // A field rep only sees their OWN visits, and only ones still inside the 24h
-  // edit window — the history list is effectively "your recently editable
-  // visits", not an audit trail of every rep. Admin keeps the full history.
+  // A field rep only sees their OWN visits, and only today's (still inside the
+  // edit window, which closes at midnight IST) — the history list is
+  // effectively "your editable visits", not an audit trail of every rep.
+  // Admin keeps the full history.
   const historyWhere = isAdmin
     ? eq(visits.counterId, id)
     : and(
@@ -94,7 +97,7 @@ export default async function CounterDetailPage({
               className="mt-2 inline-block rounded-md px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
               style={{ background: TYPE_BADGE, color: "var(--accent)" }}
             >
-              {counter.type}
+              {counterTypeLabel(counter.type, counter.typeOther)}
             </span>
           </div>
           {canVisit && (
@@ -131,14 +134,14 @@ export default async function CounterDetailPage({
 
       {/* Visit history */}
       <h4 className="mb-3 text-[13px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>
-        {isAdmin ? "Visit history" : "Your visits · editable 24h"} ({history.length})
+        {isAdmin ? "Visit history" : "Your visits · editable until midnight"} ({history.length})
       </h4>
 
       {history.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
           {isAdmin
             ? "No visits recorded yet."
-            : "No editable visits — your visits drop off here 24 hours after you record them."}
+            : "No editable visits — your visits drop off here once the day ends."}
         </p>
       ) : (
         <div className="space-y-3">

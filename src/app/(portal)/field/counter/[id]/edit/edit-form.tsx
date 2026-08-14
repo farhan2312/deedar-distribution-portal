@@ -3,16 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateCounter, type EditCounterInput } from "@/lib/field/actions";
+import { ALL_COUNTER_TYPES } from "@/lib/field/counter-types";
 import { GpsCapture } from "../../../_components/gps-capture";
-
-const ALL_COUNTER_TYPES: EditCounterInput["type"][] = [
-  "Kirana",
-  "Paan",
-  "Tea Stall",
-  "Wholesale",
-  "Vegetable Shop",
-  "Others",
-];
 
 export function EditCounterForm({
   counterId,
@@ -21,7 +13,15 @@ export function EditCounterForm({
 }: {
   counterId: string;
   areaOptions: { id: string; name: string }[];
-  initial: { name: string; address: string; type: EditCounterInput["type"]; areaId: string; gps: string };
+  initial: {
+    name: string;
+    address: string;
+    type: EditCounterInput["type"];
+    /** Raw manual label from the DB, only set when `type` is "Others". */
+    typeOther: string;
+    areaId: string;
+    gps: string;
+  };
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState(initial);
@@ -43,19 +43,29 @@ export function EditCounterForm({
       setError("Name is required.");
       return;
     }
+    if (draft.type === "Others" && !draft.typeOther.trim()) {
+      setError("Enter the counter type.");
+      return;
+    }
     setBusy(true);
     const res = await updateCounter(counterId, {
       name: draft.name,
       address: draft.address,
       areaId: draft.areaId,
       type: draft.type,
+      typeOther: draft.type === "Others" ? draft.typeOther.trim() : undefined,
       gps: draft.gps,
     });
-    setBusy(false);
     if (!res.ok) {
+      // Only re-enable on failure — the form stays put and can be retried.
+      setBusy(false);
       setError(res.error);
       return;
     }
+    // Deliberately stay disabled on success: navigation and the refresh are
+    // still in flight, and this component unmounts when the route changes.
+    // Clearing `busy` here would flash the button back to "Save changes" while
+    // the save was still completing, inviting a double submit.
     router.push(`/field/counter/${counterId}`);
     router.refresh();
   }
@@ -91,7 +101,9 @@ export function EditCounterForm({
               <button
                 key={t}
                 type="button"
-                onClick={() => setDraft({ ...draft, type: t })}
+                onClick={() =>
+                  setDraft({ ...draft, type: t, typeOther: t === "Others" ? draft.typeOther : "" })
+                }
                 className="chip"
                 style={{
                   borderColor: active ? "var(--accent)" : "var(--hairline)",
@@ -106,6 +118,16 @@ export function EditCounterForm({
             );
           })}
         </div>
+        {draft.type === "Others" && (
+          <input
+            className="inp mt-2.5"
+            type="text"
+            placeholder="Enter counter type, e.g. Medical Store"
+            maxLength={60}
+            value={draft.typeOther}
+            onChange={(e) => setDraft({ ...draft, typeOther: e.target.value })}
+          />
+        )}
       </div>
       <div className="mb-5 rounded-2xl p-4" style={{ background: "var(--accent-tint)" }}>
         <label className="mb-2.5 block text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>
@@ -117,7 +139,11 @@ export function EditCounterForm({
       {error && <p className="mb-3 text-[12px]" style={{ color: "var(--danger)" }}>{error}</p>}
 
       <div className="flex gap-3">
-        <button className="btn btn-secondary flex-1 justify-center py-3.5" onClick={() => router.push(`/field/counter/${counterId}`)}>
+        <button
+          className="btn btn-secondary flex-1 justify-center py-3.5"
+          onClick={() => router.push(`/field/counter/${counterId}`)}
+          disabled={busy}
+        >
           Cancel
         </button>
         <button className="btn btn-primary flex-1 justify-center py-3.5" onClick={save} disabled={busy}>

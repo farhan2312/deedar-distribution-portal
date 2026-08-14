@@ -118,7 +118,7 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
   if (!v) return { ok: false, error: "Visit not found." };
   if (v.userId !== user.id) return { ok: false, error: "You can only edit your own visits." };
   if (!isWithinEditWindow(v.visitedAt)) {
-    return { ok: false, error: "This visit is older than 24 hours and can no longer be edited." };
+    return { ok: false, error: "This visit locked at midnight and can no longer be edited." };
   }
 
   const items = input.items.filter((i) => SEGMENTS.includes(i.segment));

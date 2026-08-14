@@ -5,6 +5,7 @@ import { areas, counters } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { getVisitForEdit } from "@/lib/field/visit-actions";
+import { counterTypeLabel } from "@/lib/field/counter-types";
 import { Notice } from "@/components/ui/notice";
 import { VisitForm } from "../visit-form";
 
@@ -24,14 +25,20 @@ export default async function EditVisitPage({
   if (!visit || visit.counterId !== id) {
     return (
       <Notice title="Edit visit">
-        This visit can&apos;t be edited — it&apos;s either not yours or older than
-        24 hours.
+        This visit can&apos;t be edited — it&apos;s either not yours or the day it
+        was recorded on has ended.
       </Notice>
     );
   }
 
   const [counter] = await db
-    .select({ id: counters.id, name: counters.name, type: counters.type, areaName: areas.name })
+    .select({
+      id: counters.id,
+      name: counters.name,
+      type: counters.type,
+      typeOther: counters.typeOther,
+      areaName: areas.name,
+    })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
     .where(eq(counters.id, id))
@@ -42,7 +49,7 @@ export default async function EditVisitPage({
     <VisitForm
       counterId={counter.id}
       counterName={counter.name}
-      counterArea={`${counter.type} · ${counter.areaName}`}
+      counterArea={`${counterTypeLabel(counter.type, counter.typeOther)} · ${counter.areaName}`}
       visitId={visitId}
       initial={{ items: visit.items, rank: visit.rank, competitor: visit.competitor, remarks: visit.remarks }}
     />

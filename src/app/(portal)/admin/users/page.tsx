@@ -312,7 +312,7 @@ export default async function AdminUsersPage() {
                     </td>
                     <td className="text-center">
                       {u.id !== admin.id ? (
-                        <DeleteUserButton userId={u.id} />
+                        <DeleteUserButton userId={u.id} userName={u.name} />
                       ) : (
                         <span className="text-[11px]" style={{ color: "var(--ink-3)" }}>you</span>
                       )}

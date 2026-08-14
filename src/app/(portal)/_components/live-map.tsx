@@ -84,7 +84,12 @@ function dotIcon(color: string, size: number): L.DivIcon {
 
 function repIcon(name: string, stale: boolean): L.DivIcon {
   const color = stale ? "#8A8F98" : "#2E5FA3";
-  const initial = name.charAt(0).toUpperCase();
+  // Escaped like the counter popup: this is an HTML string handed to Leaflet, and
+  // a rep's name is attacker-supplied in practice (anyone can put markup in the
+  // public "Request Access" name field; approving it would then run script in the
+  // Sales Officer's / C&F head's browser when the marker renders).
+  const safeName = esc(name);
+  const initial = esc(name.charAt(0).toUpperCase());
   return L.divIcon({
     className: "",
     html:
@@ -92,7 +97,7 @@ function repIcon(name: string, stale: boolean): L.DivIcon {
       `<span style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;` +
       `background:${color};color:#fff;font:700 12px/1 system-ui;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)">${initial}</span>` +
       `<span style="white-space:nowrap;background:rgba(255,255,255,.9);color:${color};font:700 12px/1 system-ui;` +
-      `padding:3px 7px;border-radius:999px">${name}${stale ? " · stale" : ""}</span>` +
+      `padding:3px 7px;border-radius:999px">${safeName}${stale ? " · stale" : ""}</span>` +
       `</span>`,
     iconSize: [26, 26],
     iconAnchor: [13, 13],

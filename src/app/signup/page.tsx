@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { AccessRole } from "@/db/schema";
 import { requestAccess } from "@/lib/auth/signup-actions";
+import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/auth/password-policy";
 import { ROLE_LABEL, SIGNUP_ROLES } from "@/lib/auth/roles";
 import { useT } from "@/lib/i18n/provider";
 import { LanguageToggle } from "@/components/language-toggle";
@@ -107,7 +108,8 @@ export default function SignupPage() {
                 placeholder={t("Password")}
                 value={password}
                 onChange={setPassword}
-                minLength={6}
+                minLength={PASSWORD_MIN}
+                maxLength={PASSWORD_MAX}
                 autoComplete="new-password"
               />
               <FieldInput
@@ -117,7 +119,8 @@ export default function SignupPage() {
                 placeholder={t("Confirm password")}
                 value={confirmPassword}
                 onChange={setConfirmPassword}
-                minLength={6}
+                minLength={PASSWORD_MIN}
+                maxLength={PASSWORD_MAX}
                 autoComplete="new-password"
               />
 

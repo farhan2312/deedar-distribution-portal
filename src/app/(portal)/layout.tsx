@@ -44,6 +44,7 @@ export default async function PortalLayout({
       accessRoles={user.accessRoles}
       trackingActive={trackingActive}
       bugInbox={bugInbox}
+      mustChangePassword={user.mustChangePassword}
     >
       {children}
     </PortalShell>

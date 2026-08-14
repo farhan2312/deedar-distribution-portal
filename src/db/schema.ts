@@ -87,6 +87,11 @@ export const users = pgTable("users", {
   reportsToUserId: uuid("reports_to_user_id").references((): AnyPgColumn => users.id, {
     onDelete: "set null",
   }),
+  // Set when admin creates a user (their password is their phone number, a
+  // guessable bootstrap). While true the app forces them to /account/change-
+  // password before anything else; changing the password clears it. Users who
+  // set their own password via signup are created with this false.
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -168,6 +173,9 @@ export const counters = pgTable("counters", {
   name: varchar("name", { length: 200 }).notNull(),
   phone: varchar("phone", { length: 10 }).unique(),
   type: counterTypeEnum("type").notNull(),
+  // Free-text label when `type` is "Others" (e.g. "Medical Store"). Null for
+  // every other type. Display uses this in place of "Others" when present.
+  typeOther: varchar("type_other", { length: 60 }),
   depotId: uuid("depot_id")
     .notNull()
     .references(() => depots.id, { onDelete: "restrict" }),

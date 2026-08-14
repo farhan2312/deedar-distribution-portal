@@ -32,7 +32,15 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const lang = await getLang();
   return (
-    <html lang={lang} className={`${manrope.variable} h-full antialiased`}>
+    // suppressHydrationWarning: the inline script below sets `data-theme` on
+    // <html> before React hydrates, so this element's attributes intentionally
+    // differ between server and client. The flag is scoped to just <html> (one
+    // level deep) — it does NOT hide mismatches anywhere else in the tree.
+    <html
+      lang={lang}
+      className={`${manrope.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
       <head>
         {/* Applies the saved theme BEFORE first paint, so a dark-mode user
             never sees a white flash on load. Must stay inline and synchronous;

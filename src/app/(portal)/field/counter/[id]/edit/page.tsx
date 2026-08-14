@@ -25,6 +25,7 @@ export default async function EditCounterPage({
       name: counters.name,
       address: counters.address,
       type: counters.type,
+      typeOther: counters.typeOther,
       areaId: counters.areaId,
       depotId: counters.depotId,
       lat: counters.lat,
@@ -59,6 +60,7 @@ export default async function EditCounterPage({
         name: counter.name,
         address: counter.address ?? "",
         type: counter.type,
+        typeOther: counter.typeOther ?? "",
         areaId: counter.areaId,
         gps: counter.lat && counter.lng ? `${counter.lat}, ${counter.lng}` : "",
       }}

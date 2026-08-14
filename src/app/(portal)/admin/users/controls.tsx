@@ -13,6 +13,7 @@ import {
   toggleUserDepot,
   type AddUserResult,
 } from "@/lib/admin/actions";
+import { ConfirmDelete } from "@/components/ui/confirm-delete";
 
 /**
  * "Add a user" form with inline confirmation. `useActionState` keeps the
@@ -254,27 +255,18 @@ export function SupervisorSelect({
   );
 }
 
-/** Trash-icon delete, with a confirm so a stray click can't drop an account. */
-export function DeleteUserButton({ userId }: { userId: string }) {
-  const [pending, start] = useTransition();
+/** Trash-icon delete. Uses the app-wide confirmation dialog rather than the
+ * native `confirm()`, so every delete in the portal looks and behaves alike. */
+export function DeleteUserButton({ userId, userName }: { userId: string; userName?: string }) {
   return (
-    <button
-      type="button"
-      aria-label="Remove user"
-      title="Remove user"
-      disabled={pending}
-      onClick={() => {
-        if (confirm("Remove this user? This cannot be undone.")) {
-          start(() => removeUser(userId));
-        }
+    <ConfirmDelete
+      action={async () => {
+        await removeUser(userId);
       }}
-      className="flex h-9 w-9 items-center justify-center rounded-lg border transition-colors disabled:opacity-50"
-      style={{ borderColor: "var(--hairline)", color: "var(--danger)", background: "var(--surface)" }}
-    >
-      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6" />
-      </svg>
-    </button>
+      itemLabel="user"
+      itemName={userName}
+      trigger="icon"
+    />
   );
 }
 

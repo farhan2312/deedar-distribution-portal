@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { getCurrentUser } from "./dal";
 import { hashPassword, verifyPassword } from "./password";
+import { validatePasswordLength } from "./password-policy";
 
 export type ChangePasswordInput = {
   currentPassword: string;
@@ -18,9 +19,8 @@ type Result = { ok: true } | { ok: false; error: string };
 export async function changeOwnPassword(input: ChangePasswordInput): Promise<Result> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "Not authorized." };
-  if (input.newPassword.length < 6) {
-    return { ok: false, error: "New password must be at least 6 characters." };
-  }
+  const pwError = validatePasswordLength(input.newPassword);
+  if (pwError) return { ok: false, error: pwError };
   if (input.newPassword !== input.confirmPassword) {
     return { ok: false, error: "New passwords don't match." };
   }
@@ -39,7 +39,10 @@ export async function changeOwnPassword(input: ChangePasswordInput): Promise<Res
   }
 
   const passwordHash = await hashPassword(input.newPassword);
-  await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, user.id));
+  await db
+    .update(users)
+    .set({ passwordHash, mustChangePassword: false, updatedAt: new Date() })
+    .where(eq(users.id, user.id));
 
   return { ok: true };
 }

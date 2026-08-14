@@ -1,7 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { addArea, addDepot, deleteArea, deleteCnf, deleteDepot, deleteState } from "@/lib/admin/actions";
+import { useActionState, useState } from "react";
+import {
+  addArea,
+  addDepot,
+  deleteArea,
+  deleteCnf,
+  deleteDepot,
+  deleteState,
+  getDeleteImpact,
+  type HierarchyResult,
+} from "@/lib/admin/actions";
+import { ConfirmDelete } from "@/components/ui/confirm-delete";
 
 export type AreaNode = { id: string; name: string; counters: number };
 export type DepotNode = { id: string; name: string; counters: number; reps: number; areas: AreaNode[] };
@@ -38,7 +48,7 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
               indent={0}
               onToggle={() => toggle(sKey)}
               chevron={sOpen}
-              action={<DeleteLink action={deleteState.bind(null, st.id)} />}
+              action={<ConfirmDelete action={deleteState.bind(null, st.id)} itemLabel="state" itemName={st.name} loadImpact={() => getDeleteImpact("state", st.id)} />}
             >
               <div className={nameCls} style={nameStyle}>{st.name}</div>
               <div className={subCls} style={subStyle}>
@@ -56,7 +66,7 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
                       indent={24}
                       onToggle={() => toggle(cKey)}
                       chevron={cOpen}
-                      action={<DeleteLink action={deleteCnf.bind(null, cf.id)} />}
+                      action={<ConfirmDelete action={deleteCnf.bind(null, cf.id)} itemLabel="C&F HQ" itemName={cf.name} loadImpact={() => getDeleteImpact("cnf", cf.id)} />}
                     >
                       <div className={nameCls} style={nameStyle}>{cf.name}</div>
                       <div className={subCls} style={subStyle}>One per state · {cf.depots.length} depots</div>
@@ -73,7 +83,7 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
                                 indent={48}
                                 onToggle={() => toggle(dKey)}
                                 chevron={dOpen}
-                                action={<DeleteLink action={deleteDepot.bind(null, d.id)} />}
+                                action={<ConfirmDelete action={deleteDepot.bind(null, d.id)} itemLabel="depot" itemName={d.name} loadImpact={() => getDeleteImpact("depot", d.id)} />}
                               >
                                 <div className={nameCls} style={nameStyle}>{d.name}</div>
                                 <div className={subCls} style={subStyle}>
@@ -90,7 +100,7 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
                                           <div className="text-[14px] font-semibold" style={nameStyle}>{a.name}</div>
                                           <div className={subCls} style={subStyle}>Reports to {d.name} · {a.counters} counters</div>
                                         </div>
-                                        <DeleteLink action={deleteArea.bind(null, a.id)} />
+                                        <ConfirmDelete action={deleteArea.bind(null, a.id)} itemLabel="area" itemName={a.name} loadImpact={() => getDeleteImpact("area", a.id)} />
                                       </div>
                                     </div>
                                   ))}
@@ -152,36 +162,42 @@ function Row({
   );
 }
 
-function DeleteLink({ action }: { action: () => Promise<void> }) {
-  return (
-    <form action={action}>
-      <button className="link link-danger" type="submit">
-        Delete
-      </button>
-    </form>
-  );
-}
-
 function InlineAdd({
   action,
   placeholder,
   indent,
 }: {
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<HierarchyResult>;
   placeholder: string;
   indent: number;
 }) {
+  const [state, formAction, pending] = useActionState<HierarchyResult | null, FormData>(
+    async (_prev, fd) => action(fd),
+    null,
+  );
   return (
-    <form action={action} className="mb-2.5 flex gap-1.5" style={{ marginLeft: indent + 24 }}>
-      <input
-        className="inp"
-        type="text"
-        name="name"
-        placeholder={placeholder}
-        required
-        style={{ maxWidth: 200, padding: "6px 10px", fontSize: 12 }}
-      />
-      <button className="btn btn-primary btn-sm" type="submit">Add</button>
-    </form>
+    <div className="mb-2.5" style={{ marginLeft: indent + 24 }}>
+      {/* Remount on success so the input clears; keep the text on failure so a
+          rejected name can be edited rather than retyped. */}
+      <form action={formAction} className="flex gap-1.5" key={state?.ok ? "done" : "editing"}>
+        <input
+          className="inp"
+          type="text"
+          name="name"
+          placeholder={placeholder}
+          required
+          style={{ maxWidth: 200, padding: "6px 10px", fontSize: 12 }}
+          disabled={pending}
+        />
+        <button className="btn btn-primary btn-sm" type="submit" disabled={pending}>
+          {pending ? "Adding…" : "Add"}
+        </button>
+      </form>
+      {state && !state.ok && (
+        <p className="mt-1 text-[11.5px] font-medium" style={{ color: "var(--danger)" }}>
+          {state.error}
+        </p>
+      )}
+    </div>
   );
 }

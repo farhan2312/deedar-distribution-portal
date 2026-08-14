@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { areas, counters } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
+import { counterTypeLabel } from "@/lib/field/counter-types";
 import { Notice } from "@/components/ui/notice";
 import { VisitForm } from "./visit-form";
 
@@ -20,7 +21,14 @@ export default async function NewVisitPage({
 
   const { id } = await params;
   const [counter] = await db
-    .select({ id: counters.id, name: counters.name, type: counters.type, areaName: areas.name, depotId: counters.depotId })
+    .select({
+      id: counters.id,
+      name: counters.name,
+      type: counters.type,
+      typeOther: counters.typeOther,
+      areaName: areas.name,
+      depotId: counters.depotId,
+    })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
     .where(eq(counters.id, id))
@@ -40,7 +48,7 @@ export default async function NewVisitPage({
     <VisitForm
       counterId={counter.id}
       counterName={counter.name}
-      counterArea={`${counter.type} · ${counter.areaName}`}
+      counterArea={`${counterTypeLabel(counter.type, counter.typeOther)} · ${counter.areaName}`}
     />
   );
 }

@@ -15,6 +15,7 @@ import {
   visits,
 } from "@/db/schema";
 import { formatISTDate, formatISTTime, istDateString, istDayBounds } from "@/lib/date";
+import { counterTypeLabel } from "@/lib/field/counter-types";
 
 export type ScopeUser = {
   accessRoles: AccessRole[];
@@ -69,6 +70,7 @@ export async function getDepotCountersData(depotId: string): Promise<DepotCounte
         id: counters.id,
         name: counters.name,
         type: counters.type,
+        typeOther: counters.typeOther,
         area: areas.name,
         status: counters.status,
         lastVisitAt: counters.lastVisitAt,
@@ -110,7 +112,7 @@ export async function getDepotCountersData(depotId: string): Promise<DepotCounte
   const rows: DepotCounterRow[] = counterRows.map((c) => ({
     id: c.id,
     name: c.name,
-    type: c.type,
+    type: counterTypeLabel(c.type, c.typeOther),
     area: c.area,
     stock: latestStock.get(c.id) ?? 0,
     lastVisitLabel: c.lastVisitAt ? formatISTDate(c.lastVisitAt) : "—",

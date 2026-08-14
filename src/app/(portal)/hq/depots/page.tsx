@@ -3,8 +3,11 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, cnfs, counters, depots } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
-import { addArea, addDepot, deleteArea, deleteDepot } from "@/lib/hq/actions";
+import { deleteArea, deleteDepot } from "@/lib/hq/actions";
+import { getDeleteImpact } from "@/lib/admin/actions";
 import { resolveSelectedCnf } from "@/lib/hq/scope";
+import { ConfirmDelete } from "@/components/ui/confirm-delete";
+import { AddAreaForm, AddDepotForm } from "./depot-forms";
 import { Notice } from "@/components/ui/notice";
 import { CnfPicker } from "../_components/cnf-picker";
 
@@ -63,13 +66,7 @@ export default async function HqDepotsPage({
           <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
             Add a depot
           </h6>
-          <form action={addDepot.bind(null, selectedCnf.id)}>
-            <div className="field mb-3.5">
-              <label>Depot name</label>
-              <input className="inp" type="text" name="name" placeholder="e.g. Ramganj Mandi Depot" required />
-            </div>
-            <button className="btn btn-primary" type="submit">Add depot</button>
-          </form>
+          <AddDepotForm cnfId={selectedCnf.id} />
         </div>
         <div className="card p-5">
           <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
@@ -78,21 +75,10 @@ export default async function HqDepotsPage({
           {cnfDepots.length === 0 ? (
             <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>Add a depot first.</p>
           ) : (
-            <form action={addArea.bind(null, selectedCnf.id)}>
-              <div className="field mb-3">
-                <label>Depot</label>
-                <select className="inp" name="depotId" defaultValue={cnfDepots[0].id}>
-                  {cnfDepots.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field mb-3.5">
-                <label>Area name</label>
-                <input className="inp" type="text" name="name" placeholder="e.g. Ramganj Town" required />
-              </div>
-              <button className="btn btn-primary" type="submit">Add area</button>
-            </form>
+            <AddAreaForm
+              cnfId={selectedCnf.id}
+              depots={cnfDepots.map((d) => ({ id: d.id, name: d.name }))}
+            />
           )}
         </div>
       </div>
@@ -112,24 +98,24 @@ export default async function HqDepotsPage({
                   <div className="text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
                     {d.name}
                   </div>
-                  <form action={deleteDepot.bind(null, d.id)}>
-                    <button className="link link-danger" type="submit">Delete</button>
-                  </form>
+                  <ConfirmDelete
+                    action={deleteDepot.bind(null, d.id)}
+                    itemLabel="depot"
+                    itemName={d.name}
+                    loadImpact={getDeleteImpact.bind(null, "depot", d.id)}
+                  />
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {depotAreas.map((a) => (
                     <span key={a.id} className="chip" style={{ background: "var(--bg-soft)", color: "var(--ink-2)", borderColor: "transparent", paddingRight: 6 }}>
                       {a.name} · {counterCountByArea.get(a.id) ?? 0}
-                      <form action={deleteArea.bind(null, a.id)} className="inline">
-                        <button
-                          type="submit"
-                          aria-label="Delete area"
-                          className="ml-1 border-0 bg-transparent px-0.5 leading-none"
-                          style={{ color: "var(--ink-3)", fontSize: 13 }}
-                        >
-                          ×
-                        </button>
-                      </form>
+                      <ConfirmDelete
+                        action={deleteArea.bind(null, a.id)}
+                        itemLabel="area"
+                        itemName={a.name}
+                        loadImpact={getDeleteImpact.bind(null, "area", a.id)}
+                        trigger="x"
+                      />
                     </span>
                   ))}
                   {depotAreas.length === 0 && (

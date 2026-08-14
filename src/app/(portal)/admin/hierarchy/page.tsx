@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { areas, cnfs, counters, depots, states, users } from "@/db/schema";
-import { addCnf, addState } from "@/lib/admin/actions";
 import { requireAdmin } from "@/lib/admin/guard";
+import { AddCnfForm, AddStateForm } from "./hierarchy-forms";
 import { HierarchyTree, type StateNode } from "./tree";
 
 export default async function AdminHierarchyPage() {
@@ -68,17 +68,7 @@ export default async function AdminHierarchyPage() {
           <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
             Add a state
           </h6>
-          <form action={addState}>
-            <div className="field mb-3">
-              <label>State name</label>
-              <input className="inp" type="text" name="name" placeholder="e.g. Madhya Pradesh" required />
-            </div>
-            <div className="field mb-3.5">
-              <label>Country</label>
-              <input className="inp" type="text" name="country" defaultValue="India" />
-            </div>
-            <button className="btn btn-primary" type="submit">Add state</button>
-          </form>
+          <AddStateForm />
         </div>
         <div className="card p-5">
           <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
@@ -87,21 +77,7 @@ export default async function AdminHierarchyPage() {
           {allStates.length === 0 ? (
             <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>Add a state first.</p>
           ) : (
-            <form action={addCnfWithState}>
-              <div className="field mb-3">
-                <label>State</label>
-                <select className="inp" name="stateId" defaultValue={allStates[0].id}>
-                  {allStates.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field mb-3.5">
-                <label>C&amp;F HQ name</label>
-                <input className="inp" type="text" name="name" placeholder="e.g. BHOPAL CNF HQ" required />
-              </div>
-              <button className="btn btn-primary" type="submit">Add C&amp;F HQ</button>
-            </form>
+            <AddCnfForm states={allStates.map((s) => ({ id: s.id, name: s.name }))} />
           )}
         </div>
       </div>
@@ -109,12 +85,4 @@ export default async function AdminHierarchyPage() {
       <HierarchyTree tree={tree} />
     </div>
   );
-}
-
-// addCnf is (stateId, formData); adapt to a single-form action reading stateId from the form.
-async function addCnfWithState(formData: FormData) {
-  "use server";
-  const stateId = String(formData.get("stateId") ?? "");
-  if (!stateId) return;
-  await addCnf(stateId, formData);
 }

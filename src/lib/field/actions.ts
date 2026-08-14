@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { areas, counters, depots } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
+import { counterTypeLabel } from "@/lib/field/counter-types";
 
 export type DuplicateMatch = { name: string; type: string; area: string } | null;
 
@@ -26,6 +27,7 @@ export async function checkDuplicate(phone: string): Promise<FieldDuplicateMatch
       id: counters.id,
       name: counters.name,
       type: counters.type,
+      typeOther: counters.typeOther,
       area: areas.name,
       depotId: counters.depotId,
       depotName: depots.name,
@@ -41,7 +43,7 @@ export async function checkDuplicate(phone: string): Promise<FieldDuplicateMatch
   return {
     id: match.id,
     name: match.name,
-    type: match.type,
+    type: counterTypeLabel(match.type, match.typeOther),
     area: match.area,
     depotName: match.depotName,
     canVisit: isAdmin || match.depotId === user.depot?.id,
@@ -55,6 +57,9 @@ export type NewCounterInput = {
   depotId: string;
   areaId: string;
   type: "Kirana" | "Paan" | "Tea Stall" | "Wholesale" | "Vegetable Shop" | "Others";
+  /** Free-text label, required when `type` is "Others" (e.g. "Medical Store").
+   * Ignored for every other type. */
+  typeOther?: string;
   gps: string;
 };
 
@@ -78,6 +83,10 @@ export async function createCounter(input: NewCounterInput) {
   // admin) — that's added via the Supervisor form/action instead.
   if (input.type === "Wholesale") {
     return { ok: false as const, error: "Wholesale counters are added by your Supervisor, not from the field." };
+  }
+  const typeOther = input.type === "Others" ? input.typeOther?.trim() : "";
+  if (input.type === "Others" && !typeOther) {
+    return { ok: false as const, error: "Enter the counter type." };
   }
 
   const [depot] = await db.select().from(depots).where(eq(depots.id, input.depotId)).limit(1);
@@ -104,6 +113,7 @@ export async function createCounter(input: NewCounterInput) {
     depotId: depot.id,
     areaId: area.id,
     type: input.type,
+    typeOther: typeOther || null,
     lat: lat || null,
     lng: lng || null,
     status: "active",
@@ -118,6 +128,8 @@ export type EditCounterInput = {
   address: string;
   areaId: string;
   type: NewCounterInput["type"];
+  /** Free-text label, required when `type` is "Others". */
+  typeOther?: string;
   gps: string;
 };
 
@@ -146,6 +158,10 @@ export async function updateCounter(counterId: string, input: EditCounterInput) 
   if (input.type === "Wholesale" && counter.type !== "Wholesale") {
     return { ok: false as const, error: "Wholesale counters are added by your Supervisor, not from the field." };
   }
+  const typeOther = input.type === "Others" ? input.typeOther?.trim() : "";
+  if (input.type === "Others" && !typeOther) {
+    return { ok: false as const, error: "Enter the counter type." };
+  }
 
   const [area] = await db.select().from(areas).where(eq(areas.id, input.areaId)).limit(1);
   if (!area || area.depotId !== counter.depotId) {
@@ -161,6 +177,7 @@ export async function updateCounter(counterId: string, input: EditCounterInput) 
       address: input.address.trim() || null,
       areaId: area.id,
       type: input.type,
+      typeOther: typeOther || null,
       lat: lat || null,
       lng: lng || null,
       updatedAt: new Date(),
@@ -206,6 +223,7 @@ export async function searchCounterByPhone(phone: string): Promise<CounterSearch
       id: counters.id,
       name: counters.name,
       type: counters.type,
+      typeOther: counters.typeOther,
       area: areas.name,
       depotId: counters.depotId,
       depotName: depots.name,
@@ -227,7 +245,7 @@ export async function searchCounterByPhone(phone: string): Promise<CounterSearch
     canVisit: true,
     id: c.id,
     name: c.name,
-    type: c.type,
+    type: counterTypeLabel(c.type, c.typeOther),
     area: c.area,
     depotName: c.depotName,
   };

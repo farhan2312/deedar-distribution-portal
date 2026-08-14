@@ -50,6 +50,10 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
   const [remarks, setRemarks] = useState(initial?.remarks ?? "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Two-step flow: fill the numbers, then confirm them before they're written.
+   * A visit is the rep's record of what they sold — worth a look before it's
+   * committed, especially since it locks at midnight. */
+  const [step, setStep] = useState<"form" | "review">("form");
 
   // Live "time on counter" — counts up from when the check-in form opened.
   const [elapsed, setElapsed] = useState(0);
@@ -91,11 +95,17 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
     setBusy(true);
     const input = buildInput();
     const res = isEdit ? await updateVisit(visitId, input) : await createVisit(counterId, input);
-    setBusy(false);
     if (!res.ok) {
+      // Only re-enable on failure. Send them back to the form so the rejected
+      // value can actually be corrected.
+      setBusy(false);
+      setStep("form");
       setError(res.error);
       return;
     }
+    // Stay disabled on success: the push + refresh are still in flight and this
+    // component unmounts on navigation. Clearing `busy` here would re-enable
+    // "Submit visit" mid-save and allow a duplicate visit to be recorded.
     router.push(`/field/counter/${counterId}`);
     router.refresh();
   }
@@ -131,6 +141,8 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
           )}
         </div>
 
+        {step === "form" ? (
+        <>
         <p className="mb-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
           4 quick questions — under 30 seconds.
         </p>
@@ -201,18 +213,131 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
           value={remarks}
           onChange={(e) => setRemarks(e.target.value)}
         />
+        </>
+        ) : (
+          <ReviewPanel
+            sold={sold}
+            stock={stock}
+            totalSold={totalSold}
+            rank={rank}
+            competitor={competitor}
+            remarks={remarks}
+            isEdit={isEdit}
+          />
+        )}
 
         {error && <p className="mt-3 text-[12px]" style={{ color: "var(--danger)" }}>{error}</p>}
 
         <div className="mt-5 flex gap-3">
-          <button className="btn btn-secondary flex-1 justify-center py-3.5" onClick={() => router.push(`/field/counter/${counterId}`)} disabled={busy}>
-            Cancel
-          </button>
-          <button className="btn btn-primary flex-1 justify-center py-3.5" onClick={submit} disabled={busy}>
-            {busy ? "Saving…" : isEdit ? "Save changes" : "Submit visit"}
-          </button>
+          {step === "form" ? (
+            <>
+              <button
+                className="btn btn-secondary flex-1 justify-center py-3.5"
+                onClick={() => router.push(`/field/counter/${counterId}`)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary flex-1 justify-center py-3.5"
+                onClick={() => {
+                  setError("");
+                  setStep("review");
+                }}
+              >
+                Review
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="btn btn-secondary flex-1 justify-center py-3.5"
+                onClick={() => setStep("form")}
+                disabled={busy}
+              >
+                Back
+              </button>
+              <button
+                className="btn btn-primary flex-1 justify-center py-3.5"
+                onClick={submit}
+                disabled={busy}
+              >
+                {busy ? "Submitting…" : isEdit ? "Save changes" : "Submit visit"}
+              </button>
+            </>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Read-only confirmation of exactly what will be written. */
+function ReviewPanel({
+  sold,
+  stock,
+  totalSold,
+  rank,
+  competitor,
+  remarks,
+  isEdit,
+}: {
+  sold: SegMap;
+  stock: SegMap;
+  totalSold: number;
+  rank: number | null;
+  competitor: CompetitorPresence;
+  remarks: string;
+  isEdit: boolean;
+}) {
+  return (
+    <>
+      <p className="mb-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
+        Check these numbers before submitting
+        {isEdit ? "." : " — a visit can only be edited until midnight tonight."}
+      </p>
+      <div className="mb-4 h-px" style={{ background: "var(--hairline)" }} />
+
+      <div className="mb-1 flex items-baseline justify-between">
+        <h6 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>
+          Packets sold &amp; stock
+        </h6>
+        <span className="text-[11px] font-semibold" style={{ color: "var(--ink-3)" }}>
+          {totalSold} sold
+        </span>
+      </div>
+
+      {SEGMENTS.map((seg) => (
+        <div
+          key={seg}
+          className="flex items-center justify-between gap-2 py-2.5"
+          style={{ borderBottom: "1px solid var(--hairline-soft)" }}
+        >
+          <span className="text-[14px] font-medium" style={{ color: "var(--ink-1)" }}>
+            {SEGMENT_LABEL[seg]}
+          </span>
+          <span className="text-[13px] tabular-nums" style={{ color: "var(--ink-2)" }}>
+            Sold <strong style={{ color: "var(--ink-1)" }}>{sold[seg]}</strong>
+            <span className="mx-1.5" style={{ color: "var(--ink-3)" }}>·</span>
+            Stock <strong style={{ color: "var(--ink-1)" }}>{stock[seg]}</strong>
+          </span>
+        </div>
+      ))}
+
+      <ReviewRow label="Our rank" value={rank === null ? "N/A" : String(rank)} />
+      <ReviewRow
+        label="Competitor presence"
+        value={COMPETITOR_OPTIONS.find((c) => c.value === competitor)?.label ?? competitor}
+      />
+      <ReviewRow label="Remarks" value={remarks.trim() || "—"} />
+    </>
+  );
+}
+
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-2.5" style={{ borderBottom: "1px solid var(--hairline-soft)" }}>
+      <span className="text-[13px]" style={{ color: "var(--ink-3)" }}>{label}</span>
+      <span className="text-right text-[13.5px] font-medium" style={{ color: "var(--ink-1)" }}>{value}</span>
     </div>
   );
 }

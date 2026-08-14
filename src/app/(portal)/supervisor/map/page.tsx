@@ -15,6 +15,7 @@ import {
   pickDepot,
 } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
+import { counterTypeLabel } from "@/lib/field/counter-types";
 import { Notice } from "@/components/ui/notice";
 import { DepotPicker } from "../_components/depot-picker";
 import { TeamMapView, repStatus, type TeamRepRow } from "../../_components/team-map-view";
@@ -51,6 +52,7 @@ export default async function SupervisorMapPage({
             id: counters.id,
             name: counters.name,
             type: counters.type,
+            typeOther: counters.typeOther,
             area: areas.name,
             lat: counters.lat,
             lng: counters.lng,
@@ -73,7 +75,7 @@ export default async function SupervisorMapPage({
   const mapCounters: CounterPin[] = geoCounters.map((c) => ({
     id: c.id,
     name: c.name,
-    type: c.type,
+    type: counterTypeLabel(c.type, c.typeOther),
     area: c.area,
     lat: Number(c.lat),
     lng: Number(c.lng),

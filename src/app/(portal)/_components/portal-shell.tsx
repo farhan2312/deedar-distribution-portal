@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { AccessRole } from "@/db/schema";
 import {
   breadcrumbForPath,
@@ -30,13 +31,37 @@ type PortalShellProps = {
   trackingActive: boolean;
   /** Bug reports awaiting triage (admin) or filed by this user (everyone else). */
   bugInbox: BugInbox;
+  /** True for admin-created accounts still on their phone-number password —
+   * they're pinned to /account/change-password until they set a new one. */
+  mustChangePassword: boolean;
   children: React.ReactNode;
 };
 
+/** The one route a forced user may stay on. */
+const CHANGE_PASSWORD_PATH = "/account/change-password";
 
-export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingActive, bugInbox, children }: PortalShellProps) {
+
+export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingActive, bugInbox, mustChangePassword, children }: PortalShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const t = useT();
+
+  // A forced-reset user is pinned to the change-password screen: any other route
+  // bounces back to it, so they can't use the app until the password is changed
+  // (which clears the flag server-side). Server-enforced too — every mutation
+  // still runs its own auth — this is the UX gate.
+  const mustRedirect = mustChangePassword && !pathname.startsWith(CHANGE_PASSWORD_PATH);
+  useEffect(() => {
+    if (mustRedirect) router.replace(CHANGE_PASSWORD_PATH);
+  }, [mustRedirect, router]);
+
+  if (mustRedirect) {
+    return (
+      <div className="flex h-dvh items-center justify-center" style={{ background: "var(--bg)" }}>
+        <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("Redirecting…")}</p>
+      </div>
+    );
+  }
   const roleSet = new Set(accessRoles);
   // Admin is unrestricted: it sees every sidebar section, not just "admin".
   const isAdmin = roleSet.has("admin");

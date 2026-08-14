@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { areas, beatAssignments, counters, dayLogs, depots, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import type { DuplicateMatch } from "@/lib/field/actions";
+import { counterTypeLabel } from "@/lib/field/counter-types";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -140,6 +141,8 @@ export type SupervisorCounterInput = {
   depotId: string;
   areaId: string;
   type: "Kirana" | "Paan" | "Tea Stall" | "Wholesale" | "Vegetable Shop" | "Others";
+  /** Free-text label, required when `type` is "Others". */
+  typeOther?: string;
   gps: string;
 };
 
@@ -151,13 +154,14 @@ export async function checkDuplicateForSupervisor(phone: string): Promise<Duplic
   if (!/^\d{10}$/.test(phone)) return null;
 
   const [match] = await db
-    .select({ name: counters.name, type: counters.type, area: areas.name })
+    .select({ name: counters.name, type: counters.type, typeOther: counters.typeOther, area: areas.name })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
     .where(eq(counters.phone, phone))
     .limit(1);
 
-  return match ?? null;
+  if (!match) return null;
+  return { name: match.name, type: counterTypeLabel(match.type, match.typeOther), area: match.area };
 }
 
 /** Create a counter in a depot the SO supervises (admin: any depot). */
@@ -170,6 +174,10 @@ export async function createCounterBySupervisor(input: SupervisorCounterInput): 
   }
   if (!input.name.trim() || !/^\d{10}$/.test(input.phone)) {
     return { ok: false, error: "Name and a valid 10-digit mobile are required." };
+  }
+  const typeOther = input.type === "Others" ? input.typeOther?.trim() : "";
+  if (input.type === "Others" && !typeOther) {
+    return { ok: false, error: "Enter the counter type." };
   }
 
   if (!isAdmin) {
@@ -203,6 +211,7 @@ export async function createCounterBySupervisor(input: SupervisorCounterInput): 
     depotId: depot.id,
     areaId: area.id,
     type: input.type,
+    typeOther: typeOther || null,
     lat: lat || null,
     lng: lng || null,
     status: "active",

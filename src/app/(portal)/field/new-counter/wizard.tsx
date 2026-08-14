@@ -11,6 +11,7 @@ import {
   checkDuplicateForSupervisor,
   createCounterBySupervisor,
 } from "@/lib/supervisor/actions";
+import { ALL_COUNTER_TYPES } from "@/lib/field/counter-types";
 import { GpsCapture } from "../_components/gps-capture";
 
 export type AreaOption = { id: string; name: string };
@@ -27,8 +28,6 @@ type WizardMode =
   | { mode: "open"; cnfs: CnfOption[]; depots: DepotOption[] };
 
 type WizardProps = WizardMode & { variant?: WizardVariant };
-
-const ALL_COUNTER_TYPES: NewCounterInput["type"][] = ["Kirana", "Paan", "Tea Stall", "Wholesale", "Vegetable Shop", "Others"];
 
 type Step = "duplicate" | "details" | "review";
 
@@ -52,6 +51,8 @@ export function NewCounterWizard(props: WizardProps) {
     depotId: props.mode === "locked" ? props.depot.id : "",
     areaId: "",
     type: "" as NewCounterInput["type"] | "",
+    /** Manual label, only meaningful (and required) when type is "Others". */
+    typeOther: "",
     gps: "",
   });
   // A phone is a counter's unique id, so a match means the outlet already
@@ -120,6 +121,10 @@ export function NewCounterWizard(props: WizardProps) {
       setError("Fill name, depot, area and type.");
       return;
     }
+    if (draft.type === "Others" && !draft.typeOther.trim()) {
+      setError("Enter the counter type.");
+      return;
+    }
     setStep("review");
   }
 
@@ -133,16 +138,22 @@ export function NewCounterWizard(props: WizardProps) {
       depotId: draft.depotId,
       areaId: draft.areaId,
       type: draft.type as NewCounterInput["type"],
+      typeOther: draft.type === "Others" ? draft.typeOther.trim() : undefined,
       gps: draft.gps,
     };
     const res = isSupervisor
       ? await createCounterBySupervisor(payload)
       : await createCounter(payload);
-    setBusy(false);
     if (!res.ok) {
+      // Only re-enable on failure — the wizard stays put so the rejected value
+      // can be corrected and resubmitted.
+      setBusy(false);
       setError(res.error);
       return;
     }
+    // Stay disabled on success: the push + refresh are still in flight and this
+    // component unmounts on navigation. Clearing `busy` here re-enabled "Submit
+    // counter" mid-save, which is how a duplicate counter gets created.
     router.push(doneHref);
     router.refresh();
   }
@@ -154,10 +165,13 @@ export function NewCounterWizard(props: WizardProps) {
         className="flex items-center gap-3.5 px-6 py-4.5"
         style={{ background: "var(--gradient-cosmic)", color: "#fff" }}
       >
+        {/* Disabled mid-submit: navigating away while the counter is being
+            written would leave the rep unsure whether it saved. */}
         <button
           onClick={() => router.push(backHref)}
           aria-label="Back"
-          className="flex h-9 w-9 flex-none items-center justify-center rounded-full border-0 text-white"
+          disabled={busy}
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-full border-0 text-white disabled:opacity-50"
           style={{ background: "rgba(255,255,255,.16)" }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -349,7 +363,9 @@ export function NewCounterWizard(props: WizardProps) {
                   return (
                     <button
                       key={t}
-                      onClick={() => setDraft({ ...draft, type: t })}
+                      onClick={() =>
+                        setDraft({ ...draft, type: t, typeOther: t === "Others" ? draft.typeOther : "" })
+                      }
                       className="chip"
                       style={{
                         borderColor: active ? "var(--accent)" : "var(--hairline)",
@@ -364,6 +380,17 @@ export function NewCounterWizard(props: WizardProps) {
                   );
                 })}
               </div>
+              {draft.type === "Others" && (
+                <input
+                  className="inp mt-2.5"
+                  type="text"
+                  placeholder="Enter counter type, e.g. Medical Store"
+                  maxLength={60}
+                  autoFocus
+                  value={draft.typeOther}
+                  onChange={(e) => setDraft({ ...draft, typeOther: e.target.value })}
+                />
+              )}
             </div>
             <div className="mb-5 rounded-2xl p-4" style={{ background: "var(--accent-tint)" }}>
               <label className="mb-2.5 block text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>
@@ -389,7 +416,7 @@ export function NewCounterWizard(props: WizardProps) {
             <div className="mb-5 rounded-2xl p-5" style={{ background: "var(--bg-soft)" }}>
               <div className="grid grid-cols-2 gap-x-5 gap-y-3.5 text-[13px]">
                 <Review k="Name" v={draft.name} />
-                <Review k="Type" v={draft.type} />
+                <Review k="Type" v={draft.type === "Others" ? draft.typeOther.trim() : draft.type} />
                 <Review k="Address" v={draft.address || "—"} />
                 <Review k="C&F" v={cnfName} />
                 <Review k="Depot" v={depotName} />
@@ -399,7 +426,11 @@ export function NewCounterWizard(props: WizardProps) {
             </div>
             {error && <ErrorText>{error}</ErrorText>}
             <div className="flex gap-3">
-              <button className="btn btn-secondary flex-1 justify-center py-3.5" onClick={() => setStep("details")}>
+              <button
+                className="btn btn-secondary flex-1 justify-center py-3.5"
+                onClick={() => setStep("details")}
+                disabled={busy}
+              >
                 Back
               </button>
               <button className="btn btn-primary flex-1 justify-center py-3.5" onClick={submit} disabled={busy}>

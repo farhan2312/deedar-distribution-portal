@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { changeOwnPassword } from "@/lib/auth/password-actions";
+import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/auth/password-policy";
 
-export function ChangePasswordForm() {
+export function ChangePasswordForm({ forced = false }: { forced?: boolean }) {
   const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -22,10 +23,18 @@ export function ChangePasswordForm() {
         setError(res.error);
         return;
       }
-      setDone(true);
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      // Forced users have nowhere to go "back" to (they were bounced here), and
+      // the flag is now cleared — drop them into the app. `refresh()` re-runs the
+      // layout so the shell stops pinning them here.
+      if (forced) {
+        router.replace("/dashboard");
+        router.refresh();
+        return;
+      }
+      setDone(true);
     });
   }
 
@@ -69,11 +78,15 @@ export function ChangePasswordForm() {
           className="inp"
           type="password"
           autoComplete="new-password"
-          minLength={6}
+          minLength={PASSWORD_MIN}
+          maxLength={PASSWORD_MAX}
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           required
         />
+        <span className="text-[11.5px]" style={{ color: "var(--ink-3)" }}>
+          {PASSWORD_MIN}–{PASSWORD_MAX} characters.
+        </span>
       </div>
       <div className="field mb-4">
         <label>Confirm new password</label>
@@ -81,7 +94,8 @@ export function ChangePasswordForm() {
           className="inp"
           type="password"
           autoComplete="new-password"
-          minLength={6}
+          minLength={PASSWORD_MIN}
+          maxLength={PASSWORD_MAX}
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required

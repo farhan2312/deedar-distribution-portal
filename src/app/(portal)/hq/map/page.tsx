@@ -15,6 +15,7 @@ import {
   pickDepot,
   type DepotOption,
 } from "@/lib/supervisor/team";
+import { counterTypeLabel } from "@/lib/field/counter-types";
 import { Notice } from "@/components/ui/notice";
 import { CnfPicker } from "../_components/cnf-picker";
 import { DepotPicker } from "../../supervisor/_components/depot-picker";
@@ -76,6 +77,7 @@ export default async function HqLiveMapPage({
             id: counters.id,
             name: counters.name,
             type: counters.type,
+            typeOther: counters.typeOther,
             area: areas.name,
             lat: counters.lat,
             lng: counters.lng,
@@ -97,7 +99,7 @@ export default async function HqLiveMapPage({
   const mapCounters: CounterPin[] = geoCounters.map((c) => ({
     id: c.id,
     name: c.name,
-    type: c.type,
+    type: counterTypeLabel(c.type, c.typeOther),
     area: c.area,
     lat: Number(c.lat),
     lng: Number(c.lng),
