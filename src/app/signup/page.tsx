@@ -33,8 +33,10 @@ export default function SignupPage() {
     });
   }
 
+  // Mobile has no side image, so the card sits on the brand green (the submit
+  // button colour); from `md` up the split layout uses the light canvas.
   return (
-    <div className="flex flex-1 flex-col md:flex-row" style={{ background: "var(--bg)" }}>
+    <div className="flex flex-1 flex-col bg-[#0d3b2e] md:flex-row md:bg-[var(--bg)]">
       {/* Left branding panel */}
       <div className="relative hidden md:block md:w-[60%]">
         <Image

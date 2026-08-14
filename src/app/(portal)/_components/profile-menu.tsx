@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { logoutAction } from "@/lib/auth/actions";
+import { useTheme } from "@/lib/theme/use-theme";
 
 export function ProfileMenu({
   userName,
@@ -16,6 +17,7 @@ export function ProfileMenu({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const initial = userName.charAt(0).toUpperCase();
+  const { isDark, toggle } = useTheme();
 
   useEffect(() => {
     if (!open) return;
@@ -47,23 +49,31 @@ export function ProfileMenu({
           </div>
           <Divider />
 
-          {/* Dark mode — not implemented yet */}
-          <div className="flex items-center justify-between gap-3 px-4 py-3">
+          {/* Dark mode */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isDark}
+            onClick={toggle}
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+          >
             <span className="flex items-center gap-2.5 text-[13px] font-medium" style={{ color: "rgba(241,247,242,.75)" }}>
               <MoonIcon className="h-4 w-4 flex-none" />
               Dark mode
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold" style={{ color: "rgba(241,247,242,.35)" }}>Soon</span>
+            <span
+              className="inline-flex h-[18px] w-[32px] flex-none items-center rounded-full px-[3px] transition-colors"
+              style={{ background: isDark ? "var(--accent)" : "rgba(255,255,255,.12)" }}
+            >
               <span
-                aria-disabled
-                className="inline-flex h-[18px] w-[32px] flex-none items-center rounded-full px-[3px]"
-                style={{ background: "rgba(255,255,255,.12)" }}
-              >
-                <span className="h-3 w-3 rounded-full" style={{ background: "rgba(241,247,242,.4)" }} />
-              </span>
+                className="h-3 w-3 rounded-full transition-transform"
+                style={{
+                  background: isDark ? "#fff" : "rgba(241,247,242,.4)",
+                  transform: isDark ? "translateX(14px)" : "none",
+                }}
+              />
             </span>
-          </div>
+          </button>
           <Divider />
 
           {/* Change password */}

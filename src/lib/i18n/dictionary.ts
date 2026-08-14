@@ -107,8 +107,8 @@ const HI: Record<string, string> = {
   Critical: "गंभीर",
   "Page / where": "पेज / कहाँ",
   "Screenshot (optional)": "स्क्रीनशॉट (वैकल्पिक)",
-  "Click to attach — or paste a screenshot (Ctrl/⌘+V)":
-    "अटैच करने के लिए क्लिक करें — या स्क्रीनशॉट पेस्ट करें (Ctrl/⌘+V)",
+  "Attach a screenshot": "स्क्रीनशॉट अटैच करें",
+  "— or paste one (Ctrl/⌘+V)": "— या एक पेस्ट करें (Ctrl/⌘+V)",
   "Screenshot attached": "स्क्रीनशॉट जोड़ा गया",
   Remove: "हटाएँ",
   Cancel: "रद्द करें",
@@ -159,6 +159,13 @@ const HI: Record<string, string> = {
   "On job": "काम पर",
   "Keep up the great work!": "बढ़िया काम जारी रखें!",
   "Consistency today leads to success tomorrow.": "आज की निरंतरता कल की सफलता है।",
+
+  // ── Mobile nav + theme ──
+  More: "और",
+  "Close menu": "मेन्यू बंद करें",
+  "Dark mode": "डार्क मोड",
+  "Change Password": "पासवर्ड बदलें",
+  "Sign out": "साइन आउट",
 };
 
 export function translate(lang: Lang, key: string): string {

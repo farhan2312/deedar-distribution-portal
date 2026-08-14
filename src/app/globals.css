@@ -59,6 +59,64 @@
   --r-pill: 980px;
 }
 
+/* ============================================================
+   DARK MODE — opt-in via <html data-theme="dark">, never by media
+   query, so the light theme is unchanged unless the user asks for it.
+   Anchors: #121212 canvas, #1E1E1E elevated surface (cards, inputs,
+   tables). Everything else is derived from those two so contrast
+   stays consistent: inks invert, hairlines become light-on-dark at
+   low alpha, and shadows deepen (a light-tinted shadow is invisible
+   on a dark canvas).
+   ============================================================ */
+:root[data-theme="dark"] {
+  --bg: #121212;
+  --surface: #1e1e1e;
+  /* One step above the surface, for insets/hovers inside a card. */
+  --bg-soft: #262626;
+  /* Borders are light at low alpha rather than a solid grey, so they read
+     as edges on both #121212 and #1E1E1E without banding. */
+  --hairline: rgba(255, 255, 255, 0.14);
+  --hairline-soft: rgba(255, 255, 255, 0.09);
+
+  --ink-1: #ececec;
+  --ink-2: #a8a8a8;
+  --ink-3: #7a7a7a;
+
+  /* Dark UI separates by shadow far less than light UI; keep them deep
+     and subtle rather than removing them, so elevation still reads. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 48px -8px rgba(0, 0, 0, 0.7);
+
+  /* Semantic colours lightened — the light-mode values are tuned for white
+     and fail contrast on #121212. */
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --info: #c084fc;
+}
+
+/* Per-role theming. `themeVars()` puts the raw role values (--role-accent,
+   --role-accent-lift, --role-tint) on the portal shell; these rules turn them
+   into the tokens components actually use, so the same role reads correctly on
+   both canvases. */
+.role-scope {
+  --accent: var(--role-accent);
+  --accent-hover: var(--role-accent);
+  --accent-tint: var(--role-tint);
+  --bg-soft: var(--role-tint);
+  --hairline-soft: var(--role-tint);
+}
+:root[data-theme="dark"] .role-scope {
+  /* The lighter role colour, and a translucent wash instead of the pastel tint
+     (which would glow against #121212). */
+  --accent: var(--role-accent-lift);
+  --accent-hover: var(--role-accent-lift);
+  --accent-tint: rgba(var(--accent-rgb), 0.22);
+  --bg-soft: #262626;
+  --hairline-soft: rgba(255, 255, 255, 0.09);
+}
+
 @theme inline {
   --font-sans: var(--font-manrope);
 }
@@ -152,7 +210,8 @@ summary::-webkit-details-marker {
   }
 
   .card {
-    @apply rounded-2xl bg-white border transition-shadow;
+    @apply rounded-2xl border transition-shadow;
+    background: var(--surface);
     border-color: var(--hairline-soft);
     box-shadow: var(--shadow-sm);
   }
@@ -172,7 +231,8 @@ summary::-webkit-details-marker {
     background: var(--accent-hover);
   }
   .btn-secondary {
-    @apply border bg-white;
+    @apply border;
+    background: var(--surface);
     color: var(--ink-1);
     border-color: var(--hairline);
   }
@@ -205,10 +265,19 @@ summary::-webkit-details-marker {
     color: var(--ink-1);
   }
 
+  /* 16px on phones: iOS Safari auto-zooms the whole page when a focused field
+     is under 16px, and the user then has to pinch back out. Desktop keeps the
+     denser 14px via the breakpoint below. */
   .inp {
-    @apply w-full rounded-xl border bg-white px-3.5 py-2.5 text-[14px] outline-none transition-shadow;
+    @apply w-full rounded-xl border px-3.5 py-2.5 text-[16px] outline-none transition-shadow;
+    background: var(--surface);
     color: var(--ink-1);
     border-color: var(--hairline);
+  }
+  @media (min-width: 768px) {
+    .inp {
+      @apply text-[14px];
+    }
   }
   .inp::placeholder {
     color: var(--ink-3);
@@ -228,7 +297,8 @@ summary::-webkit-details-marker {
 
   /* ---- Tables: bordered, shadowed, colored header ---- */
   .table-wrap {
-    @apply overflow-hidden overflow-x-auto rounded-2xl border bg-white;
+    @apply overflow-hidden overflow-x-auto rounded-2xl border;
+    background: var(--surface);
     border-color: var(--hairline-soft);
     box-shadow: var(--shadow-sm);
   }
@@ -266,7 +336,9 @@ summary::-webkit-details-marker {
 
 /* Loading skeleton block — shimmers while a route's content streams in. */
 .skeleton {
-  background: var(--hairline-soft);
+  /* --bg-soft, not a hairline: it reads as a block against the card surface in
+     both themes (a 9%-white hairline is invisible on #1E1E1E). */
+  background: var(--bg-soft);
   border-radius: 6px;
   animation: skeletonPulse 1.4s ease-in-out infinite;
 }
@@ -301,6 +373,29 @@ summary::-webkit-details-marker {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+/* Mobile "More" sheet — backdrop fades, panel slides up from the bottom edge. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel,
+  .sheet-backdrop {
+    animation: none !important;
   }
 }
 @keyframes pulseDot {

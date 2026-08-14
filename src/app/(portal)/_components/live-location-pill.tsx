@@ -46,13 +46,20 @@ export function LiveLocationPill({ active }: { active: boolean }) {
             : t("Your Sales Officer can see you on the map while your day is open.")
       }
     >
+      {/* On phones only the wordy status label is dropped — the pin, the last
+          update time and the pulse all stay, which is the information that
+          actually matters. The full label is still in the `title` above. */}
       <PinIcon className="h-3.5 w-3.5 flex-none" style={{ color: style.color }} />
-      <span className="text-[11.5px] font-semibold whitespace-nowrap" style={{ color: style.color }}>
+      <span className="hidden text-[11.5px] font-semibold whitespace-nowrap sm:inline" style={{ color: style.color }}>
         {style.label}
       </span>
       {time && (
-        <span className="text-[11px] whitespace-nowrap tabular-nums" style={{ color: style.color, opacity: 0.75 }}>
-          · {time}
+        <span
+          className="text-[11px] whitespace-nowrap tabular-nums"
+          style={{ color: style.color, opacity: 0.75 }}
+        >
+          <span className="hidden sm:inline">· </span>
+          {time}
         </span>
       )}
       {style.pulse && (

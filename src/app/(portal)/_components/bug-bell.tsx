@@ -64,7 +64,7 @@ export function BugBell({ initial }: { initial: BugInbox }) {
         onClick={toggle}
         aria-label={t("Bug notifications")}
         aria-expanded={open}
-        className="relative inline-flex h-8 w-8 items-center justify-center rounded-lg border bg-white transition-colors"
+        className="relative inline-flex h-8 w-8 items-center justify-center rounded-lg border bg-[var(--surface)] transition-colors"
         style={{ color: "var(--ink-2)" }}
       >
         <BellIcon className="h-[18px] w-[18px]" ringing={inbox.count > 0} />
@@ -80,7 +80,7 @@ export function BugBell({ initial }: { initial: BugInbox }) {
 
       {open && (
         <div
-          className="absolute right-0 z-40 mt-2 w-[320px] overflow-hidden rounded-2xl bg-white"
+          className="absolute right-0 z-40 mt-2 w-[320px] overflow-hidden rounded-2xl bg-[var(--surface)]"
           style={{ border: "1px solid var(--hairline-soft)", boxShadow: "var(--shadow-lg)" }}
         >
           <div className="flex items-baseline justify-between px-4 py-3" style={{ borderBottom: "1px solid var(--hairline-soft)" }}>

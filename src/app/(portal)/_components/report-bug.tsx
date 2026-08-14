@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import type { BugSeverity, BugType } from "@/db/schema";
 import { submitBugReport } from "@/lib/bugs/actions";
@@ -16,15 +17,18 @@ export function ReportBug() {
 
   return (
     <>
+      {/* Icon-only on phones — the top bar is tight once the language toggle,
+          bell and live-location pill are alongside it. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-1.5 text-[12.5px] font-semibold transition-colors"
+        aria-label={t("Report a Bug")}
+        className="inline-flex items-center gap-1.5 rounded-lg border bg-[var(--surface)] px-2 py-1.5 text-[12.5px] font-semibold transition-colors sm:px-3"
         style={{ color: "var(--ink-1)" }}
       >
         {/* Red bug on a neutral button — the icon carries the signal. */}
-        <BugIcon className="h-4 w-4" />
-        {t("Report a Bug")}
+        <BugIcon className="h-4 w-4 flex-none" />
+        <span className="hidden sm:inline">{t("Report a Bug")}</span>
       </button>
       {open && <ReportBugDialog onClose={() => setOpen(false)} />}
     </>
@@ -102,9 +106,20 @@ function ReportBugDialog({ onClose }: { onClose: () => void }) {
     });
   }
 
-  return (
+  // Bottom sheet on phones, centred card from `sm` up, split into a fixed
+  // header, a SCROLLING body and a pinned footer — the form is taller than a
+  // phone screen, so without this the Submit/Cancel buttons fall off the bottom
+  // with no way to reach them. The sheet takes an EXPLICIT height on mobile
+  // (not just a max-height) so that three-way split can't collapse.
+  //
+  // Portalled to <body> deliberately. The trigger lives in the top bar, which is
+  // `sticky z-20` — and a positioned element with a z-index opens a stacking
+  // context, so an in-place dialog is capped at that z-20 no matter how high its
+  // own z-index is. The mobile bottom nav (z-40, a root-level sibling) then
+  // painted straight over the footer, hiding Cancel/Submit.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
       style={{ background: "rgba(15,18,32,.45)" }}
       onMouseDown={(e) => {
         if (!cardRef.current?.contains(e.target as Node)) onClose();
@@ -115,11 +130,11 @@ function ReportBugDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-label={t("Report a Bug")}
-        className="w-full max-w-md rounded-2xl bg-white"
+        className="flex h-[85dvh] w-full max-w-md flex-col rounded-t-2xl bg-[var(--surface)] sm:h-auto sm:max-h-[90dvh] sm:rounded-2xl"
         style={{ boxShadow: "var(--shadow-lg)", animation: "fadeUp .2s ease" }}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 px-6 pt-5">
+        <div className="flex flex-none items-start justify-between gap-3 px-5 pt-5 sm:px-6">
           <div>
             <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--danger)" }}>
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--danger)" }} />
@@ -146,15 +161,19 @@ function ReportBugDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         {done ? (
-          <div className="px-6 pb-6 pt-5">
+          <div
+            className="px-5 pt-5 sm:px-6"
+            style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
+          >
             <button className="btn btn-primary w-full justify-center py-3" onClick={onClose}>
               {t("Done")}
             </button>
           </div>
         ) : (
           <>
-            <div className="mt-4 h-px" style={{ background: "var(--hairline-soft)" }} />
-            <div className="px-6 py-5">
+            <div className="mt-4 h-px flex-none" style={{ background: "var(--hairline-soft)" }} />
+            {/* Scrolls independently so the footer below stays reachable. */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
               {/* Type */}
               <div className="field mb-4">
                 <label>{t("Type")}</label>
@@ -186,9 +205,10 @@ function ReportBugDialog({ onClose }: { onClose: () => void }) {
                 <label>
                   {t("Title")} <span style={{ color: "var(--danger)" }}>*</span>
                 </label>
+                {/* No autoFocus: on a phone it opens the keyboard the moment the
+                    sheet appears, hiding most of the form behind it. */}
                 <input
                   className="inp"
-                  autoFocus
                   maxLength={200}
                   placeholder={t("Short summary of the issue")}
                   value={title}
@@ -207,7 +227,7 @@ function ReportBugDialog({ onClose }: { onClose: () => void }) {
                 />
               </div>
 
-              <div className="mb-4 grid grid-cols-2 gap-3">
+              <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="field">
                   <label>{t("Severity")}</label>
                   <select className="inp" value={severity} onChange={(e) => setSeverity(e.target.value as BugSeverity)}>
@@ -245,7 +265,9 @@ function ReportBugDialog({ onClose }: { onClose: () => void }) {
                     className="w-full rounded-xl border border-dashed py-3 text-[12.5px] font-semibold"
                     style={{ borderColor: "var(--hairline)", background: "var(--bg-soft)", color: "var(--ink-2)" }}
                   >
-                    📎 {t("Click to attach — or paste a screenshot (Ctrl/⌘+V)")}
+                    {/* The paste hint is desktop-only — there's no Ctrl/⌘ on a phone. */}
+                    📎 {t("Attach a screenshot")}
+                    <span className="hidden sm:inline"> {t("— or paste one (Ctrl/⌘+V)")}</span>
                   </button>
                 )}
                 <input
@@ -265,20 +287,37 @@ function ReportBugDialog({ onClose }: { onClose: () => void }) {
                   {error}
                 </p>
               )}
+            </div>
 
-              <div className="mt-5 flex justify-end gap-3">
-                <button className="btn btn-secondary px-5" onClick={onClose} disabled={pending}>
-                  {t("Cancel")}
-                </button>
-                <button className="btn btn-primary px-5" onClick={submit} disabled={pending}>
-                  {pending ? t("Sending…") : type === "bug" ? t("Submit Bug") : t("Submit Feature")}
-                </button>
-              </div>
+            {/* Pinned: always on screen no matter how long the form gets. */}
+            <div
+              className="flex flex-none gap-3 border-t bg-[var(--surface)] px-5 pt-4 sm:justify-end sm:px-6"
+              style={{
+                borderColor: "var(--hairline-soft)",
+                boxShadow: "0 -6px 16px rgba(20,16,50,.06)",
+                paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+              }}
+            >
+              <button
+                className="btn btn-secondary flex-1 justify-center px-5 sm:flex-none"
+                onClick={onClose}
+                disabled={pending}
+              >
+                {t("Cancel")}
+              </button>
+              <button
+                className="btn btn-primary flex-1 justify-center px-5 sm:flex-none"
+                onClick={submit}
+                disabled={pending}
+              >
+                {pending ? t("Sending…") : type === "bug" ? t("Submit Bug") : t("Submit Feature")}
+              </button>
             </div>
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

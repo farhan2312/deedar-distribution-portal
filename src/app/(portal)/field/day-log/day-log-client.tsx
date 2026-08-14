@@ -64,7 +64,7 @@ export function DayLogClient({
           </p>
         </div>
         <div
-          className="flex items-center gap-2 rounded-full border bg-white px-4 py-2.5 text-[13.5px] font-semibold"
+          className="flex items-center gap-2 rounded-full border bg-[var(--surface)] px-4 py-2.5 text-[13.5px] font-semibold"
           style={{ borderColor: "var(--hairline)", color: "var(--ink-1)" }}
         >
           <CalendarIcon className="h-4 w-4" style={{ color: "var(--accent)" }} />
@@ -115,9 +115,11 @@ export function DayLogClient({
 
         </div>
 
-        {/* Motivational card */}
+        {/* Motivational card — only in the 2-column desktop layout, where it
+            fills the side column. Stacked full-width on a phone it's just
+            filler, so it's hidden below `lg`. */}
         <div
-          className="flex flex-col items-center justify-center rounded-2xl p-7 text-center text-white"
+          className="hidden flex-col items-center justify-center rounded-2xl p-7 text-center text-white lg:flex"
           style={{ background: "var(--gradient-cosmic)", boxShadow: "var(--shadow-md)" }}
         >
           <TrendIllustration />
@@ -228,7 +230,7 @@ function PlanRow({
   return (
     <div className="flex items-center justify-between py-4" style={{ borderBottom: last ? "none" : "1px solid var(--hairline-soft)" }}>
       <div className="flex items-center gap-3.5">
-        <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full border" style={{ borderColor: "var(--hairline)", background: "#fff" }}>
+        <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full border" style={{ borderColor: "var(--hairline)", background: "var(--surface)" }}>
           {icon}
         </span>
         <div>

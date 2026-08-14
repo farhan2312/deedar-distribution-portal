@@ -14,6 +14,7 @@ import {
 import { useT } from "@/lib/i18n/provider";
 import { LanguageToggle } from "@/components/language-toggle";
 import { NavIconView } from "./nav-icons";
+import { MobileNav } from "./mobile-nav";
 import { ProfileMenu } from "./profile-menu";
 import { ReportBug } from "./report-bug";
 import { LiveLocationPill } from "./live-location-pill";
@@ -48,10 +49,17 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
   // their own bespoke headers instead.
   const navItem = navItemForPath(pathname);
 
+  // Root uses `h-dvh`, not `h-screen`: on iOS Safari `100vh` is taller than the
+  // visible area while the URL bar is showing, which pushes the bottom of the
+  // app out of view. The dynamic viewport unit tracks the real height.
   return (
-    <div className="flex h-screen" style={{ background: "var(--bg)", ...themeVars(ROLE_THEME[section]) }}>
-      {/* Sidebar — header and footer stay fixed, only the nav list scrolls */}
-      <aside className="sidebar-glass flex w-[250px] flex-none flex-col overflow-hidden py-5">
+    <div
+      className="role-scope flex h-dvh"
+      style={{ background: "var(--bg)", ...themeVars(ROLE_THEME[section]) }}
+    >
+      {/* Sidebar — header and footer stay fixed, only the nav list scrolls.
+          Below `md` it's replaced by MobileNav's bottom bar. */}
+      <aside className="sidebar-glass hidden w-[250px] flex-none flex-col overflow-hidden py-5 md:flex">
         <div className="flex flex-none items-center gap-2.5 px-5 pb-4">
           <span
             className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-[15px] font-bold text-white"
@@ -125,20 +133,37 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
       <main className="min-w-0 flex-1 overflow-y-auto">
         {/* Top bar — breadcrumb left, language + bug report right */}
         <div
-          className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 px-8 py-3"
+          className="sticky top-0 z-20 flex items-center justify-between gap-2 px-4 py-2.5 md:gap-3 md:px-8 md:py-3"
           style={{
             background: "var(--surface)",
             borderBottom: "1px solid var(--hairline-soft)",
           }}
         >
-          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-[13px]">
+          {/* The sidebar carries the brand on desktop; on mobile it's hidden, so
+              the top bar shows the mark instead of the breadcrumb. */}
+          <div className="flex min-w-0 flex-1 items-center gap-2 md:hidden">
+            <span
+              className="flex h-7 w-7 flex-none items-center justify-center rounded-lg text-[13px] font-bold text-white"
+              style={{ background: "var(--accent)" }}
+            >
+              D
+            </span>
+            <span
+              className="truncate text-[14px] font-bold"
+              style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}
+            >
+              Deedar
+            </span>
+          </div>
+          <nav aria-label="Breadcrumb" className="hidden items-center gap-2 text-[13px] md:flex">
             <span style={{ color: "var(--ink-3)" }}>{t(crumb.section)}</span>
             <span style={{ color: "var(--ink-3)" }}>›</span>
             <span className="font-semibold" style={{ color: "var(--accent)" }}>
               {t(crumb.page)}
             </span>
           </nav>
-          <div className="flex items-center gap-3">
+          {/* flex-none so the actions never compress; the brand truncates instead. */}
+          <div className="flex flex-none items-center gap-1.5 md:gap-3">
             <LiveLocationPill active={trackingActive} />
             <LanguageToggle />
             <ReportBug />
@@ -147,9 +172,10 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
         </div>
         {/* Wide by default so tables/dashboards use the body; narrow pages
             (New Counter, Beat, forms) self-center via their own `mx-auto max-w-*`. */}
-        <div className="mx-auto max-w-[1600px] px-8 py-8">
+        {/* pb clears the fixed bottom nav on mobile (bar height + safe area). */}
+        <div className="mx-auto max-w-[1600px] px-4 pb-28 pt-5 md:px-8 md:pb-8 md:pt-8">
           {navItem && !navItem.customHeader && (
-            <div className="mb-6">
+            <div className="mb-5 md:mb-6">
               <h1 className="page-title">{t(navItem.label)}</h1>
               {navItem.blurb && <p className="page-subtitle max-w-2xl">{t(navItem.blurb)}</p>}
             </div>
@@ -157,6 +183,15 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
           {children}
         </div>
       </main>
+
+      <MobileNav
+        sections={sections}
+        activeRole={section}
+        pathname={pathname}
+        userName={userName}
+        phone={phone}
+        roleLabel={roleLabel}
+      />
     </div>
   );
 }

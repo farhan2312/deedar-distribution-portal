@@ -212,12 +212,18 @@ export function breadcrumbForPath(pathname: string): { section: string; page: st
 
 /** CSS custom props that recolor a screen's --accent to the role's theme. */
 export function themeVars(theme: RoleTheme): React.CSSProperties {
+  // Emits only RAW role values; `.role-scope` in globals.css derives the actual
+  // --accent/--bg-soft/--hairline-soft from these, differently per theme. That
+  // split matters twice over: inline styles beat any stylesheet, so a light
+  // tint set here would stay bright in dark mode; and keeping these values
+  // theme-independent means server and client render identically (no hydration
+  // mismatch from a theme the server can't know).
   return {
-    "--accent": theme.strong,
-    "--accent-hover": theme.strong,
+    "--role-accent": theme.strong,
+    // Lighter variant used as the accent in dark mode — the `strong` colours are
+    // tuned for white and are too dim to read on #121212.
+    "--role-accent-lift": theme.dot,
+    "--role-tint": theme.bg,
     "--accent-rgb": theme.rgb,
-    "--accent-tint": `${theme.bg}`,
-    "--bg-soft": theme.bg,
-    "--hairline-soft": theme.bg,
   } as React.CSSProperties;
 }
