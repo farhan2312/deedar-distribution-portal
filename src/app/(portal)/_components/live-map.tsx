@@ -124,12 +124,13 @@ const SNAP_DISTANCE_M = 1500;
 /** Same idea on the time axis: after a silence this long (lost signal, or a
  * suspended tab) the route in between is unknown, so don't animate it. */
 const SNAP_GAP_MS = 3 * 60_000;
-/** ~1 s for the sender's 50 m movement threshold — the common case. */
-const MS_PER_METER = 20;
 const MIN_DURATION_MS = 250;
-/** Hard ceiling: a marker must always settle, and should land before the next
- * fix is due rather than lagging permanently behind the rep. */
-const MAX_DURATION_MS = 2500;
+/**
+ * Ceiling on a single glide. Generous on purpose: a rep only reports every
+ * ~50 m, which at walking pace is ~35 s apart, so the tween has to be able to
+ * span most of that gap. A marker must still always settle, hence a cap.
+ */
+const MAX_DURATION_MS = 20_000;
 
 type RepMarker = {
   marker: L.Marker;
@@ -285,10 +286,14 @@ export function LiveMap({
       if (snap) {
         existing.marker.setLatLng([pos.lat, pos.lng]);
       } else {
-        const duration = Math.min(
-          MAX_DURATION_MS,
-          Math.max(MIN_DURATION_MS, moved * MS_PER_METER),
-        );
+        // Pace the glide to how often fixes ACTUALLY arrive, not to the distance
+        // covered. Distance-based timing made the marker sprint the 50 m
+        // reporting threshold in ~1 s and then sit frozen for the ~35 s it takes
+        // to walk the next 50 m — technically interpolated, but visibly stop-go.
+        // Spending the whole observed interval means the marker moves at the
+        // rep's real speed, which is what reads as smooth. The cost is that it
+        // trails reality by about one interval, the usual trade for this.
+        const duration = Math.min(MAX_DURATION_MS, Math.max(MIN_DURATION_MS, localGap));
         animateMarker(existing, { lat: pos.lat, lng: pos.lng }, duration);
       }
 
