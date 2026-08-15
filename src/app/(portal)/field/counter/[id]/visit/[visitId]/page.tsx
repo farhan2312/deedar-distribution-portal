@@ -51,7 +51,13 @@ export default async function EditVisitPage({
       counterName={counter.name}
       counterArea={`${counterTypeLabel(counter.type, counter.typeOther)} · ${counter.areaName}`}
       visitId={visitId}
-      initial={{ items: visit.items, rank: visit.rank, competitor: visit.competitor, remarks: visit.remarks }}
+      initial={{
+        items: visit.items,
+        rank: visit.rank,
+        competitor: visit.competitor,
+        competitorBrand: visit.competitorBrand,
+        remarks: visit.remarks,
+      }}
     />
   );
 }

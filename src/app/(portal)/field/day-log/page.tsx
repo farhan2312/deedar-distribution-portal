@@ -11,9 +11,30 @@ import {
   formatISTTime,
   istDateString,
   istGreeting,
+  minutesLabel,
 } from "@/lib/date";
 import { Notice } from "@/components/ui/notice";
 import { DayLogClient, type HistoryRow } from "./day-log-client";
+
+/** Monday's "YYYY-MM-DD" for the week containing `dateStr`. Pure calendar-date
+ * arithmetic on the Y/M/D components — `dateStr` is already an IST calendar
+ * date (from `istDateString`), so this doesn't need any timezone conversion of
+ * its own; redoing one here would risk shifting the day by re-applying an
+ * offset that's already baked in. */
+function mondayOf(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const isoWeekday = date.getUTCDay() || 7; // 0 (Sun) -> 7, so Mon=1..Sun=7
+  date.setUTCDate(date.getUTCDate() - (isoWeekday - 1));
+  return date.toISOString().slice(0, 10);
+}
+
+/** 1 (Monday) .. 7 (Sunday) for an IST calendar date — how many days into the
+ * week `dateStr` falls, used as "days elapsed this week" for today. */
+function isoWeekday(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() || 7;
+}
 
 export default async function FieldDayLogPage() {
   const user = await getCurrentUser();
@@ -39,6 +60,24 @@ export default async function FieldDayLogPage() {
       onJobLabel: durationLabel(l.startAt, l.endAt),
     }));
 
+  // This-week banner stats (Mon..today). A day "counts" once it's clocked in,
+  // whether or not it's ended yet — matches how "Today's Plan" itself treats
+  // `started` as the day being logged.
+  const weekStart = mondayOf(today);
+  const weekLogs = logs.filter((l) => l.logDate >= weekStart && l.logDate <= today);
+  const daysLoggedThisWeek = weekLogs.filter((l) => l.startAt).length;
+  const daysElapsedThisWeek = isoWeekday(today);
+  const weekPct = daysElapsedThisWeek > 0 ? Math.round((daysLoggedThisWeek / daysElapsedThisWeek) * 100) : 0;
+  const now = new Date();
+  const totalOnJobMinutesThisWeek = weekLogs.reduce((sum, l) => {
+    if (!l.startAt) return sum;
+    // Today's still-open log counts its elapsed time so far, so the total
+    // ticks up live rather than excluding the current day until it ends.
+    const end = l.endAt ?? (l.logDate === today ? now : null);
+    if (!end) return sum;
+    return sum + Math.max(0, (end.getTime() - l.startAt.getTime()) / 60000);
+  }, 0);
+
   return (
     <DayLogClient
       greeting={istGreeting()}
@@ -50,6 +89,9 @@ export default async function FieldDayLogPage() {
       endLabel={todayLog?.endAt ? formatISTTime(todayLog.endAt) : "Not ended yet"}
       onJobLabel={durationLabel(todayLog?.startAt ?? null, todayLog?.endAt ?? null)}
       history={history}
+      daysLoggedThisWeek={daysLoggedThisWeek}
+      totalOnJobLabelThisWeek={minutesLabel(totalOnJobMinutesThisWeek)}
+      weekPct={weekPct}
     />
   );
 }

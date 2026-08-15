@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { endDay, startDay } from "@/lib/field/day-log-actions";
 import { getDeviceId } from "@/lib/tracking/device-id";
@@ -23,6 +23,9 @@ export function DayLogClient({
   endLabel,
   onJobLabel,
   history,
+  daysLoggedThisWeek,
+  totalOnJobLabelThisWeek,
+  weekPct,
 }: {
   greeting: string;
   firstName: string;
@@ -33,10 +36,18 @@ export function DayLogClient({
   endLabel: string;
   onJobLabel: string;
   history: HistoryRow[];
+  daysLoggedThisWeek: number;
+  totalOnJobLabelThisWeek: string;
+  weekPct: number;
 }) {
   const router = useRouter();
   const t = useT();
   const [pending, start] = useTransition();
+  // Unbounded history can grow to months of rows; show a handful and let the
+  // rep expand it rather than always rendering the whole table.
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const HISTORY_PREVIEW = 5;
+  const visibleHistory = showAllHistory ? history : history.slice(0, HISTORY_PREVIEW);
 
   function onStart() {
     const deviceId = getDeviceId();
@@ -63,12 +74,15 @@ export function DayLogClient({
             {t("Let's track your day and make it count.")}
           </p>
         </div>
+        {/* Chevron is decorative only — there's no historical "Today's Plan"
+            view to switch to yet, so this pill doesn't open a date picker. */}
         <div
           className="flex items-center gap-2 rounded-full border bg-[var(--surface)] px-4 py-2.5 text-[13.5px] font-semibold"
           style={{ borderColor: "var(--hairline)", color: "var(--ink-1)" }}
         >
           <CalendarIcon className="h-4 w-4" style={{ color: "var(--accent)" }} />
           {todayLabel}
+          <ChevronDownIcon className="h-3.5 w-3.5" style={{ color: "var(--ink-3)" }} />
         </div>
       </div>
 
@@ -117,16 +131,20 @@ export function DayLogClient({
 
         {/* Motivational card — only in the 2-column desktop layout, where it
             fills the side column. Stacked full-width on a phone it's just
-            filler, so it's hidden below `lg`. */}
+            filler, so it's hidden below `lg`. Light accent-tint (not the fixed
+            --gradient-cosmic brand-green) so it follows the field section's
+            own accent like every other card, instead of always rendering
+            green regardless of role. */}
         <div
-          className="hidden flex-col items-center justify-center rounded-2xl p-7 text-center text-white lg:flex"
-          style={{ background: "var(--gradient-cosmic)", boxShadow: "var(--shadow-md)" }}
+          className="relative hidden flex-col items-center justify-center overflow-hidden rounded-2xl p-7 text-center lg:flex"
+          style={{ background: "var(--accent-tint)", boxShadow: "var(--shadow-sm)" }}
         >
-          <TrendIllustration />
-          <div className="mt-4 text-[17px] font-bold" style={{ fontFamily: "var(--font-display)" }}>
+          <LeafDecoration className="pointer-events-none absolute -bottom-3 -right-3 h-24 w-24" />
+          <ChartFlagIllustration />
+          <div className="relative mt-4 text-[17px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
             {t("Every visit counts!")}
           </div>
-          <p className="mt-2 text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,.82)" }}>
+          <p className="relative mt-2 text-[13px] leading-relaxed" style={{ color: "var(--ink-2)" }}>
             {t("Keep logging your visits and achieve more everyday.")}
           </p>
         </div>
@@ -134,16 +152,29 @@ export function DayLogClient({
 
       {/* Previous Days */}
       <div className="card mt-5 p-6">
-        <div className="mb-4 flex items-center gap-3.5">
-          <IconBadge>
-            <HistoryIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />
-          </IconBadge>
-          <div>
-            <div className="text-[17px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-              {t("Previous Days")}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3.5">
+            <IconBadge>
+              <HistoryIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />
+            </IconBadge>
+            <div>
+              <div className="text-[17px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+                {t("Previous Days")}
+              </div>
+              <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("Your recent visit history")}</div>
             </div>
-            <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("Your recent visit history")}</div>
           </div>
+          {history.length > HISTORY_PREVIEW && (
+            <button
+              type="button"
+              onClick={() => setShowAllHistory((v) => !v)}
+              className="flex items-center gap-1 text-[13px] font-semibold"
+              style={{ color: "var(--accent)" }}
+            >
+              {showAllHistory ? t("Show less") : t("View all")}
+              <ChevronRightIcon className="h-3.5 w-3.5" style={{ transform: showAllHistory ? "rotate(90deg)" : "none" }} />
+            </button>
+          )}
         </div>
 
         {history.length === 0 ? (
@@ -162,7 +193,7 @@ export function DayLogClient({
                 </tr>
               </thead>
               <tbody>
-                {history.map((h, i) => (
+                {visibleHistory.map((h, i) => (
                   <tr key={i}>
                     <td>
                       <div className="flex items-center gap-2 font-medium">
@@ -172,7 +203,17 @@ export function DayLogClient({
                     </td>
                     <td>{h.startLabel}</td>
                     <td>{h.endLabel}</td>
-                    <td>{h.onJobLabel}</td>
+                    <td>
+                      {h.onJobLabel !== "—" && (
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-bold tabular-nums"
+                          style={{ background: "rgba(30,158,90,.12)", color: "var(--success)" }}
+                        >
+                          <ClockIcon className="h-3.5 w-3.5" />
+                          {h.onJobLabel}
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -181,20 +222,42 @@ export function DayLogClient({
         )}
       </div>
 
-      {/* Encouragement banner */}
-      <div className="mt-5 flex items-center gap-4 rounded-2xl p-5" style={{ background: "var(--accent-tint)" }}>
-        <span className="flex h-11 w-11 flex-none items-center justify-center rounded-full" style={{ background: "var(--accent)" }}>
-          <StarIcon className="h-5 w-5 text-white" />
-        </span>
-        <div className="flex-1">
-          <div className="text-[15px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--accent)" }}>
-            {t("Keep up the great work!")}
+      {/* Encouragement banner + this-week stats */}
+      <div className="mt-5 flex flex-wrap items-center gap-5 rounded-2xl p-5" style={{ background: "var(--accent-tint)" }}>
+        <div className="flex flex-1 items-center gap-4" style={{ minWidth: 220 }}>
+          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-full" style={{ background: "var(--accent)" }}>
+            <StarIcon className="h-5 w-5 text-white" />
+          </span>
+          <div>
+            <div className="text-[15px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--accent)" }}>
+              {t("Keep up the great work!")}
+            </div>
+            <p className="text-[13px]" style={{ color: "var(--ink-2)" }}>
+              {t("Consistency today leads to success tomorrow.")}
+            </p>
           </div>
-          <p className="text-[13px]" style={{ color: "var(--ink-2)" }}>
-            {t("Consistency today leads to success tomorrow.")}
-          </p>
         </div>
-        <TrophyIllustration />
+
+        <div className="flex flex-wrap items-center gap-5 sm:gap-6">
+          <BannerStat
+            icon={<TargetIcon className="h-[18px] w-[18px]" style={{ color: "var(--accent)" }} />}
+            value={String(daysLoggedThisWeek)}
+            label={t("Days Logged")}
+          />
+          <div className="hidden h-9 w-px sm:block" style={{ background: "var(--hairline)" }} />
+          <BannerStat
+            icon={<ClockIcon className="h-[18px] w-[18px]" style={{ color: "var(--success)" }} />}
+            value={totalOnJobLabelThisWeek}
+            label={t("Total On Job")}
+            pill
+          />
+          <div className="hidden h-9 w-px sm:block" style={{ background: "var(--hairline)" }} />
+          <BannerStat
+            icon={<FlameIcon className="h-[18px] w-[18px]" style={{ color: "var(--warning)" }} />}
+            value={`${weekPct}%`}
+            label={t("This Week")}
+          />
+        </div>
       </div>
     </div>
   );
@@ -250,34 +313,73 @@ function PlanRow({
   );
 }
 
-function TrendIllustration() {
+/** Ascending-bars + flag, in a soft accent-tinted circle — the light-card
+ * counterpart to the old white-on-green TrendIllustration. Every fill derives
+ * from --accent, so it recolours with the role theme instead of being a fixed
+ * brand colour. */
+function ChartFlagIllustration() {
   return (
-    <svg width="120" height="84" viewBox="0 0 120 84" fill="none">
-      <circle cx="60" cy="42" r="40" fill="rgba(255,255,255,.1)" />
-      <circle cx="18" cy="14" r="3" fill="rgba(255,255,255,.5)" />
-      <circle cx="104" cy="20" r="2" fill="rgba(255,255,255,.5)" />
-      <circle cx="98" cy="66" r="2.5" fill="rgba(255,255,255,.4)" />
-      <path d="M18 58 L40 40 L56 50 L88 20" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="18" cy="58" r="3.5" fill="#fff" />
-      <circle cx="40" cy="40" r="3.5" fill="#fff" />
-      <circle cx="56" cy="50" r="3.5" fill="#fff" />
-      <path d="M88 20 L88 8 L100 14 Z" fill="#fff" />
-      <line x1="88" y1="20" x2="88" y2="8" stroke="#fff" strokeWidth="2" />
+    <svg width="112" height="80" viewBox="0 0 112 80" fill="none" className="relative">
+      <circle cx="56" cy="42" r="36" fill="rgba(var(--accent-rgb), .14)" />
+      <circle cx="18" cy="16" r="2.5" fill="var(--accent)" opacity=".45" />
+      <circle cx="96" cy="20" r="2" fill="var(--accent)" opacity=".4" />
+      <circle cx="90" cy="62" r="2" fill="var(--accent)" opacity=".35" />
+      <rect x="27" y="48" width="9" height="18" rx="2" fill="var(--accent)" opacity=".5" />
+      <rect x="41" y="40" width="9" height="26" rx="2" fill="var(--accent)" opacity=".68" />
+      <rect x="55" y="30" width="9" height="36" rx="2" fill="var(--accent)" opacity=".85" />
+      <rect x="69" y="22" width="9" height="44" rx="2" fill="var(--accent)" />
+      <line x1="73.5" y1="22" x2="73.5" y2="10" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
+      <path d="M73.5 10 87 14.5 73.5 19Z" fill="var(--accent)" />
     </svg>
   );
 }
 
-function TrophyIllustration() {
+/** Subtle two-leaf corner accent for the motivational card — decorative only,
+ * low-opacity so it never competes with the text above it. */
+function LeafDecoration({ className }: { className?: string }) {
   return (
-    <svg width="56" height="56" viewBox="0 0 56 56" fill="none" className="flex-none">
-      <circle cx="28" cy="28" r="28" fill="var(--accent-tint)" />
-      <circle cx="14" cy="12" r="2" fill="var(--accent)" opacity="0.5" />
-      <circle cx="46" cy="16" r="1.6" fill="var(--accent)" opacity="0.5" />
-      <path d="M22 18h12v8a6 6 0 0 1-12 0v-8Z" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M22 20h-4a3 3 0 0 0 3 3M34 20h4a3 3 0 0 1-3 3" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
-      <path d="M28 32v4" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
-      <path d="M23 40h10l-1.5-4h-7L23 40Z" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />
+    <svg className={className} viewBox="0 0 80 80" fill="none">
+      <path d="M40 78S20 60 20 38c0-14 10-24 24-24 0 20-4 64-4 64Z" fill="var(--accent)" opacity=".16" />
+      <path d="M40 78S60 66 64 46c2-12-4-22-16-24-2 20-8 56-8 56Z" fill="var(--accent)" opacity=".1" />
     </svg>
+  );
+}
+
+function BannerStat({
+  icon,
+  value,
+  label,
+  pill,
+}: {
+  icon: React.ReactNode;
+  value: string;
+  label: string;
+  /** Total On Job reads as a status ("time earned"), not a plain count, so its
+   * value gets the same green success-pill treatment as an "on job" duration
+   * anywhere else in the app — Days Logged/This Week stay plain numbers. */
+  pill?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full" style={{ background: "var(--surface)" }}>
+        {icon}
+      </span>
+      <div>
+        {pill ? (
+          <span
+            className="inline-block rounded-full px-2.5 py-0.5 text-[13px] font-bold tabular-nums"
+            style={{ fontFamily: "var(--font-display)", background: "rgba(30,158,90,.12)", color: "var(--success)" }}
+          >
+            {value}
+          </span>
+        ) : (
+          <div className="text-[15px] font-bold tabular-nums" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+            {value}
+          </div>
+        )}
+        <div className="mt-0.5 text-[11px] whitespace-nowrap" style={{ color: "var(--ink-3)" }}>{label}</div>
+      </div>
+    </div>
   );
 }
 
@@ -320,6 +422,49 @@ function StarIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
       <path d="m12 2 2.9 6.6 7.1.7-5.4 4.7 1.6 7-6.2-3.7L6 21l1.6-7-5.4-4.7 7.1-.7Z" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
+
+function TargetIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function ClockIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </svg>
+  );
+}
+
+function FlameIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2c1.5 3 5 5.5 5 10a5 5 0 0 1-10 0c0-1.5.5-2.5 1.5-3.5.2 1.2 1 2 1 2C9 8 10 5 12 2Z" />
     </svg>
   );
 }

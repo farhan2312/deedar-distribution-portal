@@ -21,6 +21,9 @@ export type VisitInput = {
   items: VisitItem[];
   rank: number | null;
   competitor: CompetitorPresence | null;
+  /** Free-text brand name, required when `competitor` is "local" or
+   * "national" — which competitor, not just that one exists. */
+  competitorBrand?: string;
   remarks: string;
   /** Seconds spent on the counter — sampled from the client timer at submit.
    * Only meaningful on create; ignored on edit (kept from the original). */
@@ -43,6 +46,9 @@ function validate(input: VisitInput): string | null {
   if (input.rank != null && input.rank < 1) return "Deedar rank must be at least 1.";
   if (!input.competitor || !COMPETITORS.includes(input.competitor)) {
     return "Select competitor presence.";
+  }
+  if (input.competitor !== "none" && !input.competitorBrand?.trim()) {
+    return "Name the competitor brand.";
   }
   return null;
 }
@@ -77,6 +83,9 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
   const items = input.items.filter((i) => SEGMENTS.includes(i.segment));
   const totalSold = items.reduce((s, i) => s + i.sold, 0);
   const totalStock = items.reduce((s, i) => s + i.stock, 0);
+  // Cleared whenever competitor is "none" — a brand name left over from a
+  // previous selection shouldn't survive switching back to no-competitor.
+  const competitorBrand = input.competitor !== "none" ? input.competitorBrand?.trim() || null : null;
   const now = new Date();
 
   const [v] = await db
@@ -90,6 +99,7 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
       items,
       rank: input.rank,
       competitor: input.competitor,
+      competitorBrand,
       remarks: input.remarks.trim() || null,
       durationSeconds: normalizeDuration(input.durationSeconds),
       updatedAt: now,
@@ -116,7 +126,12 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
     .where(eq(visits.id, visitId))
     .limit(1);
   if (!v) return { ok: false, error: "Visit not found." };
-  if (v.userId !== user.id) return { ok: false, error: "You can only edit your own visits." };
+  // Reps may only edit their own; admin can correct anyone's, so a same-day
+  // mistake can be fixed centrally. The midnight lock applies to BOTH — once
+  // the day closes its figures are final for everyone.
+  if (v.userId !== user.id && !user.accessRoles.includes("admin")) {
+    return { ok: false, error: "You can only edit your own visits." };
+  }
   if (!isWithinEditWindow(v.visitedAt)) {
     return { ok: false, error: "This visit locked at midnight and can no longer be edited." };
   }
@@ -124,6 +139,7 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
   const items = input.items.filter((i) => SEGMENTS.includes(i.segment));
   const totalSold = items.reduce((s, i) => s + i.sold, 0);
   const totalStock = items.reduce((s, i) => s + i.stock, 0);
+  const competitorBrand = input.competitor !== "none" ? input.competitorBrand?.trim() || null : null;
 
   await db
     .update(visits)
@@ -133,6 +149,7 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
       items,
       rank: input.rank,
       competitor: input.competitor,
+      competitorBrand,
       remarks: input.remarks.trim() || null,
       updatedAt: new Date(),
     })
@@ -142,15 +159,22 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
   return { ok: true, visitId };
 }
 
-/** Load a visit for the edit form (owner + within window only). */
+/** Load a visit for the edit form. Owner (or admin) + within window only —
+ * mirrors the check in `updateVisit` so the form can't open on something the
+ * action would then refuse to save. */
 export async function getVisitForEdit(visitId: string) {
   const user = await getCurrentUser();
   if (!user || !canAccess(user, "field")) return null;
 
+  const isAdmin = user.accessRoles.includes("admin");
   const [v] = await db
     .select()
     .from(visits)
-    .where(and(eq(visits.id, visitId), eq(visits.userId, user.id)))
+    .where(
+      isAdmin
+        ? eq(visits.id, visitId)
+        : and(eq(visits.id, visitId), eq(visits.userId, user.id)),
+    )
     .limit(1);
   if (!v || !isWithinEditWindow(v.visitedAt)) return null;
 
@@ -158,6 +182,7 @@ export async function getVisitForEdit(visitId: string) {
     counterId: v.counterId,
     rank: v.rank,
     competitor: v.competitor,
+    competitorBrand: v.competitorBrand ?? "",
     remarks: v.remarks ?? "",
     items: v.items,
   };

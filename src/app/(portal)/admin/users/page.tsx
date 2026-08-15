@@ -11,9 +11,10 @@ import {
   AddUserForm,
   AreaCheckbox,
   CnfSelect,
+  ActiveToggle,
   DeleteUserButton,
-  DepotCheckbox,
   DepotSelect,
+  SupervisorDepotPicker,
   RoleCheckbox,
   SupervisorSelect,
   UsersPanel,
@@ -67,7 +68,17 @@ export default async function AdminUsersPage() {
   const pendingRequests = requestRows.filter((r) => r.status === "pending");
   const decidedRequests = requestRows.filter((r) => r.status !== "pending");
 
-  const depotOptions = allDepots.map((d) => ({ id: d.id, name: d.name }));
+  // Depots grouped by their C&F. A user's depot(s) belong to exactly one C&F
+  // (a Sales Officer supervises depots under a single C&F), so the picker is a
+  // real two-step cascade — pick the C&F, then only that C&F's depots show —
+  // rather than one long flat list to hunt through as depots grow.
+  const depotGroups = allCnfs
+    .map((c) => ({
+      cnfId: c.id,
+      cnfName: c.name,
+      depots: allDepots.filter((d) => d.cnfId === c.id).map((d) => ({ id: d.id, name: d.name })),
+    }))
+    .filter((g) => g.depots.length > 0);
   const cnfOptions = allCnfs.map((c) => ({ id: c.id, name: c.name }));
   // A field rep reports to a Supervisor (SO) — only supervisors are options.
   const supervisorOptions = allUsers
@@ -85,6 +96,29 @@ export default async function AdminUsersPage() {
   for (const ud of allUserDepots) {
     if (!userDepotSet.has(ud.userId)) userDepotSet.set(ud.userId, new Set());
     userDepotSet.get(ud.userId)!.add(ud.depotId);
+  }
+
+  // The C&F(s) a user belongs to, for the client-side C&F filter. Derived here
+  // rather than at render time because different roles reach a C&F differently:
+  //   • hq            → users.cnfId directly
+  //   • field/dealer  → depots[users.depotId].cnfId
+  //   • supervisor    → depots[userDepots.depotId].cnfId  (can be multiple)
+  // Admin/khq are cross-C&F, so no filter membership.
+  const cnfByDepot = new Map<string, string>();
+  for (const d of allDepots) cnfByDepot.set(d.id, d.cnfId);
+  const userCnfIds = new Map<string, Set<string>>();
+  for (const u of allUsers) {
+    const cnfs = new Set<string>();
+    if (u.cnfId) cnfs.add(u.cnfId);
+    if (u.depotId) {
+      const c = cnfByDepot.get(u.depotId);
+      if (c) cnfs.add(c);
+    }
+    for (const depotId of userDepotSet.get(u.id) ?? []) {
+      const c = cnfByDepot.get(depotId);
+      if (c) cnfs.add(c);
+    }
+    userCnfIds.set(u.id, cnfs);
   }
 
   return (
@@ -112,7 +146,7 @@ export default async function AdminUsersPage() {
             iconBg="var(--accent-tint)"
             label="Total users"
             value={allUsers.length}
-            sub="Active accounts"
+            sub={`${allUsers.filter((u) => u.isActive).length} active`}
           />
           <StatCard
             icon={<ClockIcon className="h-5 w-5" style={{ color: pendingRequests.length > 0 ? "#B25E00" : "var(--ink-3)" }} />}
@@ -219,7 +253,7 @@ export default async function AdminUsersPage() {
         </details>
       )}
 
-      <UsersPanel>
+      <UsersPanel cnfOptions={cnfOptions}>
         <div className="table-wrap">
           <table className="table" style={{ minWidth: 1040 }}>
             <thead>
@@ -238,18 +272,38 @@ export default async function AdminUsersPage() {
                 const roleSet = new Set(u.accessRoles);
                 const depotAreas = u.depotId ? (areasByDepot.get(u.depotId) ?? []) : [];
                 return (
-                  <tr key={u.id} data-user-row data-search={`${u.name} ${u.phone}`.toLowerCase()}>
+                  <tr
+                    key={u.id}
+                    data-user-row
+                    data-search={`${u.name} ${u.phone}`.toLowerCase()}
+                    // Space-separated so the filter can substring-match one id.
+                    // Admin / khq / unmapped users have an empty attribute and are
+                    // therefore hidden when a specific C&F is picked (they don't
+                    // belong to it) but visible under "All C&F".
+                    data-cnf={[...(userCnfIds.get(u.id) ?? [])].join(" ")}
+                    // Muted via a background tint, NOT row opacity — opacity on
+                    // the row would cap the action buttons' contrast too, which
+                    // is exactly what made the Activate button look dead.
+                    style={u.isActive ? undefined : { background: "var(--bg-soft)" }}
+                  >
                     <td>
                       <div className="flex items-center gap-3">
-                        <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full text-[13px] font-bold" style={{ background: "var(--accent-tint)", color: "var(--accent)" }}>
+                        <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full text-[13px] font-bold" style={{ background: "var(--accent-tint)", color: u.isActive ? "var(--accent)" : "var(--ink-3)" }}>
                           {initials(u.name)}
                         </span>
                         <div>
-                          <div className="font-semibold whitespace-nowrap" style={{ color: "var(--ink-1)" }}>{u.name}</div>
-                          <span className="mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(30,158,90,.12)", color: "#1E9E5A" }}>
-                            <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#1E9E5A" }} />
-                            Active
-                          </span>
+                          <div className="font-semibold whitespace-nowrap" style={{ color: u.isActive ? "var(--ink-1)" : "var(--ink-3)" }}>{u.name}</div>
+                          {u.isActive ? (
+                            <span className="mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(30,158,90,.12)", color: "#1E9E5A" }}>
+                              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#1E9E5A" }} />
+                              Active
+                            </span>
+                          ) : (
+                            <span className="mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "var(--bg-soft)", color: "var(--ink-3)" }}>
+                              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--ink-3)" }} />
+                              Deactivated
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -269,7 +323,7 @@ export default async function AdminUsersPage() {
                       {roleSet.has("field") && (
                         <>
                           <Mapping label="Depot (Field ISR)">
-                            <DepotSelect userId={u.id} value={u.depotId} options={depotOptions} />
+                            <DepotSelect userId={u.id} value={u.depotId} groups={depotGroups} />
                             {u.depotId && depotAreas.length > 0 && (
                               <div className="mt-1.5 flex flex-wrap gap-1.5">
                                 {depotAreas.map((a) => (
@@ -289,16 +343,16 @@ export default async function AdminUsersPage() {
                       )}
                       {roleSet.has("supervisor") && (
                         <Mapping label="Depots (Sales Officer)">
-                          <div className="flex flex-wrap gap-1.5">
-                            {allDepots.map((d) => (
-                              <DepotCheckbox key={d.id} userId={u.id} depotId={d.id} name={d.name} checked={userDepotSet.get(u.id)?.has(d.id) ?? false} />
-                            ))}
-                          </div>
+                          <SupervisorDepotPicker
+                            userId={u.id}
+                            groups={depotGroups}
+                            checkedDepotIds={userDepotSet.get(u.id) ?? new Set()}
+                          />
                         </Mapping>
                       )}
                       {roleSet.has("dealer") && !roleSet.has("field") && (
                         <Mapping label="Depot (Dealer)">
-                          <DepotSelect userId={u.id} value={u.depotId} options={depotOptions} />
+                          <DepotSelect userId={u.id} value={u.depotId} groups={depotGroups} />
                         </Mapping>
                       )}
                       {roleSet.has("hq") && (
@@ -310,11 +364,14 @@ export default async function AdminUsersPage() {
                       </>
                       )}
                     </td>
-                    <td className="text-center">
+                    <td>
                       {u.id !== admin.id ? (
-                        <DeleteUserButton userId={u.id} userName={u.name} />
+                        <div className="flex items-center justify-center gap-2">
+                          <ActiveToggle userId={u.id} active={u.isActive} />
+                          <DeleteUserButton userId={u.id} userName={u.name} />
+                        </div>
                       ) : (
-                        <span className="text-[11px]" style={{ color: "var(--ink-3)" }}>you</span>
+                        <span className="block text-center text-[11px]" style={{ color: "var(--ink-3)" }}>you</span>
                       )}
                     </td>
                   </tr>

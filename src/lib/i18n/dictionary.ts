@@ -166,6 +166,13 @@ const HI: Record<string, string> = {
   "Dark mode": "डार्क मोड",
   "Change Password": "पासवर्ड बदलें",
   "Sign out": "साइन आउट",
+
+  // ── Day Log ──
+  "View all": "सभी देखें",
+  "Show less": "कम दिखाएं",
+  "Days Logged": "दर्ज दिन",
+  "Total On Job": "कुल कार्य समय",
+  "This Week": "इस सप्ताह",
 };
 
 export function translate(lang: Lang, key: string): string {

@@ -92,6 +92,10 @@ export const users = pgTable("users", {
   // password before anything else; changing the password clears it. Users who
   // set their own password via signup are created with this false.
   mustChangePassword: boolean("must_change_password").notNull().default(false),
+  // Soft-disable: a deactivated user can't log in and is treated as logged-out
+  // on their next request, but all their data (visits, counters) is preserved.
+  // The reversible alternative to deletion — see `setUserActive`.
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -285,6 +289,9 @@ export const visits = pgTable("visits", {
   items: jsonb("items").$type<VisitItem[]>().notNull().default([]),
   rank: integer("rank"),
   competitor: competitorPresenceEnum("competitor"),
+  // Free-text brand name when `competitor` is "local" or "national" (e.g.
+  // "Tata Tea", "Wagh Bakri"). Null when competitor is "none" or unset.
+  competitorBrand: varchar("competitor_brand", { length: 80 }),
   remarks: text("remarks"),
   // Seconds spent on the counter — sampled from the client-side "time on
   // counter" timer at submit. Null for older rows recorded before the timer

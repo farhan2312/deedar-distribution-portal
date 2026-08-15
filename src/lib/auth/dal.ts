@@ -18,6 +18,7 @@ export const getCurrentUser = cache(async () => {
       phone: users.phone,
       accessRoles: users.accessRoles,
       mustChangePassword: users.mustChangePassword,
+      isActive: users.isActive,
       depotId: users.depotId,
       depotName: depots.name,
       cnfId: users.cnfId,
@@ -33,6 +34,9 @@ export const getCurrentUser = cache(async () => {
     .limit(1);
 
   if (!user) return null;
+  // Deactivated mid-session → treat as logged out on the very next request, so
+  // a disabled account loses access immediately rather than at token expiry.
+  if (!user.isActive) return null;
 
   const [assignedAreas, supervisedDepots] = await Promise.all([
     db

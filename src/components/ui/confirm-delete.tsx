@@ -22,6 +22,7 @@ export function ConfirmDelete({
   itemName,
   trigger = "link",
   loadImpact,
+  warning,
   onDeleted,
 }: {
   /** Runs on confirm. Returning a WriteResult lets us show the refusal reason. */
@@ -39,6 +40,9 @@ export function ConfirmDelete({
    * re-created, so it must never be a surprise.
    */
   loadImpact?: () => Promise<DeleteImpact>;
+  /** Static consequence spelled out in the dialog, for cascades a count can't
+   * capture — e.g. deleting a user wipes their visit history. */
+  warning?: string;
   onDeleted?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -174,6 +178,18 @@ export function ConfirmDelete({
               )}
 
               {impact && <ImpactWarning impact={impact} itemLabel={itemLabel} />}
+
+              {warning && (
+                <div
+                  className="mt-3 flex items-start gap-2 rounded-xl px-3 py-2.5 text-[12.5px] font-medium"
+                  style={{ background: "rgba(199,38,59,.08)", color: "var(--danger)" }}
+                >
+                  <svg className="mt-0.5 h-4 w-4 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" /><path d="M12 9v4M12 17h.01" />
+                  </svg>
+                  <span>{warning}</span>
+                </div>
+              )}
 
               {error && (
                 <p

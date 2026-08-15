@@ -82,3 +82,11 @@ export function durationLabel(start: Date | null, end: Date | null): string {
   if (mins < 0) mins = 0;
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
+
+/** "8h 36m" from a whole number of minutes (negative clamps to 0). Same format
+ * as `durationLabel`, for callers summing minutes directly instead of diffing
+ * two instants (e.g. a week's total on-job time across several day logs). */
+export function minutesLabel(totalMinutes: number): string {
+  const mins = Math.max(0, Math.round(totalMinutes));
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}

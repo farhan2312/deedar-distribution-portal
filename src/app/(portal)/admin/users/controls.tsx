@@ -5,6 +5,7 @@ import type { AccessRole } from "@/db/schema";
 import {
   addUser,
   removeUser,
+  setUserActive,
   setUserCnf,
   setUserDepot,
   setUserReportsTo,
@@ -163,33 +164,131 @@ export function DepotCheckbox({
   );
 }
 
+export type DepotGroup = { cnfId: string; cnfName: string; depots: { id: string; name: string }[] };
+
+/**
+ * Sales Officer's depot assignment: pick the C&F, then check depot(s) from just
+ * that C&F's list. An SO supervises depots under a single C&F, so — like
+ * `DepotSelect` — this narrows rather than just groups.
+ *
+ * Defaults to the C&F of whichever depot is already checked, if any. If a row
+ * has checked depots in more than one C&F (stale data from before this rule),
+ * only one C&F's checkboxes show at a time; the note below surfaces the rest
+ * rather than hiding them silently.
+ */
+export function SupervisorDepotPicker({
+  userId,
+  groups,
+  checkedDepotIds,
+}: {
+  userId: string;
+  groups: DepotGroup[];
+  checkedDepotIds: Set<string>;
+}) {
+  const [cnfId, setCnfId] = useState(() => {
+    for (const g of groups) {
+      if (g.depots.some((d) => checkedDepotIds.has(d.id))) return g.cnfId;
+    }
+    return "";
+  });
+  const activeGroup = groups.find((g) => g.cnfId === cnfId);
+  const otherCheckedCount = [...checkedDepotIds].filter(
+    (id) => !activeGroup?.depots.some((d) => d.id === id),
+  ).length;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <select
+        className="inp"
+        style={{ padding: "5px 8px", fontSize: 12 }}
+        value={cnfId}
+        onChange={(e) => setCnfId(e.target.value)}
+      >
+        <option value="">Select C&amp;F</option>
+        {groups.map((g) => (
+          <option key={g.cnfId} value={g.cnfId}>{g.cnfName}</option>
+        ))}
+      </select>
+      {activeGroup && (
+        <div className="flex flex-wrap gap-1.5">
+          {activeGroup.depots.map((d) => (
+            <DepotCheckbox key={d.id} userId={userId} depotId={d.id} name={d.name} checked={checkedDepotIds.has(d.id)} />
+          ))}
+        </div>
+      )}
+      {otherCheckedCount > 0 && (
+        <p className="text-[11px]" style={{ color: "var(--warning)" }}>
+          + {otherCheckedCount} depot{otherCheckedCount === 1 ? "" : "s"} checked under another C&amp;F (legacy) — switch C&amp;F above to see them.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Which group (if any) currently contains `depotId`. */
+function groupFor(groups: DepotGroup[], depotId: string | null): DepotGroup | undefined {
+  return depotId ? groups.find((g) => g.depots.some((d) => d.id === depotId)) : undefined;
+}
+
+/**
+ * Two-step cascade: pick the C&F, then pick a depot from just that C&F's list.
+ * A user's depot always belongs to exactly one C&F, so this is a genuine
+ * narrowing (not just grouping) — with many depots, a flat list is a hunt.
+ *
+ * The C&F select is local UI state only (no server write) — it just decides
+ * which depots the second dropdown offers. The actual assignment commits only
+ * when a depot is chosen, via the existing `setUserDepot` action.
+ */
 export function DepotSelect({
   userId,
   value,
-  options,
+  groups,
 }: {
   userId: string;
   value: string | null;
-  options: { id: string; name: string }[];
+  groups: DepotGroup[];
 }) {
   const [pending, start] = useTransition();
+  const [cnfId, setCnfId] = useState(() => groupFor(groups, value)?.cnfId ?? "");
+  const depotOptions = groups.find((g) => g.cnfId === cnfId)?.depots ?? [];
+  // The depot select only shows a pre-selected value when it's actually in the
+  // currently chosen C&F's list — otherwise it reads as "Select depot" until a
+  // real choice is made for that C&F.
+  const depotValue = depotOptions.some((d) => d.id === value) ? value! : "";
+
   return (
-    <select
-      className="inp"
-      style={{ padding: "5px 8px", fontSize: 12 }}
-      defaultValue={value ?? ""}
-      disabled={pending}
-      onChange={(e) => {
-        const fd = new FormData();
-        fd.set("depotId", e.target.value);
-        start(() => setUserDepot(userId, fd));
-      }}
-    >
-      <option value="">Select depot</option>
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>{o.name}</option>
-      ))}
-    </select>
+    <div className="flex flex-col gap-1.5">
+      <select
+        className="inp"
+        style={{ padding: "5px 8px", fontSize: 12 }}
+        value={cnfId}
+        onChange={(e) => setCnfId(e.target.value)}
+      >
+        <option value="">Select C&amp;F</option>
+        {groups.map((g) => (
+          <option key={g.cnfId} value={g.cnfId}>{g.cnfName}</option>
+        ))}
+      </select>
+      <select
+        className="inp"
+        style={{ padding: "5px 8px", fontSize: 12 }}
+        // Remount when the C&F changes so an uncommitted depot choice from the
+        // PREVIOUS C&F never lingers as this select's displayed value.
+        key={cnfId}
+        defaultValue={depotValue}
+        disabled={pending || !cnfId}
+        onChange={(e) => {
+          const fd = new FormData();
+          fd.set("depotId", e.target.value);
+          start(() => setUserDepot(userId, fd));
+        }}
+      >
+        <option value="">{cnfId ? "Select depot" : "Pick a C&F first"}</option>
+        {depotOptions.map((d) => (
+          <option key={d.id} value={d.id}>{d.name}</option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -255,6 +354,33 @@ export function SupervisorSelect({
   );
 }
 
+/**
+ * Deactivate / reactivate — the reversible alternative to deleting a user.
+ * Deactivating blocks their login and logs them out on the next request while
+ * keeping every visit and counter; reactivating restores access.
+ */
+export function ActiveToggle({ userId, active }: { userId: string; active: boolean }) {
+  const [pending, start] = useTransition();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      title={active ? "Deactivate — blocks login, keeps their data" : "Reactivate this user"}
+      onClick={() => start(() => setUserActive(userId, !active))}
+      className="flex h-9 items-center justify-center rounded-lg px-3.5 text-[12.5px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50"
+      style={
+        active
+          ? // Deactivate: amber-tinted outline.
+            { border: "1px solid var(--hairline)", color: "var(--warning)", background: "var(--surface)" }
+          : // Activate: same outline treatment, green border/text.
+            { border: "1px solid var(--success)", color: "var(--success)", background: "var(--surface)" }
+      }
+    >
+      {pending ? "…" : active ? "Deactivate" : "Activate"}
+    </button>
+  );
+}
+
 /** Trash-icon delete. Uses the app-wide confirmation dialog rather than the
  * native `confirm()`, so every delete in the portal looks and behaves alike. */
 export function DeleteUserButton({ userId, userName }: { userId: string; userName?: string }) {
@@ -266,27 +392,42 @@ export function DeleteUserButton({ userId, userName }: { userId: string; userNam
       itemLabel="user"
       itemName={userName}
       trigger="icon"
+      warning="This also permanently deletes all their visits and day logs. To keep their history, deactivate them instead."
     />
   );
 }
 
 /**
- * Card wrapper for the users table: header (icon, title, live search) plus the
- * server-rendered table passed as children. Search filters rows client-side by
- * the `data-search` attribute each row carries — no refetch, no extra state on
- * the server.
+ * Card wrapper for the users table: header (icon, title, live search + C&F
+ * filter) plus the server-rendered table passed as children. Both filters are
+ * client-side — each row carries `data-search` and `data-cnf`, so filtering
+ * needs no refetch or server state. Search and C&F are AND-combined.
+ *
+ * The C&F filter is why this page cascades cleanly: picking one shows only that
+ * C&F's field/SO/depot users, so the depot/area dropdowns and pill-checkboxes
+ * you're about to touch aren't hidden behind unrelated rows.
  */
-export function UsersPanel({ children }: { children: React.ReactNode }) {
+export function UsersPanel({
+  children,
+  cnfOptions,
+}: {
+  children: React.ReactNode;
+  cnfOptions: { id: string; name: string }[];
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [q, setQ] = useState("");
+  const [cnf, setCnf] = useState("all");
 
-  function onChange(value: string) {
-    setQ(value);
-    const needle = value.trim().toLowerCase();
+  function apply(nextQ: string, nextCnf: string) {
+    const needle = nextQ.trim().toLowerCase();
     const rows = ref.current?.querySelectorAll<HTMLElement>("[data-user-row]");
     rows?.forEach((row) => {
       const hay = row.getAttribute("data-search") ?? "";
-      row.classList.toggle("hidden", needle.length > 0 && !hay.includes(needle));
+      const cnfs = row.getAttribute("data-cnf") ?? "";
+      const passesSearch = needle.length === 0 || hay.includes(needle);
+      // Space-separated ids; wrap with spaces so an id can't substring-match another.
+      const passesCnf = nextCnf === "all" || ` ${cnfs} `.includes(` ${nextCnf} `);
+      row.classList.toggle("hidden", !(passesSearch && passesCnf));
     });
   }
 
@@ -305,18 +446,38 @@ export function UsersPanel({ children }: { children: React.ReactNode }) {
             <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>Manage roles, mapping and reporting structure.</div>
           </div>
         </div>
-        <div className="relative w-full sm:w-72">
-          <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
-          </svg>
-          <input
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <select
             className="inp"
-            style={{ paddingLeft: 36 }}
-            type="search"
-            value={q}
-            placeholder="Search by name or mobile…"
-            onChange={(e) => onChange(e.target.value)}
-          />
+            style={{ width: "auto", minWidth: 180 }}
+            value={cnf}
+            onChange={(e) => {
+              setCnf(e.target.value);
+              apply(q, e.target.value);
+            }}
+            aria-label="Filter by C&F HQ"
+          >
+            <option value="all">All C&amp;F HQs</option>
+            {cnfOptions.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <div className="relative w-full sm:w-72">
+            <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              className="inp"
+              style={{ paddingLeft: 36 }}
+              type="search"
+              value={q}
+              placeholder="Search by name or mobile…"
+              onChange={(e) => {
+                setQ(e.target.value);
+                apply(e.target.value, cnf);
+              }}
+            />
+          </div>
         </div>
       </div>
       <div ref={ref}>{children}</div>

@@ -15,12 +15,27 @@ export const SEGMENT_LABEL: Record<ProductSegment, string> = Object.fromEntries(
 export const COMPETITOR_OPTIONS: { value: CompetitorPresence; label: string }[] = [
   { value: "none", label: "None" },
   { value: "local", label: "Local Brands" },
-  { value: "national", label: "Other" },
+  { value: "national", label: "National Brands" },
 ];
 
 export const COMPETITOR_LABEL: Record<CompetitorPresence, string> = Object.fromEntries(
   COMPETITOR_OPTIONS.map((c) => [c.value, c.label]),
 ) as Record<CompetitorPresence, string>;
+
+/**
+ * Display label for a visit's competitor presence: the label plus the
+ * free-text brand name when one was entered ("Local Brands — Wagh Bakri"),
+ * else just the label. Centralised so every read site shows it the same way,
+ * mirroring `counterTypeLabel`'s coalesce for counter type.
+ */
+export function competitorDisplayLabel(
+  competitor: CompetitorPresence | null,
+  brand: string | null | undefined,
+): string {
+  if (!competitor) return COMPETITOR_LABEL.none;
+  const label = COMPETITOR_LABEL[competitor];
+  return competitor !== "none" && brand?.trim() ? `${label} — ${brand.trim()}` : label;
+}
 
 /** Max packets sold PER SKU (product segment) in a single visit — applied to
  * each segment independently, not to the combined total. */
@@ -54,4 +69,21 @@ export function isWithinEditWindow(visitedAt: Date, now: Date = new Date()) {
  * react-hooks/purity. */
 export function editableVisitCutoff(now: Date = new Date()): Date {
   return istDayBounds(now).start;
+}
+
+/**
+ * How long today's visits stay editable, as a short label like "4h 12m" — the
+ * gap between now and midnight IST. Null once the window has closed.
+ *
+ * Rendered server-side, so it's a snapshot at page load rather than a live
+ * countdown; that's deliberate, since a ticking clock would need client JS on
+ * an otherwise static page.
+ */
+export function editWindowRemaining(now: Date = new Date()): string | null {
+  const ms = istDayBounds(now).end.getTime() - now.getTime();
+  if (ms <= 0) return null;
+  const minutes = Math.floor(ms / 60_000);
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }

@@ -52,6 +52,7 @@ export async function POST(request: Request) {
       id: users.id,
       passwordHash: users.passwordHash,
       accessRoles: users.accessRoles,
+      isActive: users.isActive,
     })
     .from(users)
     .where(eq(users.phone, phone.trim()))
@@ -61,6 +62,15 @@ export async function POST(request: Request) {
     // Only failures count toward the per-phone bucket.
     await bumpRateLimit(phoneKey, PHONE_FAILURE_LIMIT);
     return Response.json({ error: "Invalid phone number or password." }, { status: 401 });
+  }
+
+  // Checked AFTER the password so we don't reveal which accounts exist/are
+  // disabled to someone guessing. A deactivated account can't sign in.
+  if (!user.isActive) {
+    return Response.json(
+      { error: "This account has been deactivated. Contact your administrator." },
+      { status: 403 },
+    );
   }
 
   await createSession(user, rememberMe !== false);

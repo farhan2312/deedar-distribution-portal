@@ -18,6 +18,7 @@ export type VisitFormProps = {
     items: VisitItem[];
     rank: number | null;
     competitor: CompetitorPresence | null;
+    competitorBrand?: string;
     remarks: string;
   };
 };
@@ -47,6 +48,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
   const [stock, setStock] = useState<SegMap>(() => initMap(initial?.items, "stock"));
   const [rank, setRank] = useState<number | null>(initial?.rank ?? 1);
   const [competitor, setCompetitor] = useState<CompetitorPresence>(initial?.competitor ?? "none");
+  const [competitorBrand, setCompetitorBrand] = useState(initial?.competitorBrand ?? "");
   const [remarks, setRemarks] = useState(initial?.remarks ?? "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -85,6 +87,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
       items: SEGMENTS.map((seg) => ({ segment: seg, stock: stock[seg], sold: sold[seg] })),
       rank,
       competitor,
+      competitorBrand,
       remarks,
       durationSeconds: isEdit ? null : elapsed,
     };
@@ -198,12 +201,29 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
           onChange={(v) => setRank(v === "na" ? null : Number(v))}
         />
 
-        <h6 className="mb-2 mt-4 text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>Competitor presence</h6>
+        <h6 className="mb-2 mt-4 text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>Competitor presence *</h6>
         <Segmented
           options={COMPETITOR_OPTIONS.map((c) => ({ value: c.value, label: c.label }))}
           value={competitor}
-          onChange={(v) => setCompetitor(v as CompetitorPresence)}
+          onChange={(v) => {
+            const next = v as CompetitorPresence;
+            setCompetitor(next);
+            // Clear a leftover brand name from a previous local/national pick
+            // when the rep switches back to "None" — matches what the server
+            // does on save, so the review step never shows a stale brand.
+            if (next === "none") setCompetitorBrand("");
+          }}
         />
+        {competitor !== "none" && (
+          <input
+            className="inp mt-2"
+            type="text"
+            placeholder="Name the competitor brand"
+            value={competitorBrand}
+            onChange={(e) => setCompetitorBrand(e.target.value)}
+            maxLength={80}
+          />
+        )}
 
         <h6 className="mb-2 mt-4 text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>Remarks (optional)</h6>
         <textarea
@@ -221,6 +241,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
             totalSold={totalSold}
             rank={rank}
             competitor={competitor}
+            competitorBrand={competitorBrand}
             remarks={remarks}
             isEdit={isEdit}
           />
@@ -278,6 +299,7 @@ function ReviewPanel({
   totalSold,
   rank,
   competitor,
+  competitorBrand,
   remarks,
   isEdit,
 }: {
@@ -286,6 +308,7 @@ function ReviewPanel({
   totalSold: number;
   rank: number | null;
   competitor: CompetitorPresence;
+  competitorBrand: string;
   remarks: string;
   isEdit: boolean;
 }) {
@@ -326,7 +349,11 @@ function ReviewPanel({
       <ReviewRow label="Our rank" value={rank === null ? "N/A" : String(rank)} />
       <ReviewRow
         label="Competitor presence"
-        value={COMPETITOR_OPTIONS.find((c) => c.value === competitor)?.label ?? competitor}
+        value={
+          competitor === "none"
+            ? "None"
+            : `${COMPETITOR_OPTIONS.find((c) => c.value === competitor)?.label ?? competitor}${competitorBrand.trim() ? ` — ${competitorBrand.trim()}` : ""}`
+        }
       />
       <ReviewRow label="Remarks" value={remarks.trim() || "—"} />
     </>

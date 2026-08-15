@@ -342,6 +342,21 @@ export async function removeUser(userId: string) {
   revalidatePath("/admin/users");
 }
 
+/**
+ * Soft-disable a user without deleting them. Deleting a rep cascades away all
+ * their visits (their entire sales history) — deactivation keeps everything but
+ * blocks login and treats them as logged-out on their next request. Reversible.
+ */
+export async function setUserActive(userId: string, active: boolean) {
+  const admin = await requireAdmin();
+  if (admin.id === userId) return; // can't deactivate yourself
+  await db
+    .update(users)
+    .set({ isActive: active, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+  revalidatePath("/admin/users");
+}
+
 export async function toggleAccessRole(userId: string, role: AccessRole) {
   await requireAdmin();
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
