@@ -71,6 +71,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/field/day-log", label: "Day Log", icon: "calendar", customHeader: true },
       { href: "/field/beat", label: "Beat", icon: "target", customHeader: true },
+      { href: "/field/map", label: "Live map", icon: "mapPin", customHeader: true },
       { href: "/field/new-counter", label: "New Counter", icon: "plusCircle", customHeader: true },
     ],
   },
