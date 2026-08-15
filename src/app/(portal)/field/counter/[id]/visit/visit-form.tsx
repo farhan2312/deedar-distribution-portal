@@ -38,7 +38,9 @@ function mmss(totalSeconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-const RANK_OPTIONS = [1, 2, 3, null] as const;
+/** Ranks 1–5, plus N/A for "not ranked" (stored as null — legacy exports use 0
+ * for the same meaning and are imported as null). */
+const RANK_OPTIONS = [1, 2, 3, 4, 5, null] as const;
 
 export function VisitForm({ counterId, counterName, counterArea, visitId, initial }: VisitFormProps) {
   const router = useRouter();

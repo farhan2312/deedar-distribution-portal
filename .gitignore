@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# one-off data-import scripts that hardcode real customer data (phone numbers,
+# shop names) or a local machine path — never meant to be shared/reusable code
+scripts/import-legacy.ts

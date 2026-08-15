@@ -42,8 +42,10 @@ function validate(input: VisitInput): string | null {
       return `Packets sold per SKU can't exceed ${MAX_SOLD_PER_SKU}.`;
     }
   }
-  // Rank is optional (the form offers "N/A"); if given it must be ≥ 1.
-  if (input.rank != null && input.rank < 1) return "Deedar rank must be at least 1.";
+  // Rank is optional (the form offers "N/A" → null); if given it's 1–5.
+  if (input.rank != null && (input.rank < 1 || input.rank > 5)) {
+    return "Deedar rank must be between 1 and 5.";
+  }
   if (!input.competitor || !COMPETITORS.includes(input.competitor)) {
     return "Select competitor presence.";
   }
