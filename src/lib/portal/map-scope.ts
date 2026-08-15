@@ -3,6 +3,7 @@ import { and, asc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import type { AccessRole } from "@/db/schema";
 import { areas, cnfs, counters, depots, visits } from "@/db/schema";
+import { getT } from "@/lib/i18n/server";
 
 export type ScopeOption = { id: string; name: string };
 
@@ -104,6 +105,7 @@ export async function resolveMapScope(
   section: MapSection,
   params: MapScopeParams,
 ): Promise<MapScope> {
+  const t = await getT();
   const isAdmin = user.accessRoles.includes("admin");
   // Only admins choose a C&F; HQ is pinned to their own; SO/ISR are below it.
   const hasCnfLevel = isAdmin;
@@ -191,22 +193,22 @@ export async function resolveMapScope(
   const soleDepot = !depot && depotOptions.length === 1 ? depotOptions[0] : null;
   const soleArea = !area && areaOptions.length === 1 ? areaOptions[0] : null;
   const label =
-    area?.name ?? depot?.name ?? soleArea?.name ?? soleDepot?.name ?? cnf?.name ?? FALLBACK_LABEL[section];
+    area?.name ?? depot?.name ?? soleArea?.name ?? soleDepot?.name ?? cnf?.name ?? t(FALLBACK_LABEL[section]);
 
   const levels: ScopeLevel[] = [];
   if (hasCnfLevel) {
-    levels.push({ key: "cnf", label: "C&F HQ", allLabel: "All C&F", options: cnfOptions, value: cnf?.id ?? "all" });
+    levels.push({ key: "cnf", label: t("C&F HQ"), allLabel: t("All C&F"), options: cnfOptions, value: cnf?.id ?? "all" });
   }
   if (hasDepotLevel) {
     levels.push({
       key: "depot",
-      label: "Depot",
-      allLabel: "All depots",
+      label: t("Depot"),
+      allLabel: t("All depots"),
       options: depotOptions,
       value: depot?.id ?? "all",
     });
   }
-  levels.push({ key: "area", label: "Area", allLabel: "All areas", options: areaOptions, value: area?.id ?? "all" });
+  levels.push({ key: "area", label: t("Area"), allLabel: t("All areas"), options: areaOptions, value: area?.id ?? "all" });
 
   return { levels, cnf, depot, area, depotIds, where, label };
 }

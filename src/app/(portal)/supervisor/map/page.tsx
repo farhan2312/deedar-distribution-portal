@@ -15,6 +15,7 @@ import {
 import { resolveMapScope } from "@/lib/portal/map-scope";
 import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { MapScopePickers } from "../../_components/map-scope-pickers";
 import { TeamMapView, repStatus, type TeamRepRow } from "../../_components/team-map-view";
@@ -28,8 +29,10 @@ export default async function SupervisorMapPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="Live map">You don&apos;t have Sales Officer access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Live map")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
+  const t = await getT();
 
   // Depot → Area for a Sales Officer; Central Admin also gets the C&F level.
   const scope = await resolveMapScope(user, "supervisor", await searchParams);
@@ -113,7 +116,11 @@ export default async function SupervisorMapPage({
       mapCounters={mapCounters}
       mapReps={mapReps}
       controls={<MapScopePickers levels={scope.levels} />}
-      emptyMessage={`No field reps report to you${scope.depot ? " in this depot" : ""} yet.`}
+      emptyMessage={
+        scope.depot
+          ? t("No field reps report to you in this depot yet.")
+          : t("No field reps report to you yet.")
+      }
     />
   );
 }

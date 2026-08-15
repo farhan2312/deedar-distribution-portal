@@ -1,4 +1,5 @@
 import { LegendDot } from "@/components/ui/legend-dot";
+import { getT } from "@/lib/i18n/server";
 import { LiveMapPanel } from "./live-map-panel";
 import { COUNTER_COLORS, REP_LIVE_COLOR } from "./map-colors";
 import type { CounterPin, RepMeta } from "./live-map";
@@ -43,7 +44,7 @@ export type TeamRepRow = {
   started: boolean;
 };
 
-export function TeamMapView({
+export async function TeamMapView({
   scopeLabel,
   repRows,
   mapCounters,
@@ -61,19 +62,21 @@ export function TeamMapView({
   /** Shown instead of the roster when nobody is in scope. */
   emptyMessage: string;
 }) {
+  const t = await getT();
+
   return (
     <div>
       {controls && <div className="mb-3 flex flex-wrap justify-end gap-2">{controls}</div>}
 
       <div className="mb-2.5 flex flex-wrap items-center gap-4">
         <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-          {scopeLabel} — counter map
+          {scopeLabel} — {t("counter map")}
         </h4>
         <div className="flex flex-wrap items-center gap-3.5">
-          <LegendDot color={COUNTER_COLORS.visited} label="Visited today" />
-          <LegendDot color={COUNTER_COLORS.pending} label="Pending" />
-          <LegendDot color={COUNTER_COLORS.counter} label="Counters" />
-          <LegendDot color={REP_LIVE_COLOR} label="Rep (live)" />
+          <LegendDot color={COUNTER_COLORS.visited} label={t("Visited today")} />
+          <LegendDot color={COUNTER_COLORS.pending} label={t("Pending")} />
+          <LegendDot color={COUNTER_COLORS.counter} label={t("Counters")} />
+          <LegendDot color={REP_LIVE_COLOR} label={t("Rep (live)")} />
         </div>
       </div>
 
@@ -92,7 +95,7 @@ export function TeamMapView({
               style={{ borderColor: "var(--hairline-soft)" }}
             >
               <h4 className="text-[13.5px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-                Team today
+                {t("Team today")}
               </h4>
               <span
                 className="chip"
@@ -132,11 +135,11 @@ export function TeamMapView({
                           className="rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold"
                           style={{ background: st.bg, color: st.color }}
                         >
-                          {st.label}
+                          {t(st.label)}
                         </span>
                         {/* Spelled out — a bare "0/0" doesn't say what it counts. */}
                         <span className="text-[11px]" style={{ color: "var(--ink-3)" }}>
-                          {r.visits} visits · {r.counters} counters
+                          {r.visits} {t("visits")} · {r.counters} {t("Counters").toLowerCase()}
                         </span>
                       </div>
                     </li>
@@ -154,14 +157,14 @@ export function TeamMapView({
 
       {/* Live team table */}
       <h6 className="mt-7 mb-3 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        Live team — status for the day
+        {t("Live team — status for the day")}
       </h6>
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
               {["Salesman", "Status", "Visits", "Last seen", "Counter hrs"].map((h) => (
-                <th key={h}>{h}</th>
+                <th key={h}>{t(h)}</th>
               ))}
             </tr>
           </thead>
@@ -178,7 +181,7 @@ export function TeamMapView({
                     <td className="font-semibold">{r.name}</td>
                     <td>
                       <span className="chip" style={{ background: st.bg, color: st.color, borderColor: "transparent" }}>
-                        {st.label}
+                        {t(st.label)}
                       </span>
                     </td>
                     <td>{r.visits}</td>

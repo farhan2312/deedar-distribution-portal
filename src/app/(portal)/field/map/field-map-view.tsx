@@ -5,6 +5,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { distanceMeters, type RepPosition } from "@/lib/tracking/protocol";
 import { distanceLabel, useOwnPosition } from "@/lib/tracking/use-own-position";
+import { useT } from "@/lib/i18n/provider";
 import { COUNTER_COLORS, REP_LIVE_COLOR } from "../../_components/map-colors";
 import type { CounterPin } from "../../_components/live-map";
 import { LegendDot } from "@/components/ui/legend-dot";
@@ -24,24 +25,29 @@ const LiveMap = dynamic(() => import("../../_components/live-map").then((m) => m
  * watching OTHER reps, so we feed it a single "me" entry rather than forking it. */
 const ME = "me";
 
-const STATE_NOTE: Record<string, string> = {
-  locating: "Finding your location…",
-  denied: "Location blocked — allow access to see how far each counter is.",
-  unavailable: "Location unavailable on this device.",
-};
+function stateNote(t: (key: string) => string): Record<string, string> {
+  return {
+    locating: t("Finding your location…"),
+    denied: t("Location blocked — allow access to see how far each counter is."),
+    unavailable: t("Location unavailable on this device."),
+  };
+}
 
 /** List-row status by the same precedence as the map dots (visited → beat →
  * area). Kept in sync with `counterColor` in live-map via COUNTER_COLORS, and
  * worded to match the legend so a dot means the same thing in both places. */
-function counterStatus(c: CounterPin): { label: string; color: string; badgeBg: string; badgeColor: string } {
+function counterStatus(
+  c: CounterPin,
+  t: (key: string) => string,
+): { label: string; color: string; badgeBg: string; badgeColor: string } {
   if (c.visited) {
-    return { label: "Visited", color: COUNTER_COLORS.visited, badgeBg: "rgba(30,158,90,.12)", badgeColor: "var(--success)" };
+    return { label: t("Visited"), color: COUNTER_COLORS.visited, badgeBg: "rgba(30,158,90,.12)", badgeColor: "var(--success)" };
   }
   // On today's beat but not visited yet — that's what "pending" means here.
   if (c.assigned) {
-    return { label: "Pending", color: COUNTER_COLORS.pending, badgeBg: "var(--bg-soft)", badgeColor: "var(--ink-2)" };
+    return { label: t("Pending"), color: COUNTER_COLORS.pending, badgeBg: "var(--bg-soft)", badgeColor: "var(--ink-2)" };
   }
-  return { label: "Counter", color: COUNTER_COLORS.counter, badgeBg: "rgba(224,161,0,.14)", badgeColor: "var(--warning)" };
+  return { label: t("Counter"), color: COUNTER_COLORS.counter, badgeBg: "rgba(224,161,0,.14)", badgeColor: "var(--warning)" };
 }
 
 export function FieldMapView({
@@ -58,6 +64,7 @@ export function FieldMapView({
   /** Area picker rendered top-right, as on the Sales Officer map. */
   controls?: React.ReactNode;
 }) {
+  const t = useT();
   const { position, state } = useOwnPosition();
 
   // The map already knows how to draw rep markers from a positions map, so
@@ -98,7 +105,7 @@ export function FieldMapView({
     });
   }, [counters, position]);
 
-  const note = STATE_NOTE[state];
+  const note = stateNote(t)[state];
 
   return (
     <div>
@@ -106,13 +113,13 @@ export function FieldMapView({
 
       <div className="mb-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
         <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-          {scopeLabel} — counters map
+          {scopeLabel} — {t("counters map")}
         </h4>
         <div className="flex flex-wrap items-center gap-3.5">
-          <LegendDot color={COUNTER_COLORS.visited} label="Visited today" />
-          <LegendDot color={COUNTER_COLORS.pending} label="Pending" />
-          <LegendDot color={COUNTER_COLORS.counter} label="Counters" />
-          <LegendDot color={REP_LIVE_COLOR} label="You" />
+          <LegendDot color={COUNTER_COLORS.visited} label={t("Visited today")} />
+          <LegendDot color={COUNTER_COLORS.pending} label={t("Pending")} />
+          <LegendDot color={COUNTER_COLORS.counter} label={t("Counters")} />
+          <LegendDot color={REP_LIVE_COLOR} label={t("You")} />
         </div>
         {note && (
           <span className="text-[12px]" style={{ color: state === "denied" ? "var(--danger)" : "var(--ink-3)" }}>
@@ -135,7 +142,7 @@ export function FieldMapView({
               style={{ borderColor: "var(--hairline-soft)" }}
             >
               <h4 className="text-[13.5px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-                Today&apos;s beat
+                {t("Today's Beat")}
               </h4>
               <span className="chip" style={{ background: "var(--bg-soft)", color: "var(--ink-2)", borderColor: "transparent" }}>
                 {ordered.length}
@@ -144,13 +151,12 @@ export function FieldMapView({
 
             {ordered.length === 0 ? (
               <p className="px-3.5 py-4 text-[12.5px]" style={{ color: "var(--ink-3)" }}>
-                No beat today — your Sales Officer hasn&apos;t assigned any
-                counters yet.
+                {t("No beat today — your Sales Officer hasn't assigned any counters yet.")}
               </p>
             ) : (
               <ul className="min-h-0 flex-1 overflow-y-auto">
                 {ordered.map(({ counter: c, metres }) => {
-                  const s = counterStatus(c);
+                  const s = counterStatus(c, t);
                   return (
                     <li key={c.id} className="border-b last:border-b-0" style={{ borderColor: "var(--hairline-soft)" }}>
                       <Link href={`/field/counter/${c.id}`} className="block px-3.5 py-2.5 transition-colors">
@@ -186,11 +192,11 @@ export function FieldMapView({
         <div className="min-w-0">
           <LiveMap counters={counters} reps={[{ id: ME, name: "You" }]} positions={positions} />
           <p className="mt-2 text-[12px]" style={{ color: "var(--ink-3)" }}>
-            Distances are straight-line from your current location, not road distance.
+            {t("Distances are straight-line from your current location, not road distance.")}
             {missingGps > 0 && (
               <span style={{ color: "var(--warning)" }}>
                 {" "}
-                {missingGps} counter{missingGps === 1 ? "" : "s"} without GPS not shown.
+                {missingGps} {t(missingGps === 1 ? "counter without GPS not shown." : "counters without GPS not shown.")}
               </span>
             )}
           </p>

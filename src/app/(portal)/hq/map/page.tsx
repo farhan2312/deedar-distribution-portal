@@ -14,6 +14,7 @@ import {
   getVisitsToday,
 } from "@/lib/supervisor/team";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { MapScopePickers } from "../../_components/map-scope-pickers";
 import { TeamMapView, repStatus, type TeamRepRow } from "../../_components/team-map-view";
@@ -27,8 +28,9 @@ export default async function HqLiveMapPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const isAdmin = user.accessRoles.includes("admin");
+  const t = await getT();
   if (!canAccess(user, "hq")) {
-    return <Notice title="Live map">You don&apos;t have C&amp;F HQ access.</Notice>;
+    return <Notice title={t("Live map")}>{t("You don't have C&F HQ access.")}</Notice>;
   }
 
   // HQ is pinned to their own C&F and picks Depot → Area under it; Central
@@ -36,7 +38,7 @@ export default async function HqLiveMapPage({
   const scope = await resolveMapScope(user, "hq", await searchParams);
   if (!isAdmin && !scope.cnf) {
     return (
-      <Notice title="Live map">You aren&apos;t mapped to a C&amp;F yet — ask Central Admin.</Notice>
+      <Notice title={t("Live map")}>{t("You aren't mapped to a C&F yet — ask Central Admin.")}</Notice>
     );
   }
   const depotIds = scope.depotIds;
@@ -123,7 +125,7 @@ export default async function HqLiveMapPage({
       mapCounters={mapCounters}
       mapReps={mapReps}
       controls={<MapScopePickers levels={scope.levels} />}
-      emptyMessage={`No field reps in ${scope.label} yet.`}
+      emptyMessage={`${scope.label} ${t("has no field reps yet.")}`}
     />
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { distanceMeters, STALE_AFTER_MS, type RepPosition } from "@/lib/tracking/protocol";
+import { useT } from "@/lib/i18n/provider";
 import { COUNTER_COLORS } from "./map-colors";
 
 export type CounterPin = {
@@ -49,18 +50,21 @@ function counterColor(p: CounterPin): string {
 }
 
 /** Human label for the pin's current state. */
-function counterStatusLabel(c: CounterPin): string {
-  if (c.visited) return "Visited today";
-  if (c.assigned) return "Pending — assigned today";
-  return "Counter";
+function counterStatusLabel(c: CounterPin, t: (key: string) => string): string {
+  if (c.visited) return t("Visited today");
+  if (c.assigned) return t("Pending — assigned today");
+  return t("Counter");
 }
 
 /** Counter detail card shown when a pin is clicked. A thin left-edge bar in the
  * pin's status colour ties the card back to the dot. */
-function counterPopup(c: CounterPin): string {
+function counterPopup(c: CounterPin, t: (key: string) => string): string {
   const color = counterColor(c);
   const meta = [c.type, c.area].filter(Boolean).map(esc).join(" · ");
-  const facts = [`Stock: ${c.stock}`, c.lastVisitLabel ? `Last visit: ${esc(c.lastVisitLabel)}` : null]
+  const facts = [
+    `${t("Stock")}: ${c.stock}`,
+    c.lastVisitLabel ? `${t("Last visit")}: ${esc(c.lastVisitLabel)}` : null,
+  ]
     .filter(Boolean)
     .join(" · ");
   return (
@@ -68,7 +72,7 @@ function counterPopup(c: CounterPin): string {
     `<div style="font:700 13.5px/1.3 inherit;color:#221f3a">${esc(c.name)}</div>` +
     `<div style="font-size:11.5px;color:#8a88a3;margin-top:2px">${meta}</div>` +
     `<div style="font-size:11.5px;color:#5d5b76;margin-top:3px">${facts}</div>` +
-    `<div style="font-size:11.5px;font-weight:600;color:${color};margin-top:4px">${counterStatusLabel(c)}</div>` +
+    `<div style="font-size:11.5px;font-weight:600;color:${color};margin-top:4px">${counterStatusLabel(c, t)}</div>` +
     `</div>`
   );
 }
@@ -193,10 +197,16 @@ export function LiveMap({
   const mapRef = useRef<L.Map | null>(null);
   const repLayerRef = useRef<Map<string, RepMarker>>(new Map());
   const fittedRef = useRef(false);
+  const t = useT();
 
   const repNames = useMemo(() => new Map(reps.map((r) => [r.id, r.name])), [reps]);
 
-  // Create the map + static counter pins once.
+  // Create the map + static counter pins once. Not keyed on `t`: a language
+  // switch runs `router.refresh()`, which hands this a fresh `counters` array
+  // from the server, so the effect already reruns (and rebuilds popups in the
+  // new language) without needing `t` in the dependency list — adding it would
+  // just tear down and recreate the whole map (viewport, live markers) on every
+  // toggle for no benefit.
   useEffect(() => {
     if (!hostRef.current || mapRef.current) return;
 
@@ -207,7 +217,7 @@ export function LiveMap({
     for (const c of counters) {
       L.marker([c.lat, c.lng], { icon: dotIcon(counterColor(c), 14) })
         .addTo(map)
-        .bindPopup(counterPopup(c));
+        .bindPopup(counterPopup(c, t));
     }
 
     if (counters.length > 0) {
@@ -226,6 +236,8 @@ export function LiveMap({
       mapRef.current = null;
       repLayer.clear();
     };
+    // `t` deliberately omitted — see the comment above this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [counters]);
 
   // Sync live rep markers whenever positions change.

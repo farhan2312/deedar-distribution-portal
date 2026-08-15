@@ -8,6 +8,7 @@ import { formatISTDate, istDateString, istDayBounds } from "@/lib/date";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { getCountersVisitedTodayIn, resolveMapScope } from "@/lib/portal/map-scope";
 import { getCountersAssignedToday } from "@/lib/supervisor/team";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import type { CounterPin } from "../../_components/live-map";
 import { MapScopePickers } from "../../_components/map-scope-pickers";
@@ -21,7 +22,8 @@ export default async function FieldMapPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Live map">You don&apos;t have Field Salesman ISR access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Live map")}>{t("You don't have Field Salesman ISR access.")}</Notice>;
   }
 
   const params = await searchParams;

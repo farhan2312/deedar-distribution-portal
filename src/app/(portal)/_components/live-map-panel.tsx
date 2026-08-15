@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useLivePositions } from "@/lib/tracking/use-live-positions";
 import { STALE_AFTER_MS } from "@/lib/tracking/protocol";
+import { useT } from "@/lib/i18n/provider";
 import type { CounterPin, RepMeta } from "./live-map";
 
 export type { CounterPin, RepMeta };
@@ -26,6 +27,7 @@ const STATE_STYLE = {
 } as const;
 
 export function LiveMapPanel({ counters, reps }: { counters: CounterPin[]; reps: RepMeta[] }) {
+  const t = useT();
   const { positions, state } = useLivePositions();
   const st = STATE_STYLE[state];
 
@@ -51,18 +53,18 @@ export function LiveMapPanel({ counters, reps }: { counters: CounterPin[]; reps:
     <div>
       <div className="mb-2.5 flex flex-wrap items-center gap-3">
         <span className="chip" style={{ background: st.bg, color: st.color, borderColor: "transparent" }}>
-          {st.label}
+          {t(st.label)}
         </span>
         <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-          {activeCount} of {reps.length} rep{reps.length === 1 ? "" : "s"} reporting now
+          {activeCount} {t("of")} {reps.length} {t(reps.length === 1 ? "rep reporting now" : "reps reporting now")}
         </span>
       </div>
 
       <LiveMap counters={counters} reps={reps} positions={positions} />
 
       <p className="mt-2 text-[12px]" style={{ color: "var(--ink-3)" }}>
-        Rep markers update in realtime over WebSocket while they&apos;re clocked in.
-        Markers grey out after {Math.round(STALE_AFTER_MS / 60_000)} minutes without an update.
+        {t("Rep markers update in realtime over WebSocket while they're clocked in.")}{" "}
+        {t("Markers grey out after")} {Math.round(STALE_AFTER_MS / 60_000)} {t("minutes without an update.")}
       </p>
     </div>
   );

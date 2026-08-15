@@ -173,6 +173,74 @@ const HI: Record<string, string> = {
   "Days Logged": "दर्ज दिन",
   "Total On Job": "कुल कार्य समय",
   "This Week": "इस सप्ताह",
+
+  // ── Live maps: scope pickers (field/supervisor/hq) ──
+  "All Areas": "सभी क्षेत्र",
+  "All Depots": "सभी डिपो",
+  "All C&F": "सभी C&F",
+  "C&F HQ": "C&F मुख्यालय",
+  Area: "क्षेत्र",
+  "All depots": "सभी डिपो",
+  "All areas": "सभी क्षेत्र",
+
+  // ── Live maps: access notices ──
+  "You don't have Field Salesman ISR access.": "आपके पास फील्ड सेल्समैन ISR एक्सेस नहीं है।",
+  "You don't have Sales Officer access.": "आपके पास सेल्स ऑफिसर एक्सेस नहीं है।",
+  "You don't have C&F HQ access.": "आपके पास C&F मुख्यालय एक्सेस नहीं है।",
+  "You aren't mapped to a C&F yet — ask Central Admin.":
+    "आप अभी तक किसी C&F से मैप नहीं हैं — सेंट्रल एडमिन से पूछें।",
+  "No field reps report to you yet.": "अभी तक कोई फील्ड रेप आपको रिपोर्ट नहीं करता।",
+  "No field reps report to you in this depot yet.":
+    "इस डिपो में अभी तक कोई फील्ड रेप आपको रिपोर्ट नहीं करता।",
+  "has no field reps yet.": "में अभी तक कोई फील्ड रेप नहीं है।",
+
+  // ── Live maps: Sales Officer / C&F HQ team view ──
+  "counter map": "काउंटर मैप",
+  "Pending — assigned today": "लंबित — आज असाइन किया गया",
+  "Rep (live)": "रेप (लाइव)",
+  "Team today": "आज की टीम",
+  "Live team — status for the day": "लाइव टीम — आज की स्थिति",
+  Salesman: "सेल्समैन",
+  Status: "स्थिति",
+  Visits: "विज़िट",
+  "Last seen": "आखिरी बार देखा गया",
+  "Counter hrs": "काउंटर घंटे",
+  visits: "विज़िट",
+  "Day closed": "दिन बंद",
+  "On counter": "काउंटर पर",
+  Idle: "निष्क्रिय",
+  "Not started": "शुरू नहीं हुआ",
+
+  // ── Live maps: counter pins + popup (shared field/supervisor/hq) ──
+  "Visited today": "आज विज़िट किया गया",
+  Pending: "लंबित",
+  Counter: "दुकान",
+  "Last visit": "आखिरी विज़िट",
+
+  // ── Live maps: live rep marker panel ──
+  Live: "लाइव",
+  Offline: "ऑफ़लाइन",
+  of: "में से",
+  "rep reporting now": "रेप अभी रिपोर्ट कर रहा है",
+  "reps reporting now": "रेप अभी रिपोर्ट कर रहे हैं",
+  "Rep markers update in realtime over WebSocket while they're clocked in.":
+    "जब तक वे क्लॉक-इन हैं, रेप मार्कर वास्तविक समय में अपडेट होते हैं।",
+  "Markers grey out after": "मार्कर धूसर हो जाते हैं",
+  "minutes without an update.": "मिनट बिना अपडेट के बाद।",
+
+  // ── Live maps: ISR (field) view ──
+  "Finding your location…": "आपका स्थान खोजा जा रहा है…",
+  "Location blocked — allow access to see how far each counter is.":
+    "लोकेशन अवरुद्ध — प्रत्येक दुकान कितनी दूर है यह देखने के लिए एक्सेस दें।",
+  "Location unavailable on this device.": "इस डिवाइस पर लोकेशन उपलब्ध नहीं है।",
+  You: "आप",
+  "counters map": "काउंटर मैप",
+  "No beat today — your Sales Officer hasn't assigned any counters yet.":
+    "आज कोई बीट नहीं — आपके सेल्स ऑफिसर ने अभी तक कोई दुकान असाइन नहीं की है।",
+  "Distances are straight-line from your current location, not road distance.":
+    "दूरियाँ आपके वर्तमान स्थान से सीधी रेखा में हैं, सड़क की दूरी नहीं।",
+  "counter without GPS not shown.": "GPS के बिना दुकान नहीं दिखाई गई।",
+  "counters without GPS not shown.": "GPS के बिना दुकानें नहीं दिखाई गईं।",
 };
 
 export function translate(lang: Lang, key: string): string {
