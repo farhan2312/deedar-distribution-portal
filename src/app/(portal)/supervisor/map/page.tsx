@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, counters } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
@@ -8,23 +8,22 @@ import {
   getCountersAssignedToday,
   getCountersVisitedToday,
   getLatestVisitStock,
-  getScopeDepots,
   getTeamDayLogs,
   getTeamReps,
   getVisitsToday,
-  pickDepot,
 } from "@/lib/supervisor/team";
+import { resolveMapScope } from "@/lib/portal/map-scope";
 import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { Notice } from "@/components/ui/notice";
-import { DepotPicker } from "../_components/depot-picker";
+import { MapScopePickers } from "../../_components/map-scope-pickers";
 import { TeamMapView, repStatus, type TeamRepRow } from "../../_components/team-map-view";
 import type { CounterPin, RepMeta } from "../../_components/live-map";
 
 export default async function SupervisorMapPage({
   searchParams,
 }: {
-  searchParams: Promise<{ depot?: string }>;
+  searchParams: Promise<{ cnf?: string; depot?: string; area?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -32,12 +31,17 @@ export default async function SupervisorMapPage({
     return <Notice title="Live map">You don&apos;t have Sales Officer access.</Notice>;
   }
 
-  const { depot: requestedDepot } = await searchParams;
-  const depots = await getScopeDepots(user);
-  const depot = pickDepot(depots, requestedDepot);
-  const depotIds = depot ? [depot.id] : depots.map((d) => d.id);
+  // Depot → Area for a Sales Officer; Central Admin also gets the C&F level.
+  const scope = await resolveMapScope(user, "supervisor", await searchParams);
+  const depotIds = scope.depotIds;
 
-  const reps = await getTeamReps(user, depot?.id);
+  // The roster follows the depot level only — an area narrows counters, not
+  // people, since a rep belongs to a depot rather than to one area.
+  const allReps = await getTeamReps(user, scope.depot?.id);
+  const reps =
+    !scope.depot && depotIds
+      ? allReps.filter((r) => r.depotId != null && depotIds.includes(r.depotId))
+      : allReps;
   const repIds = reps.map((r) => r.id);
   const today = istDateString();
   const bounds = istDayBounds();
@@ -46,22 +50,20 @@ export default async function SupervisorMapPage({
     getTeamDayLogs(repIds, today),
     getVisitsToday(repIds, bounds),
     getCountersVisitedToday(repIds, bounds),
-    depotIds.length
-      ? db
-          .select({
-            id: counters.id,
-            name: counters.name,
-            type: counters.type,
-            typeOther: counters.typeOther,
-            area: areas.name,
-            lat: counters.lat,
-            lng: counters.lng,
-            lastVisitAt: counters.lastVisitAt,
-          })
-          .from(counters)
-          .innerJoin(areas, eq(areas.id, counters.areaId))
-          .where(inArray(counters.depotId, depotIds))
-      : Promise.resolve([]),
+    db
+      .select({
+        id: counters.id,
+        name: counters.name,
+        type: counters.type,
+        typeOther: counters.typeOther,
+        area: areas.name,
+        lat: counters.lat,
+        lng: counters.lng,
+        lastVisitAt: counters.lastVisitAt,
+      })
+      .from(counters)
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .where(scope.where),
   ]);
 
   // Leaflet plots real coordinates, so only geo-tagged counters are mappable.
@@ -104,16 +106,14 @@ export default async function SupervisorMapPage({
     };
   });
 
-  const scopeLabel = depot?.name ?? (depots.length > 1 ? "All Depots" : depots[0]?.name ?? "Your Depot");
-
   return (
     <TeamMapView
-      scopeLabel={scopeLabel}
+      scopeLabel={scope.label}
       repRows={repRows}
       mapCounters={mapCounters}
       mapReps={mapReps}
-      controls={depots.length > 1 ? <DepotPicker options={depots} value={depot?.id ?? "all"} /> : null}
-      emptyMessage={`No field reps report to you${depot ? " in this depot" : ""} yet.`}
+      controls={<MapScopePickers levels={scope.levels} />}
+      emptyMessage={`No field reps report to you${scope.depot ? " in this depot" : ""} yet.`}
     />
   );
 }
