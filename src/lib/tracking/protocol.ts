@@ -71,7 +71,7 @@ export type HandshakeAuth = { ticket: string };
 // heartbeat so the server can tell a parked device from a dead one.
 
 /** Minimum movement before we spend an update, in metres. */
-export const MIN_MOVE_METERS = 50;
+export const MIN_MOVE_METERS = 15;
 /** Send at least this often even when stationary (ms). */
 export const HEARTBEAT_MS = 60_000;
 /** Ignore fixes worse than this accuracy (metres) — usually IP/wifi guesses. */

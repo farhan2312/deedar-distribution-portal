@@ -126,11 +126,16 @@ const SNAP_DISTANCE_M = 1500;
 const SNAP_GAP_MS = 3 * 60_000;
 const MIN_DURATION_MS = 250;
 /**
- * Ceiling on a single glide. Generous on purpose: a rep only reports every
- * ~50 m, which at walking pace is ~35 s apart, so the tween has to be able to
- * span most of that gap. A marker must still always settle, hence a cap.
+ * Ceiling on a single glide — deliberately just SNAP_GAP_MS, not a tighter
+ * number. A first cut capped this at 20s, which sounds generous but is
+ * SHORTER than a walking rep's real ~36s reporting gap (50m at ~5km/h): the
+ * marker glided for 20s and then sat frozen for the remaining 16s of every
+ * cycle — still a visible stutter, just a shorter one. SNAP_GAP_MS already
+ * independently catches truly abnormal gaps (lost signal, a suspended tab) by
+ * snapping instead of animating, so any gap that reaches this branch at all is
+ * one worth animating over its FULL length, not cut short again.
  */
-const MAX_DURATION_MS = 20_000;
+const MAX_DURATION_MS = SNAP_GAP_MS;
 
 type RepMarker = {
   marker: L.Marker;
