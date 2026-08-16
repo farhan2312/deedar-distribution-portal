@@ -14,6 +14,7 @@ import {
   isWithinEditWindow,
 } from "@/lib/field/products";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 
 const TYPE_BADGE = "rgba(178,142,46,.14)";
@@ -26,8 +27,10 @@ export default async function CounterDetailPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Counter">You don&apos;t have Field Salesman ISR access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Counter")}>{t("You don't have Field Salesman ISR access.")}</Notice>;
   }
+  const t = await getT();
 
   const { id } = await params;
   const [counter] = await db
@@ -95,7 +98,7 @@ export default async function CounterDetailPage({
   return (
     <div className="mx-auto max-w-2xl" style={{ animation: "fadeUp .3s ease" }}>
       <Link href="/field/beat" className="link mb-4 inline-flex">
-        ← Back to beat
+        {t("← Back to beat")}
       </Link>
 
       {/* Counter details */}
@@ -119,16 +122,16 @@ export default async function CounterDetailPage({
           {canVisit && (
             <Link href={`/field/counter/${counter.id}/edit`} className="btn btn-secondary btn-sm relative">
               <PencilIcon className="h-3.5 w-3.5" />
-              Edit
+              {t("Edit")}
             </Link>
           )}
         </div>
 
         <div className="relative mt-5 flex flex-col gap-3 md:max-w-[62%]">
-          <DetailRow icon={<PhoneIcon className="h-4 w-4" />} k="Mobile" v={counter.phone ?? "—"} accent />
-          <DetailRow icon={<StoreIcon className="h-4 w-4" />} k="Depot" v={counter.depotName} />
-          <DetailRow icon={<PinIcon className="h-4 w-4" />} k="Area/C&F" v={`${counter.areaName}, ${counter.cnfName}`} />
-          <DetailRow icon={<TargetIcon className="h-4 w-4" />} k="GPS" v={gps} />
+          <DetailRow icon={<PhoneIcon className="h-4 w-4" />} k={t("Mobile")} v={counter.phone ?? "—"} accent />
+          <DetailRow icon={<StoreIcon className="h-4 w-4" />} k={t("Depot")} v={counter.depotName} />
+          <DetailRow icon={<PinIcon className="h-4 w-4" />} k={t("Area/C&F")} v={`${counter.areaName}, ${counter.cnfName}`} />
+          <DetailRow icon={<TargetIcon className="h-4 w-4" />} k={t("GPS")} v={gps} />
         </div>
       </div>
 
@@ -143,13 +146,13 @@ export default async function CounterDetailPage({
             className="btn btn-primary w-full justify-center gap-2.5 py-4 text-[15px]"
           >
             <CalendarIcon className="h-[18px] w-[18px]" />
-            Add Visit for this Counter
+            {t("Add Visit for this Counter")}
             <span aria-hidden className="ml-1">→</span>
           </Link>
         ) : (
           <p className="card p-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            This counter is in {counter.depotName}, not your depot — you can view
-            it but can&apos;t add a visit.
+            {t("This counter is in")} {counter.depotName}
+            {t(", not your depot — you can view it but can't add a visit.")}
           </p>
         )}
       </div>
@@ -160,19 +163,19 @@ export default async function CounterDetailPage({
           className="inline-block pb-1.5 text-[13px] font-bold uppercase tracking-wider"
           style={{ color: "var(--ink-2)", borderBottom: "2px solid var(--accent)" }}
         >
-          Visit history ({history.length})
+          {t("Visit history")} ({history.length})
         </h4>
         {timeLeft && (
           <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-            Today&apos;s visits editable for{" "}
-            <strong style={{ color: "var(--warning)" }}>{timeLeft}</strong> — until 11:59 PM
+            {t("Today's visits editable for")}{" "}
+            <strong style={{ color: "var(--warning)" }}>{timeLeft}</strong> — {t("until 11:59 PM")}
           </span>
         )}
       </div>
 
       {history.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
-          No editable visits — visits drop off here once the day ends.
+          {t("No editable visits — visits drop off here once the day ends.")}
         </p>
       ) : (
         <div className="space-y-3">
@@ -193,7 +196,7 @@ export default async function CounterDetailPage({
                       </div>
                       {h.durationSeconds != null && (
                         <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
-                          Time on counter:{" "}
+                          {t("Time on counter:")}{" "}
                           <span className="font-semibold tabular-nums" style={{ color: "var(--ink-2)" }}>
                             {formatDuration(h.durationSeconds)}
                           </span>
@@ -207,12 +210,12 @@ export default async function CounterDetailPage({
                       style={{ background: "var(--bg-soft)", color: "var(--ink-2)" }}
                     >
                       <UserIcon className="h-3.5 w-3.5" />
-                      Rep {h.repName}
+                      {t("Rep")} {h.repName}
                     </span>
                     {editable && (
                       <Link href={`/field/counter/${counter.id}/visit/${h.id}`} className="btn btn-secondary btn-sm">
                         <PencilIcon className="h-3.5 w-3.5" />
-                        Edit
+                        {t("Edit")}
                       </Link>
                     )}
                   </div>
@@ -226,12 +229,12 @@ export default async function CounterDetailPage({
                       </IconTile>
                       <div className="min-w-0">
                         <div className="text-[13.5px] font-bold" style={{ color: "var(--accent)" }}>{it.segment}</div>
-                        <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>Stock {it.stock}</div>
+                        <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Stock")} {it.stock}</div>
                         <div
                           className="text-[12px] font-semibold"
                           style={{ color: it.sold > 0 ? "var(--success)" : "var(--danger)" }}
                         >
-                          Sold {it.sold}
+                          {t("Sold")} {it.sold}
                         </div>
                       </div>
                     </div>
@@ -241,13 +244,13 @@ export default async function CounterDetailPage({
                 <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   <StatTile
                     icon={<StarIcon className="h-4 w-4" style={{ color: "var(--accent)" }} />}
-                    label="Deedar Rank"
+                    label={t("Deedar Rank")}
                     value={h.rank != null ? `#${h.rank}` : "—"}
                   />
                   <StatTile
                     icon={<UsersIcon className="h-4 w-4" style={{ color: "var(--accent)" }} />}
-                    label="Competitor"
-                    value={h.competitor ? competitorDisplayLabel(h.competitor, h.competitorBrand) : "—"}
+                    label={t("Competitor")}
+                    value={h.competitor ? t(competitorDisplayLabel(h.competitor, h.competitorBrand)) : "—"}
                   />
                 </div>
 

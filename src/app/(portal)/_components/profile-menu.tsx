@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { logoutAction } from "@/lib/auth/actions";
 import { useTheme } from "@/lib/theme/use-theme";
+import { useT } from "@/lib/i18n/provider";
 
 export function ProfileMenu({
   userName,
@@ -14,6 +15,7 @@ export function ProfileMenu({
   phone: string;
   roleLabel: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const initial = userName.charAt(0).toUpperCase();
@@ -59,7 +61,7 @@ export function ProfileMenu({
           >
             <span className="flex items-center gap-2.5 text-[13px] font-medium" style={{ color: "rgba(241,247,242,.75)" }}>
               <MoonIcon className="h-4 w-4 flex-none" />
-              Dark mode
+              {t("Dark mode")}
             </span>
             <span
               className="inline-flex h-[18px] w-[32px] flex-none items-center rounded-full px-[3px] transition-colors"
@@ -84,7 +86,7 @@ export function ProfileMenu({
             style={{ color: "rgba(241,247,242,.85)" }}
           >
             <LinkIcon className="h-4 w-4 flex-none" />
-            Change Password
+            {t("Change Password")}
           </Link>
           <Divider />
 
@@ -96,7 +98,7 @@ export function ProfileMenu({
               style={{ color: "#F08A8A" }}
             >
               <SignOutIcon className="h-4 w-4 flex-none" />
-              Sign out
+              {t("Sign out")}
             </button>
           </form>
         </div>
@@ -120,7 +122,7 @@ export function ProfileMenu({
             {userName}
           </div>
           <div className="truncate text-[11px]" style={{ color: "rgba(241,247,242,.5)" }}>
-            {roleLabel}
+            {t(roleLabel)}
           </div>
         </div>
         <ChevronIcon className="h-4 w-4 flex-none transition-transform" style={{ color: "rgba(241,247,242,.5)", transform: open ? "rotate(180deg)" : "none" }} />

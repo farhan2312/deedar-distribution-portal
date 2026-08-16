@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { addArea, addDepot } from "@/lib/hq/actions";
 import type { WriteResult } from "@/lib/db-errors";
+import { useT } from "@/lib/i18n/provider";
 import { FormResult } from "@/components/ui/form-result";
 
 /**
@@ -12,6 +13,7 @@ import { FormResult } from "@/components/ui/form-result";
  * nothing and the admin got no feedback at all.
  */
 export function AddDepotForm({ cnfId }: { cnfId: string }) {
+  const t = useT();
   const [state, formAction, pending] = useActionState<WriteResult | null, FormData>(
     async (_prev, fd) => addDepot(cnfId, fd),
     null,
@@ -22,21 +24,21 @@ export function AddDepotForm({ cnfId }: { cnfId: string }) {
           rejected name can be corrected rather than retyped. */}
       <form action={formAction} key={state?.ok ? "done" : "editing"}>
         <div className="field mb-3.5">
-          <label>Depot name</label>
+          <label>{t("Depot name")}</label>
           <input
             className="inp"
             type="text"
             name="name"
-            placeholder="e.g. Ramganj Mandi Depot"
+            placeholder={t("e.g. Ramganj Mandi Depot")}
             required
             disabled={pending}
           />
         </div>
         <button className="btn btn-primary" type="submit" disabled={pending}>
-          {pending ? "Adding…" : "Add depot"}
+          {pending ? t("Adding…") : t("Add depot")}
         </button>
       </form>
-      <FormResult state={state} successText="Depot added." />
+      <FormResult state={state} successText={t("Depot added.")} />
     </>
   );
 }
@@ -48,6 +50,7 @@ export function AddAreaForm({
   cnfId: string;
   depots: { id: string; name: string }[];
 }) {
+  const t = useT();
   const [state, formAction, pending] = useActionState<WriteResult | null, FormData>(
     async (_prev, fd) => addArea(cnfId, fd),
     null,
@@ -56,7 +59,7 @@ export function AddAreaForm({
     <>
       <form action={formAction} key={state?.ok ? "done" : "editing"}>
         <div className="field mb-3">
-          <label>Depot</label>
+          <label>{t("Depot")}</label>
           <select className="inp" name="depotId" defaultValue={depots[0]?.id} disabled={pending}>
             {depots.map((d) => (
               <option key={d.id} value={d.id}>
@@ -66,21 +69,21 @@ export function AddAreaForm({
           </select>
         </div>
         <div className="field mb-3.5">
-          <label>Area name</label>
+          <label>{t("Area name")}</label>
           <input
             className="inp"
             type="text"
             name="name"
-            placeholder="e.g. Ramganj Town"
+            placeholder={t("e.g. Ramganj Town")}
             required
             disabled={pending}
           />
         </div>
         <button className="btn btn-primary" type="submit" disabled={pending}>
-          {pending ? "Adding…" : "Add area"}
+          {pending ? t("Adding…") : t("Add area")}
         </button>
       </form>
-      <FormResult state={state} successText="Area added." />
+      <FormResult state={state} successText={t("Area added.")} />
     </>
   );
 }

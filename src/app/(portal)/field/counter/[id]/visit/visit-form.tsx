@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { CompetitorPresence, ProductSegment, VisitItem } from "@/db/schema";
 import { createVisit, updateVisit, type VisitInput } from "@/lib/field/visit-actions";
 import { COMPETITOR_OPTIONS, MAX_SOLD_PER_SKU, PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
+import { useT } from "@/lib/i18n/provider";
 
 const SEGMENTS: ProductSegment[] = PRODUCT_SEGMENTS.map((p) => p.value);
 type SegMap = Record<ProductSegment, number>;
@@ -44,6 +45,7 @@ const RANK_OPTIONS = [1, 2, 3, 4, 5, null] as const;
 
 export function VisitForm({ counterId, counterName, counterArea, visitId, initial }: VisitFormProps) {
   const router = useRouter();
+  const t = useT();
   const isEdit = !!visitId;
 
   const [sold, setSold] = useState<SegMap>(() => initMap(initial?.items, "sold"));
@@ -124,7 +126,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
             style={{ background: "rgba(30,158,90,.1)", color: "var(--success)" }}
           >
             <span className="h-2 w-2 rounded-full" style={{ background: "var(--success)", animation: "pulseDot 1.4s ease-in-out infinite" }} />
-            Location verified · checked in
+            {t("Location verified · checked in")}
           </div>
         )}
 
@@ -141,7 +143,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
               <div className="text-[28px] font-bold tabular-nums" style={{ fontFamily: "var(--font-display)", letterSpacing: "-.02em", color: "var(--ink-1)" }}>
                 {mmss(elapsed)}
               </div>
-              <div className="text-[11px]" style={{ color: "var(--ink-3)" }}>time on counter</div>
+              <div className="text-[11px]" style={{ color: "var(--ink-3)" }}>{t("time on counter")}</div>
             </div>
           )}
         </div>
@@ -149,16 +151,16 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
         {step === "form" ? (
         <>
         <p className="mb-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
-          4 quick questions — under 30 seconds.
+          {t("4 quick questions — under 30 seconds.")}
         </p>
         <div className="mb-4 h-px" style={{ background: "var(--hairline)" }} />
 
         <div className="mb-1 flex items-baseline justify-between">
           <h6 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>
-            Packets sold &amp; stock at counter
+            {t("Packets sold & stock at counter")}
           </h6>
           <span className="text-[11px] font-semibold" style={{ color: "var(--ink-3)" }}>
-            {totalSold} sold
+            {totalSold} {t("sold")}
           </span>
         </div>
 
@@ -167,14 +169,14 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
             <div key={seg} className="flex flex-wrap items-center justify-between gap-2 py-3" style={{ borderBottom: "1px solid var(--hairline-soft)" }}>
               <span className="text-[14px] font-medium" style={{ color: "var(--ink-1)" }}>{SEGMENT_LABEL[seg]}</span>
               <div className="flex items-center gap-2.5">
-                <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>Sold</span>
+                <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Sold")}</span>
                 <Stepper
                   value={sold[seg]}
                   onDec={() => bumpSold(seg, -1)}
                   onInc={() => bumpSold(seg, 1)}
                   incDisabled={sold[seg] >= MAX_SOLD_PER_SKU}
                 />
-                <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>Stock</span>
+                <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Stock")}</span>
                 <input
                   className="inp text-center"
                   type="number"
@@ -190,22 +192,22 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
         </div>
         {anyAtCap && (
           <p className="mt-2 text-[11.5px]" style={{ color: "var(--warning)" }}>
-            Max {MAX_SOLD_PER_SKU} packets sold per SKU.
+            {t("Max")} {MAX_SOLD_PER_SKU} {t("packets sold per SKU.")}
           </p>
         )}
 
         <div className="my-4 h-px" style={{ background: "var(--hairline)" }} />
 
-        <h6 className="mb-2 text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>Our rank at this counter</h6>
+        <h6 className="mb-2 text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>{t("Our rank at this counter")}</h6>
         <Segmented
-          options={RANK_OPTIONS.map((r) => ({ value: r === null ? "na" : String(r), label: r === null ? "N/A" : String(r) }))}
+          options={RANK_OPTIONS.map((r) => ({ value: r === null ? "na" : String(r), label: r === null ? t("N/A") : String(r) }))}
           value={rank === null ? "na" : String(rank)}
           onChange={(v) => setRank(v === "na" ? null : Number(v))}
         />
 
-        <h6 className="mb-2 mt-4 text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>Competitor presence *</h6>
+        <h6 className="mb-2 mt-4 text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>{t("Competitor presence *")}</h6>
         <Segmented
-          options={COMPETITOR_OPTIONS.map((c) => ({ value: c.value, label: c.label }))}
+          options={COMPETITOR_OPTIONS.map((c) => ({ value: c.value, label: t(c.label) }))}
           value={competitor}
           onChange={(v) => {
             const next = v as CompetitorPresence;
@@ -220,18 +222,18 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
           <input
             className="inp mt-2"
             type="text"
-            placeholder="Name the competitor brand"
+            placeholder={t("Name the competitor brand")}
             value={competitorBrand}
             onChange={(e) => setCompetitorBrand(e.target.value)}
             maxLength={80}
           />
         )}
 
-        <h6 className="mb-2 mt-4 text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>Remarks (optional)</h6>
+        <h6 className="mb-2 mt-4 text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>{t("Remarks (optional)")}</h6>
         <textarea
           className="inp"
           rows={2}
-          placeholder="e.g. asked for bigger visi-cooler"
+          placeholder={t("e.g. asked for bigger visi-cooler")}
           value={remarks}
           onChange={(e) => setRemarks(e.target.value)}
         />
@@ -246,6 +248,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
             competitorBrand={competitorBrand}
             remarks={remarks}
             isEdit={isEdit}
+            t={t}
           />
         )}
 
@@ -258,7 +261,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
                 className="btn btn-secondary flex-1 justify-center py-3.5"
                 onClick={() => router.push(`/field/counter/${counterId}`)}
               >
-                Cancel
+                {t("Cancel")}
               </button>
               <button
                 className="btn btn-primary flex-1 justify-center py-3.5"
@@ -267,7 +270,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
                   setStep("review");
                 }}
               >
-                Review
+                {t("Review")}
               </button>
             </>
           ) : (
@@ -277,14 +280,14 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
                 onClick={() => setStep("form")}
                 disabled={busy}
               >
-                Back
+                {t("Back")}
               </button>
               <button
                 className="btn btn-primary flex-1 justify-center py-3.5"
                 onClick={submit}
                 disabled={busy}
               >
-                {busy ? "Submitting…" : isEdit ? "Save changes" : "Submit visit"}
+                {busy ? t("Submitting…") : isEdit ? t("Save changes") : t("Submit visit")}
               </button>
             </>
           )}
@@ -304,6 +307,7 @@ function ReviewPanel({
   competitorBrand,
   remarks,
   isEdit,
+  t,
 }: {
   sold: SegMap;
   stock: SegMap;
@@ -313,21 +317,22 @@ function ReviewPanel({
   competitorBrand: string;
   remarks: string;
   isEdit: boolean;
+  t: (key: string) => string;
 }) {
   return (
     <>
       <p className="mb-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
-        Check these numbers before submitting
-        {isEdit ? "." : " — a visit can only be edited until midnight tonight."}
+        {t("Check these numbers before submitting")}
+        {isEdit ? "." : t(" — a visit can only be edited until midnight tonight.")}
       </p>
       <div className="mb-4 h-px" style={{ background: "var(--hairline)" }} />
 
       <div className="mb-1 flex items-baseline justify-between">
         <h6 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>
-          Packets sold &amp; stock
+          {t("Packets sold & stock")}
         </h6>
         <span className="text-[11px] font-semibold" style={{ color: "var(--ink-3)" }}>
-          {totalSold} sold
+          {totalSold} {t("sold")}
         </span>
       </div>
 
@@ -341,23 +346,23 @@ function ReviewPanel({
             {SEGMENT_LABEL[seg]}
           </span>
           <span className="text-[13px] tabular-nums" style={{ color: "var(--ink-2)" }}>
-            Sold <strong style={{ color: "var(--ink-1)" }}>{sold[seg]}</strong>
+            {t("Sold")} <strong style={{ color: "var(--ink-1)" }}>{sold[seg]}</strong>
             <span className="mx-1.5" style={{ color: "var(--ink-3)" }}>·</span>
-            Stock <strong style={{ color: "var(--ink-1)" }}>{stock[seg]}</strong>
+            {t("Stock")} <strong style={{ color: "var(--ink-1)" }}>{stock[seg]}</strong>
           </span>
         </div>
       ))}
 
-      <ReviewRow label="Our rank" value={rank === null ? "N/A" : String(rank)} />
+      <ReviewRow label={t("Our rank")} value={rank === null ? t("N/A") : String(rank)} />
       <ReviewRow
-        label="Competitor presence"
+        label={t("Competitor presence")}
         value={
           competitor === "none"
-            ? "None"
-            : `${COMPETITOR_OPTIONS.find((c) => c.value === competitor)?.label ?? competitor}${competitorBrand.trim() ? ` — ${competitorBrand.trim()}` : ""}`
+            ? t("None")
+            : `${t(COMPETITOR_OPTIONS.find((c) => c.value === competitor)?.label ?? competitor)}${competitorBrand.trim() ? ` — ${competitorBrand.trim()}` : ""}`
         }
       />
-      <ReviewRow label="Remarks" value={remarks.trim() || "—"} />
+      <ReviewRow label={t("Remarks")} value={remarks.trim() || "—"} />
     </>
   );
 }

@@ -4,9 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { changeOwnPassword } from "@/lib/auth/password-actions";
 import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/auth/password-policy";
+import { useT } from "@/lib/i18n/provider";
 
 export function ChangePasswordForm({ forced = false }: { forced?: boolean }) {
   const router = useRouter();
+  const t = useT();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -42,17 +44,17 @@ export function ChangePasswordForm({ forced = false }: { forced?: boolean }) {
     return (
       <div className="card p-5">
         <p className="text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>
-          Password updated.
+          {t("Password updated.")}
         </p>
         <p className="mt-1 text-[13px]" style={{ color: "var(--ink-3)" }}>
-          Use your new password next time you log in.
+          {t("Use your new password next time you log in.")}
         </p>
         <div className="mt-4 flex gap-3">
           <button className="btn btn-secondary" onClick={() => setDone(false)}>
-            Change again
+            {t("Change again")}
           </button>
           <button className="btn btn-primary" onClick={() => router.back()}>
-            Done
+            {t("Done")}
           </button>
         </div>
       </div>
@@ -62,7 +64,7 @@ export function ChangePasswordForm({ forced = false }: { forced?: boolean }) {
   return (
     <form className="card p-5" onSubmit={submit}>
       <div className="field mb-3.5">
-        <label>Current password</label>
+        <label>{t("Current password")}</label>
         <input
           className="inp"
           type="password"
@@ -73,7 +75,7 @@ export function ChangePasswordForm({ forced = false }: { forced?: boolean }) {
         />
       </div>
       <div className="field mb-3.5">
-        <label>New password</label>
+        <label>{t("New password")}</label>
         <input
           className="inp"
           type="password"
@@ -85,11 +87,11 @@ export function ChangePasswordForm({ forced = false }: { forced?: boolean }) {
           required
         />
         <span className="text-[11.5px]" style={{ color: "var(--ink-3)" }}>
-          {PASSWORD_MIN}–{PASSWORD_MAX} characters.
+          {PASSWORD_MIN}–{PASSWORD_MAX} {t("characters")}.
         </span>
       </div>
       <div className="field mb-4">
-        <label>Confirm new password</label>
+        <label>{t("Confirm new password")}</label>
         <input
           className="inp"
           type="password"
@@ -107,7 +109,7 @@ export function ChangePasswordForm({ forced = false }: { forced?: boolean }) {
         </p>
       )}
       <button className="btn btn-primary w-full justify-center" type="submit" disabled={pending}>
-        {pending ? "Updating…" : "Update password"}
+        {pending ? t("Updating…") : t("Update password")}
       </button>
     </form>
   );

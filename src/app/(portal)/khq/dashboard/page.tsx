@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { cnfs, counters, depots, states, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { getT } from "@/lib/i18n/server";
 import { LegendDot } from "@/components/ui/legend-dot";
 import { StatCard } from "@/components/ui/stat-card";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -26,6 +27,7 @@ function healthConic(active: number, dormant: number, declining: number) {
 export default async function KhqDashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const t = await getT();
 
   const [allStates, allCnfs, allDepots, allCounters, allReps] = await Promise.all([
     db.select().from(states),
@@ -73,14 +75,14 @@ export default async function KhqDashboardPage() {
   });
 
   const stats = [
-    { label: "States", value: allStates.length },
-    { label: "C&F HQs", value: allCnfs.length },
-    { label: "Depots", value: allDepots.length },
-    { label: "Counters", value: allCounters.length },
-    { label: "Field reps", value: fieldReps.length },
-    { label: "Packets sold today", value: 35 },
-    { label: "Incentives payable", value: "₹2,960" },
-    { label: "Declining counters", value: decliningCount, danger: true },
+    { label: t("States"), value: allStates.length },
+    { label: t("C&F HQs"), value: allCnfs.length },
+    { label: t("Depots"), value: allDepots.length },
+    { label: t("Counters"), value: allCounters.length },
+    { label: t("Field reps"), value: fieldReps.length },
+    { label: t("Packets sold today"), value: 35 },
+    { label: t("Incentives payable"), value: "₹2,960" },
+    { label: t("Declining counters"), value: decliningCount, danger: true },
   ];
 
   return (
@@ -93,8 +95,8 @@ export default async function KhqDashboardPage() {
 
       <div className="mb-6 grid items-stretch gap-4 lg:grid-cols-2">
         <div className="card flex flex-col p-5">
-          <h6 style={cardTitle}>Counter health</h6>
-          <p style={cardSub}>Overall company health, by counter status</p>
+          <h6 style={cardTitle}>{t("Counter health")}</h6>
+          <p style={cardSub}>{t("Overall company health, by counter status")}</p>
           <div className="flex flex-1 items-center gap-4.5">
             <div className="relative h-24 w-24 flex-none rounded-full" style={{ background: health.conic }}>
               <div
@@ -105,16 +107,16 @@ export default async function KhqDashboardPage() {
               </div>
             </div>
             <div className="space-y-1.5 text-[12px]" style={{ color: "var(--ink-2)" }}>
-              <LegendDot color="var(--success)" label={`Active — ${activeCount}`} square />
-              <LegendDot color="var(--warning)" label={`Dormant — ${dormantCount}`} square />
-              <LegendDot color="var(--danger)" label={`Declining — ${decliningCount}`} square />
+              <LegendDot color="var(--success)" label={`${t("Active")} — ${activeCount}`} square />
+              <LegendDot color="var(--warning)" label={`${t("Dormant")} — ${dormantCount}`} square />
+              <LegendDot color="var(--danger)" label={`${t("Declining")} — ${decliningCount}`} square />
             </div>
           </div>
         </div>
 
         <div className="card flex flex-col p-5">
-          <h6 style={cardTitle}>Counters by state</h6>
-          <p style={cardSub}>Footprint by state — scales as new states onboard</p>
+          <h6 style={cardTitle}>{t("Counters by state")}</h6>
+          <p style={cardSub}>{t("Footprint by state — scales as new states onboard")}</p>
           {stateBars.map((s) => (
             <div key={s.name} className="mb-2.5 flex items-center gap-2.5">
               <div className="w-[100px] text-[13px]" style={{ color: "var(--ink-1)" }}>{s.name}</div>
@@ -125,13 +127,13 @@ export default async function KhqDashboardPage() {
         </div>
       </div>
 
-      <h6 className="mb-3" style={cardTitle}>Depot performance comparison</h6>
+      <h6 className="mb-3" style={cardTitle}>{t("Depot performance comparison")}</h6>
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
               {["Depot", "Reps", "Counters", "Visits today", "Packets today", "Avg counter time", "Declining"].map((h) => (
-                <th key={h}>{h}</th>
+                <th key={h}>{t(h)}</th>
               ))}
             </tr>
           </thead>
@@ -152,7 +154,7 @@ export default async function KhqDashboardPage() {
       </div>
 
       <div className="mt-6 max-w-xs">
-        <h6 className="mb-3" style={cardTitle}>Product mix (MTD)</h6>
+        <h6 className="mb-3" style={cardTitle}>{t("Product mix (MTD)")}</h6>
         <div className="card space-y-1.5 p-4">
           {PRODUCT_MIX.map((p) => (
             <LegendDot key={p.label} color={p.color} label={`${p.label} — ${p.pct}%`} square />

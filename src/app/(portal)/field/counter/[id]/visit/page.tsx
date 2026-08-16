@@ -5,6 +5,7 @@ import { areas, counters } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { VisitForm } from "./visit-form";
 
@@ -16,7 +17,8 @@ export default async function NewVisitPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Add visit">You don&apos;t have Field Salesman ISR access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Add visit")}>{t("You don't have Field Salesman ISR access.")}</Notice>;
   }
 
   const { id } = await params;
@@ -37,9 +39,10 @@ export default async function NewVisitPage({
 
   const canVisit = user.accessRoles.includes("admin") || counter.depotId === user.depot?.id;
   if (!canVisit) {
+    const t = await getT();
     return (
-      <Notice title="Add visit">
-        This counter isn&apos;t in your depot, so you can&apos;t add a visit to it.
+      <Notice title={t("Add visit")}>
+        {t("This counter isn't in your depot, so you can't add a visit to it.")}
       </Notice>
     );
   }

@@ -6,10 +6,12 @@ import type { ProductSegment, StockMovementType } from "@/db/schema";
 import { PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
 import { closeStockDay, recordMovement } from "@/lib/depot/actions";
 import type { DepotOption, DepotStockData, StockRow } from "@/lib/depot/data";
+import { useT } from "@/lib/i18n/provider";
 import { DepotSelect } from "../_components/depot-select";
 
 const SEGMENTS: ProductSegment[] = PRODUCT_SEGMENTS.map((p) => p.value);
 
+// English strings below are DICTIONARY KEYS — translated at render, not here.
 const MOVEMENT_TYPES: { value: StockMovementType; label: string }[] = [
   { value: "inward", label: "Inward from C&F" },
   { value: "outward_retail", label: "Outward — Retail counters" },
@@ -18,6 +20,7 @@ const MOVEMENT_TYPES: { value: StockMovementType; label: string }[] = [
   { value: "manual", label: "Manual adjustment" },
 ];
 
+// Log column uses the shorter labels; both variants live in the dictionary.
 const TYPE_LABEL: Record<StockMovementType, string> = {
   inward: "Inward from C&F",
   outward_retail: "Outward — Retail",
@@ -43,6 +46,7 @@ export function DepotStockClient({
   data: DepotStockData;
 }) {
   const router = useRouter();
+  const t = useT();
   const [type, setType] = useState<StockMovementType>("inward");
   const [segment, setSegment] = useState<ProductSegment>("DG10");
   const [repUserId, setRepUserId] = useState("");
@@ -61,7 +65,7 @@ export function DepotStockClient({
     setError(null);
     const n = Math.trunc(Number(qty));
     if (!Number.isFinite(n) || n === 0) {
-      setError("Enter a quantity.");
+      setError(t("Enter a quantity."));
       return;
     }
     start(async () => {
@@ -103,38 +107,38 @@ export function DepotStockClient({
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h4 className="text-[20px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Depot Stock
+            {t("Depot Stock")}
           </h4>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            Daily inward / outward movement, tracked per SKU.
+            {t("Daily inward / outward movement, tracked per SKU.")}
           </p>
         </div>
         {scope.length > 1 && <DepotSelect options={scope} value={depot.id} />}
       </div>
 
       <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Total stock at depot" value={`${data.total.toLocaleString("en-IN")} pkts`} />
-        <StatCard label="Low-stock SKUs" value={String(data.lowCount)} accent={data.lowCount > 0 ? "var(--warning)" : undefined} />
-        <StatCard label="Movements today" value={String(data.movementsToday)} />
+        <StatCard label={t("Total stock at depot")} value={`${data.total.toLocaleString("en-IN")} ${t("pkts")}`} />
+        <StatCard label={t("Low-stock SKUs")} value={String(data.lowCount)} accent={data.lowCount > 0 ? "var(--warning)" : undefined} />
+        <StatCard label={t("Movements today")} value={String(data.movementsToday)} />
       </div>
 
       {/* Stock by SKU */}
       <h4 className="mb-3 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        Stock by SKU
+        {t("Stock by SKU")}
       </h4>
       <div className="table-wrap mb-7">
         <table className="table">
           <thead>
             <tr>
               {["SKU", "Product", "On hand", "Level", "Status"].map((h) => (
-                <th key={h}>{h}</th>
+                <th key={h}>{t(h)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {data.rows.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ color: "var(--ink-3)" }}>No stock recorded for this depot yet.</td>
+                <td colSpan={5} style={{ color: "var(--ink-3)" }}>{t("No stock recorded for this depot yet.")}</td>
               </tr>
             ) : (
               data.rows.map((r) => {
@@ -152,7 +156,7 @@ export function DepotStockClient({
                     </td>
                     <td>
                       <span className="chip" style={{ background: lvl.bg, color: lvl.color, borderColor: "transparent" }}>
-                        {lvl.label}
+                        {t(lvl.label)}
                       </span>
                     </td>
                   </tr>
@@ -167,7 +171,7 @@ export function DepotStockClient({
       <div className="card mb-7 max-w-xl p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h6 className="text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Record a stock movement
+            {t("Record a stock movement")}
           </h6>
           <button
             className="btn btn-secondary"
@@ -175,7 +179,7 @@ export function DepotStockClient({
             onClick={closeDay}
             disabled={locked || pending}
           >
-            Close today&apos;s stock
+            {t("Close today's stock")}
           </button>
         </div>
 
@@ -188,21 +192,21 @@ export function DepotStockClient({
           }
         >
           {locked
-            ? `Closed by ${data.todayClosedBy ?? "—"} · ${data.todayClosedAtLabel ?? ""} — no further edits today.`
-            : "Open for today — record movements as they happen."}
+            ? `${t("Closed by")} ${data.todayClosedBy ?? "—"} · ${data.todayClosedAtLabel ?? ""} ${t("— no further edits today.")}`
+            : t("Open for today — record movements as they happen.")}
         </div>
 
         <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="field">
-            <label>Movement type</label>
+            <label>{t("Movement type")}</label>
             <select className="inp" value={type} disabled={locked} onChange={(e) => setType(e.target.value as StockMovementType)}>
               {MOVEMENT_TYPES.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+                <option key={m.value} value={m.value}>{t(m.label)}</option>
               ))}
             </select>
           </div>
           <div className="field">
-            <label>SKU</label>
+            <label>{t("SKU")}</label>
             <select className="inp" value={segment} disabled={locked} onChange={(e) => setSegment(e.target.value as ProductSegment)}>
               {SEGMENTS.map((s) => (
                 <option key={s} value={s}>{s}</option>
@@ -213,9 +217,9 @@ export function DepotStockClient({
 
         {isOutwardRetail && (
           <div className="field mb-3">
-            <label>Field Salesman ISR *</label>
+            <label>{t("Field Salesman ISR *")}</label>
             <select className="inp" value={repUserId} disabled={locked} onChange={(e) => setRepUserId(e.target.value)}>
-              <option value="">Select salesman</option>
+              <option value="">{t("Select salesman")}</option>
               {data.reps.map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
               ))}
@@ -225,9 +229,9 @@ export function DepotStockClient({
 
         {isOutwardWholesale && (
           <div className="field mb-3">
-            <label>Wholesale counter *</label>
+            <label>{t("Wholesale counter *")}</label>
             <select className="inp" value={wholesaleCounterId} disabled={locked} onChange={(e) => setWholesaleCounterId(e.target.value)}>
-              <option value="">Select wholesale counter</option>
+              <option value="">{t("Select wholesale counter")}</option>
               {data.wholesaleCounters.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -237,23 +241,23 @@ export function DepotStockClient({
 
         <div className="mb-3.5 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_2fr]">
           <div className="field">
-            <label>{isManual ? "Quantity (+/−)" : "Quantity"}</label>
+            <label>{isManual ? t("Quantity (+/−)") : t("Quantity")}</label>
             <input
               className="inp"
               type="number"
               inputMode="numeric"
-              placeholder={isManual ? "e.g. -20" : "e.g. 50"}
+              placeholder={isManual ? t("e.g. -20") : t("e.g. 50")}
               value={qty}
               disabled={locked}
               onChange={(e) => setQty(e.target.value)}
             />
           </div>
           <div className="field">
-            <label>Note</label>
+            <label>{t("Note")}</label>
             <input
               className="inp"
               type="text"
-              placeholder="e.g. Truck no. / counter name / reason"
+              placeholder={t("e.g. Truck no. / counter name / reason")}
               value={note}
               disabled={locked}
               onChange={(e) => setNote(e.target.value)}
@@ -264,34 +268,34 @@ export function DepotStockClient({
         {error && <p className="mb-3 text-[13px] font-semibold" style={{ color: "var(--danger)" }}>{error}</p>}
 
         <button className="btn btn-primary" onClick={submit} disabled={locked || pending}>
-          {pending ? "Saving…" : "Record movement"}
+          {pending ? t("Saving…") : t("Record movement")}
         </button>
       </div>
 
       {/* Daily movement log */}
       <h4 className="mb-3 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        Daily movement log
+        {t("Daily movement log")}
       </h4>
       <div className="table-wrap mb-7">
         <table className="table">
           <thead>
             <tr>
               {["Date", "SKU", "Type", "Qty", "To / by", "Note", "Logged by"].map((h) => (
-                <th key={h}>{h}</th>
+                <th key={h}>{t(h)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {data.movements.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ color: "var(--ink-3)" }}>No movements recorded yet.</td>
+                <td colSpan={7} style={{ color: "var(--ink-3)" }}>{t("No movements recorded yet.")}</td>
               </tr>
             ) : (
               data.movements.map((m) => (
                 <tr key={m.id}>
                   <td className="whitespace-nowrap">{m.whenLabel}</td>
                   <td className="font-semibold">{m.segment}</td>
-                  <td className="whitespace-nowrap">{TYPE_LABEL[m.type]}</td>
+                  <td className="whitespace-nowrap">{t(TYPE_LABEL[m.type])}</td>
                   <td
                     className="font-semibold tabular-nums"
                     style={{ color: m.qty < 0 ? "var(--danger)" : "var(--success)" }}
@@ -310,17 +314,17 @@ export function DepotStockClient({
 
       {/* Historic closing balance */}
       <h4 className="mb-1 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        Historic stock (daily closing balance)
+        {t("Historic stock (daily closing balance)")}
       </h4>
       <p className="mb-3 text-[13px]" style={{ color: "var(--ink-3)" }}>
-        Logged automatically at each movement — kept for trend analysis.
+        {t("Logged automatically at each movement — kept for trend analysis.")}
       </p>
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
               {["Date", ...SEGMENTS, "Total", "Status"].map((h) => (
-                <th key={h}>{h}</th>
+                <th key={h}>{t(h)}</th>
               ))}
             </tr>
           </thead>
@@ -328,7 +332,7 @@ export function DepotStockClient({
             {data.history.length === 0 ? (
               <tr>
                 <td colSpan={SEGMENTS.length + 3} style={{ color: "var(--ink-3)" }}>
-                  No closing balances yet — record a movement to start the log.
+                  {t("No closing balances yet — record a movement to start the log.")}
                 </td>
               </tr>
             ) : (
@@ -342,11 +346,11 @@ export function DepotStockClient({
                   <td className="whitespace-nowrap">
                     {h.closed ? (
                       <span className="chip" style={{ background: "rgba(30,158,90,.12)", color: "var(--success)", borderColor: "transparent" }}>
-                        Closed by {h.closedBy ?? "—"} · {h.closedAtLabel ?? ""}
+                        {t("Closed by")} {h.closedBy ?? "—"} · {h.closedAtLabel ?? ""}
                       </span>
                     ) : (
                       <span className="chip" style={{ background: "var(--bg-soft)", color: "var(--ink-3)", borderColor: "transparent" }}>
-                        Open
+                        {t("Open")}
                       </span>
                     )}
                   </td>

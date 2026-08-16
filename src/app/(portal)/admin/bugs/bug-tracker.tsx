@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { BugSeverity, BugStatus, BugType } from "@/db/schema";
 import { getBugScreenshot, setBugStatus } from "@/lib/bugs/actions";
+import { useT } from "@/lib/i18n/provider";
 
 export type BugRow = {
   id: string;
@@ -35,6 +36,7 @@ const STATUS_STYLE: Record<BugStatus, { label: string; bg: string; color: string
 const STATUSES: BugStatus[] = ["open", "in_progress", "resolved", "closed"];
 
 export function BugTracker({ reports }: { reports: BugRow[] }) {
+  const t = useT();
   const [filter, setFilter] = useState<BugStatus | "all">("all");
   const visible = filter === "all" ? reports : reports.filter((r) => r.status === filter);
   const openCount = reports.filter((r) => r.status === "open").length;
@@ -43,7 +45,7 @@ export function BugTracker({ reports }: { reports: BugRow[] }) {
     <div>
       {openCount > 0 && (
         <p className="mb-5 text-[13px] font-medium" style={{ color: "var(--ink-2)" }}>
-          {openCount} still open.
+          {openCount} {t("still open.")}
         </p>
       )}
 
@@ -62,7 +64,7 @@ export function BugTracker({ reports }: { reports: BugRow[] }) {
                 cursor: "pointer",
               }}
             >
-              {s === "all" ? "All" : STATUS_STYLE[s].label}
+              {s === "all" ? t("All") : t(STATUS_STYLE[s].label)}
             </button>
           );
         })}
@@ -70,7 +72,9 @@ export function BugTracker({ reports }: { reports: BugRow[] }) {
 
       {visible.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
-          No reports {filter === "all" ? "yet" : `with status “${STATUS_STYLE[filter as BugStatus].label}”`}.
+          {filter === "all"
+            ? `${t("No reports yet")}.`
+            : `${t("No reports with status")} “${t(STATUS_STYLE[filter as BugStatus].label)}”.`}
         </p>
       ) : (
         <div className="space-y-3">
@@ -85,6 +89,7 @@ export function BugTracker({ reports }: { reports: BugRow[] }) {
 
 function BugCard({ report: r }: { report: BugRow }) {
   const router = useRouter();
+  const t = useT();
   const [shot, setShot] = useState<string | null>(null);
   const [loadingShot, setLoadingShot] = useState(false);
   const [pending, start] = useTransition();
@@ -119,11 +124,11 @@ function BugCard({ report: r }: { report: BugRow }) {
               {r.title}
             </span>
             <span className="chip" style={{ background: sev.bg, color: sev.color, borderColor: "transparent" }}>
-              {sev.label}
+              {t(sev.label)}
             </span>
           </div>
           <div className="mt-1 text-[12px]" style={{ color: "var(--ink-3)" }}>
-            {r.reporterName ?? "Unknown"} · {r.whenLabel}
+            {r.reporterName ?? t("Unknown")} · {r.whenLabel}
             {r.page && ` · ${r.page}`}
           </div>
           {r.description && (
@@ -134,13 +139,13 @@ function BugCard({ report: r }: { report: BugRow }) {
           {r.hasScreenshot && (
             <div className="mt-2">
               <button className="link text-[12.5px]" onClick={toggleShot} disabled={loadingShot}>
-                {loadingShot ? "Loading…" : shot ? "Hide screenshot" : "View screenshot"}
+                {loadingShot ? t("Loading…") : shot ? t("Hide screenshot") : t("View screenshot")}
               </button>
               {shot && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={shot}
-                  alt="Reported screenshot"
+                  alt={t("Reported screenshot")}
                   className="mt-2 max-h-96 w-auto rounded-xl border"
                   style={{ borderColor: "var(--hairline-soft)" }}
                 />
@@ -151,7 +156,7 @@ function BugCard({ report: r }: { report: BugRow }) {
 
         <div className="flex flex-none items-center gap-2">
           <span className="chip" style={{ background: st.bg, color: st.color, borderColor: "transparent" }}>
-            {st.label}
+            {t(st.label)}
           </span>
           <select
             className="inp"
@@ -162,7 +167,7 @@ function BugCard({ report: r }: { report: BugRow }) {
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {STATUS_STYLE[s].label}
+                {t(STATUS_STYLE[s].label)}
               </option>
             ))}
           </select>

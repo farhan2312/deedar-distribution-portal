@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { getVisitForEdit } from "@/lib/field/visit-actions";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { VisitForm } from "../visit-form";
 
@@ -17,16 +18,17 @@ export default async function EditVisitPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Edit visit">You don&apos;t have Field Salesman ISR access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Edit visit")}>{t("You don't have Field Salesman ISR access.")}</Notice>;
   }
 
   const { id, visitId } = await params;
   const visit = await getVisitForEdit(visitId);
   if (!visit || visit.counterId !== id) {
+    const t = await getT();
     return (
-      <Notice title="Edit visit">
-        This visit can&apos;t be edited — it&apos;s either not yours or the day it
-        was recorded on has ended.
+      <Notice title={t("Edit visit")}>
+        {t("This visit can't be edited — it's either not yours or the day it was recorded on has ended.")}
       </Notice>
     );
   }

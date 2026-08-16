@@ -3,16 +3,20 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { searchCounterByPhone, type CounterSearchResult } from "@/lib/field/actions";
-import { ProgressBar } from "@/components/ui/progress-bar";
 import { useT } from "@/lib/i18n/provider";
 
 export type BeatCounter = {
+  /** Unique row key — for admin, several rows can share the same counter id
+   * (one per rep the counter is assigned to). */
+  key: string;
   id: string;
   name: string;
   type: string;
   areaName: string;
   canVisit: boolean;
   visitedToday: boolean;
+  /** Assigned rep's name — shown to admin only, null otherwise. */
+  repName: string | null;
 };
 
 export function BeatClient({
@@ -22,6 +26,7 @@ export function BeatClient({
   visitsToday,
   newCountersToday,
   beat,
+  isAdmin = false,
 }: {
   firstName: string;
   depotName: string;
@@ -29,6 +34,9 @@ export function BeatClient({
   visitsToday: number;
   newCountersToday: number;
   beat: BeatCounter[];
+  /** Whether the viewer is Central Admin — flips the empty-state wording and
+   * the "N remaining" chip to talk about company-wide beats. */
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const t = useT();
@@ -64,8 +72,8 @@ export function BeatClient({
       </header>*/}
 
       <div className="mb-5 grid grid-cols-2 gap-3">
-        <BeatStat label={t("Visits today")} value={visitsToday} target={50} />
-        <BeatStat label={t("New counters")} value={newCountersToday} target={10} />
+        <BeatStat label={t("Visits today")} value={visitsToday} />
+        <BeatStat label={t("New counters")} value={newCountersToday} />
       </div>
 
       {/* Search by mobile */}
@@ -79,7 +87,7 @@ export function BeatClient({
             type="tel"
             inputMode="tel"
             maxLength={10}
-            placeholder="10-digit mobile"
+            placeholder={t("10-digit mobile")}
             value={phone}
             onChange={(e) => {
               setPhone(e.target.value);
@@ -96,8 +104,8 @@ export function BeatClient({
           <div className="mt-3">
             {!result.found ? (
               <p className="text-[13px]" style={{ color: "var(--ink-2)" }}>
-                No counter with this number.{" "}
-                <a href="/field/new-counter" className="link">Add it as a new counter →</a>
+                {t("No counter with this number.")}{" "}
+                <a href="/field/new-counter" className="link">{t("Add it as a new counter →")}</a>
               </p>
             ) : result.canVisit ? (
               <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: "var(--bg-soft)" }}>
@@ -139,12 +147,14 @@ export function BeatClient({
 
       {beat.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
-          {t("No counters assigned for today yet — your Sales Officer (SO) sets your daily beat.")}
+          {isAdmin
+            ? t("No beats assigned across the company today yet.")
+            : t("No counters assigned for today yet — your Sales Officer (SO) sets your daily beat.")}
         </p>
       ) : (
         <div className="space-y-2">
           {beat.map((c) => (
-            <div key={c.id} className="card card-hover flex items-center gap-3 p-3.5">
+            <div key={c.key} className="card card-hover flex items-center gap-3 p-3.5">
               <div className="flex h-10 w-10 flex-none items-center justify-center rounded-xl" style={{ background: "var(--accent-tint)" }}>
                 <PinIcon />
               </div>
@@ -154,6 +164,12 @@ export function BeatClient({
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>
                   {c.type} · {c.areaName}
+                  {c.repName && (
+                    <>
+                      {" · "}
+                      <span style={{ color: "var(--accent)" }}>{c.repName}</span>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="flex flex-none items-center gap-2">
@@ -174,17 +190,12 @@ export function BeatClient({
   );
 }
 
-function BeatStat({ label, value, target }: { label: string; value: number; target: number }) {
-  const pct = target === 0 ? 0 : Math.round((value / target) * 100);
+function BeatStat({ label, value }: { label: string; value: number }) {
   return (
     <div className="card p-4">
       <div className="eyebrow">{label}</div>
       <div className="mt-1.5 text-[26px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
         {value}
-        <span className="text-[14px] font-medium" style={{ color: "var(--ink-3)" }}>/{target}</span>
-      </div>
-      <div className="mt-2">
-        <ProgressBar pct={pct} />
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { areas, counters } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { EditCounterForm } from "./edit-form";
 
@@ -15,7 +16,8 @@ export default async function EditCounterPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Edit counter">You don&apos;t have Field Salesman ISR access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Edit counter")}>{t("You don't have Field Salesman ISR access.")}</Notice>;
   }
 
   const { id } = await params;
@@ -39,9 +41,10 @@ export default async function EditCounterPage({
   const isAdmin = user.accessRoles.includes("admin");
   const canEdit = isAdmin || counter.depotId === user.depot?.id;
   if (!canEdit) {
+    const t = await getT();
     return (
-      <Notice title="Edit counter">
-        This counter isn&apos;t in your depot, so you can&apos;t edit it.
+      <Notice title={t("Edit counter")}>
+        {t("This counter isn't in your depot, so you can't edit it.")}
       </Notice>
     );
   }

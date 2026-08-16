@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/lib/i18n/provider";
 
 /** Captures the device's real GPS via the browser Geolocation API. */
 export function GpsCapture({
@@ -10,13 +11,14 @@ export function GpsCapture({
   value: string;
   onCapture: (coords: string) => void;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   function capture() {
     setError("");
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setError("Location isn't available on this device.");
+      setError(t("Location isn't available on this device."));
       return;
     }
     setBusy(true);
@@ -28,8 +30,8 @@ export function GpsCapture({
       (err) => {
         setError(
           err.code === err.PERMISSION_DENIED
-            ? "Location permission denied — allow it and try again."
-            : "Couldn't get your location. Try again.",
+            ? t("Location permission denied — allow it and try again.")
+            : t("Couldn't get your location. Try again."),
         );
         setBusy(false);
       },
@@ -45,7 +47,7 @@ export function GpsCapture({
         onClick={capture}
         disabled={busy}
       >
-        {busy ? "Locating…" : value ? `Captured · ${value}` : "Capture Current Location"}
+        {busy ? t("Locating…") : value ? `${t("Captured ·")} ${value}` : t("Capture Current Location")}
       </button>
       {error && <p className="mt-2 text-[12px]" style={{ color: "var(--danger)" }}>{error}</p>}
     </div>

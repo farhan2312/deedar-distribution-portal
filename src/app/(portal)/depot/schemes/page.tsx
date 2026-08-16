@@ -2,9 +2,12 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { depotScope, getDepotSchemesData, pickDepot, type SchemeClaimRow } from "@/lib/depot/data";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { DepotSelect } from "../_components/depot-select";
 
+// English labels here are the dictionary KEYS — translated at render, not here,
+// so the object can stay module-scoped instead of rebuilding per request.
 const STATUS_STYLE: Record<SchemeClaimRow["status"], { label: string; bg: string; color: string }> = {
   paid: { label: "Paid", bg: "rgba(30,158,90,.1)", color: "var(--success)" },
   processing: { label: "Processing", bg: "rgba(178,94,0,.1)", color: "var(--warning)" },
@@ -19,38 +22,41 @@ export default async function DepotSchemesPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "dealer")) {
-    return <Notice title="Schemes">You don&apos;t have Depot access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Schemes")}>{t("You don't have Depot access.")}</Notice>;
   }
 
   const scope = await depotScope(user);
   if (scope.length === 0) {
-    return <Notice title="Schemes">You aren&apos;t mapped to a depot yet — ask Central Admin.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Schemes")}>{t("You aren't mapped to a depot yet — ask Central Admin.")}</Notice>;
   }
   const { depot: requested } = await searchParams;
   const depot = pickDepot(scope, requested)!;
   const { payoutToday, claims } = await getDepotSchemesData(depot.id);
+  const t = await getT();
 
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Schemes — {depot.name}
+            {t("Schemes")} — {depot.name}
           </h4>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            Retailer scheme payouts, settled via UPI.
+            {t("Retailer scheme payouts, settled via UPI.")}
           </p>
         </div>
         {scope.length > 1 && <DepotSelect options={scope} value={depot.id} />}
       </div>
 
       <div className="card mb-6 p-5" style={{ maxWidth: 340 }}>
-        <div className="eyebrow" style={{ fontSize: 11 }}>Scheme payouts today</div>
+        <div className="eyebrow" style={{ fontSize: 11 }}>{t("Scheme payouts today")}</div>
         <div className="mt-1 text-[28px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
           ₹{payoutToday.toLocaleString("en-IN")}
         </div>
         <div className="mt-1 text-[13px]" style={{ color: "var(--ink-2)" }}>
-          100% via UPI, zero cash through salesmen
+          {t("100% via UPI, zero cash through salesmen")}
         </div>
       </div>
 
@@ -59,14 +65,14 @@ export default async function DepotSchemesPage({
           <thead>
             <tr>
               {["Retailer", "Code", "Value", "Status", "When"].map((h) => (
-                <th key={h}>{h}</th>
+                <th key={h}>{t(h)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {claims.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ color: "var(--ink-3)" }}>No scheme claims yet.</td>
+                <td colSpan={5} style={{ color: "var(--ink-3)" }}>{t("No scheme claims yet.")}</td>
               </tr>
             ) : (
               claims.map((c) => {
@@ -78,7 +84,7 @@ export default async function DepotSchemesPage({
                     <td>₹{c.value.toLocaleString("en-IN")}</td>
                     <td>
                       <span className="chip" style={{ background: st.bg, color: st.color, borderColor: "transparent" }}>
-                        {st.label}
+                        {t(st.label)}
                       </span>
                     </td>
                     <td>{c.whenLabel}</td>

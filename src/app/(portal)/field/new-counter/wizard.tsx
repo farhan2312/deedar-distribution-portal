@@ -12,6 +12,7 @@ import {
   createCounterBySupervisor,
 } from "@/lib/supervisor/actions";
 import { ALL_COUNTER_TYPES } from "@/lib/field/counter-types";
+import { useT } from "@/lib/i18n/provider";
 import { GpsCapture } from "../_components/gps-capture";
 
 export type AreaOption = { id: string; name: string };
@@ -33,6 +34,7 @@ type Step = "duplicate" | "details" | "review";
 
 export function NewCounterWizard(props: WizardProps) {
   const router = useRouter();
+  const t = useT();
   const isSupervisor = props.variant === "supervisor";
   const backHref = isSupervisor ? "/supervisor/assign-beat" : "/field/beat";
   const doneHref = isSupervisor ? "/supervisor/assign-beat" : "/field/beat";
@@ -41,7 +43,7 @@ export function NewCounterWizard(props: WizardProps) {
   // Supervisor variant of this wizard does.
   const counterTypes: NewCounterInput["type"][] = isSupervisor
     ? ALL_COUNTER_TYPES
-    : ALL_COUNTER_TYPES.filter((t) => t !== "Wholesale");
+    : ALL_COUNTER_TYPES.filter((ct) => ct !== "Wholesale");
   const [step, setStep] = useState<Step>("duplicate");
   const [draft, setDraft] = useState({
     name: "",
@@ -107,7 +109,7 @@ export function NewCounterWizard(props: WizardProps) {
   function goDetails() {
     setError("");
     if (!/^\d{10}$/.test(draft.phone)) {
-      setError("Enter a valid 10-digit mobile number.");
+      setError(t("Enter a valid 10-digit mobile number."));
       return;
     }
     if (checking) return; // wait for the in-flight lookup
@@ -118,11 +120,11 @@ export function NewCounterWizard(props: WizardProps) {
   function goReview() {
     setError("");
     if (!draft.name.trim() || !draft.depotId || !draft.areaId || !draft.type) {
-      setError("Fill name, depot, area and type.");
+      setError(t("Fill name, depot, area and type."));
       return;
     }
     if (draft.type === "Others" && !draft.typeOther.trim()) {
-      setError("Enter the counter type.");
+      setError(t("Enter the counter type."));
       return;
     }
     setStep("review");
@@ -169,7 +171,7 @@ export function NewCounterWizard(props: WizardProps) {
             written would leave the rep unsure whether it saved. */}
         <button
           onClick={() => router.push(backHref)}
-          aria-label="Back"
+          aria-label={t("Back")}
           disabled={busy}
           className="flex h-9 w-9 flex-none items-center justify-center rounded-full border-0 text-white disabled:opacity-50"
           style={{ background: "rgba(255,255,255,.16)" }}
@@ -179,7 +181,7 @@ export function NewCounterWizard(props: WizardProps) {
           </svg>
         </button>
         <div className="text-[18px] font-bold" style={{ fontFamily: "var(--font-display)" }}>
-          Add New Counter
+          {t("Add New Counter")}
         </div>
       </div>
 
@@ -197,7 +199,7 @@ export function NewCounterWizard(props: WizardProps) {
                 className="mt-1.5 text-[11.5px] font-semibold"
                 style={{ color: done ? "var(--accent)" : "var(--ink-3)" }}
               >
-                {s.label}
+                {t(s.label)}
               </div>
             </div>
           );
@@ -207,19 +209,18 @@ export function NewCounterWizard(props: WizardProps) {
       <div className="px-6 pt-2 pb-7">
         {step === "duplicate" && (
           <>
-            <h4 className="page-title mt-4 mb-1">Check for duplicates</h4>
+            <h4 className="page-title mt-4 mb-1">{t("Check for duplicates")}</h4>
             <p className="mb-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
-              Search by mobile number first — it&apos;s the unique ID for a
-              counter, unlike free-text shop names.
+              {t("Search by mobile number first — it's the unique ID for a counter, unlike free-text shop names.")}
             </p>
             <div className="field mb-2.5">
-              <label>Owner / Counter Mobile Number *</label>
+              <label>{t("Owner / Counter Mobile Number *")}</label>
               <input
                 className="inp"
                 type="tel"
                 inputMode="tel"
                 maxLength={10}
-                placeholder="10-digit mobile"
+                placeholder={t("10-digit mobile")}
                 value={draft.phone}
                 onChange={(e) => {
                   const next = e.target.value.replace(/\D/g, "").slice(0, 10);
@@ -230,18 +231,18 @@ export function NewCounterWizard(props: WizardProps) {
                 }}
               />
               {checking && (
-                <p className="mt-1.5 text-[12px]" style={{ color: "var(--ink-3)" }}>Checking…</p>
+                <p className="mt-1.5 text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Checking…")}</p>
               )}
               {!checking && !dup && /^\d{10}$/.test(draft.phone) && (
                 <p className="mt-1.5 text-[12px]" style={{ color: "var(--success)" }}>
-                  ✓ New number — no existing counter with this mobile.
+                  {t("✓ New number — no existing counter with this mobile.")}
                 </p>
               )}
             </div>
             {dup && (
               <div className="mb-3.5 rounded-xl p-3.5" style={{ background: "rgba(178,94,0,.1)" }}>
                 <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--warning)" }}>
-                  This mobile number is already a counter
+                  {t("This mobile number is already a counter")}
                 </div>
                 <div className="text-[13px]" style={{ color: "var(--ink-1)" }}>
                   {dup.name} · {dup.type} · {dup.area}
@@ -256,12 +257,12 @@ export function NewCounterWizard(props: WizardProps) {
                       router.refresh();
                     }}
                   >
-                    Add a visit to this counter →
+                    {t("Add a visit to this counter →")}
                   </button>
                 )}
                 {dup.id && dup.canVisit === false && (
                   <p className="mt-2 text-[12px]" style={{ color: "var(--ink-2)" }}>
-                    It&apos;s in another depot, so you can&apos;t add a visit to it from here.
+                    {t("It's in another depot, so you can't add a visit to it from here.")}
                   </p>
                 )}
               </div>
@@ -272,28 +273,28 @@ export function NewCounterWizard(props: WizardProps) {
               onClick={goDetails}
               disabled={busy || checking || !!dup || !/^\d{10}$/.test(draft.phone)}
             >
-              Continue
+              {t("Continue")}
             </button>
           </>
         )}
 
         {step === "details" && (
           <>
-            <h4 className="page-title mt-4 mb-4">Counter Identity</h4>
-            <Field label="Name of Counter/Point of Contact *">
+            <h4 className="page-title mt-4 mb-4">{t("Counter Identity")}</h4>
+            <Field label={t("Name of Counter/Point of Contact *")}>
               <input
                 className="inp"
                 type="text"
-                placeholder="e.g. Shree Ganesh Kirana"
+                placeholder={t("e.g. Shree Ganesh Kirana")}
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               />
             </Field>
-            <Field label="Address">
+            <Field label={t("Address")}>
               <input
                 className="inp"
                 type="text"
-                placeholder="Street, landmark, village"
+                placeholder={t("Street, landmark, village")}
                 value={draft.address}
                 onChange={(e) => setDraft({ ...draft, address: e.target.value })}
               />
@@ -301,37 +302,37 @@ export function NewCounterWizard(props: WizardProps) {
 
             {props.mode === "locked" ? (
               <div className="mb-3.5 grid grid-cols-2 gap-3.5">
-                <Field label="C&F">
+                <Field label={t("C&F")}>
                   <input className="inp" type="text" value={cnfName} disabled />
                 </Field>
-                <Field label="Depot">
+                <Field label={t("Depot")}>
                   <input className="inp" type="text" value={depotName} disabled />
                 </Field>
               </div>
             ) : (
               <div className="mb-3.5 grid grid-cols-2 gap-3.5">
                 <div className="field">
-                  <label>C&F *</label>
+                  <label>{t("C&F *")}</label>
                   <select
                     className="inp"
                     value={draft.cnfId}
                     onChange={(e) => setDraft({ ...draft, cnfId: e.target.value, depotId: "", areaId: "" })}
                   >
-                    <option value="">Select</option>
+                    <option value="">{t("Select")}</option>
                     {props.cnfs.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
                 </div>
                 <div className="field">
-                  <label>Depot *</label>
+                  <label>{t("Depot *")}</label>
                   <select
                     className="inp"
                     value={draft.depotId}
                     disabled={!draft.cnfId}
                     onChange={(e) => setDraft({ ...draft, depotId: e.target.value, areaId: "" })}
                   >
-                    <option value="">{draft.cnfId ? "Select" : "Pick a C&F first"}</option>
+                    <option value="">{draft.cnfId ? t("Select") : t("Pick a C&F first")}</option>
                     {depotOptionsForCnf.map((d) => (
                       <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
@@ -341,14 +342,14 @@ export function NewCounterWizard(props: WizardProps) {
             )}
 
             <div className="field mb-3.5">
-              <label>Area *</label>
+              <label>{t("Area *")}</label>
               <select
                 className="inp"
                 value={draft.areaId}
                 disabled={props.mode === "open" && !draft.depotId}
                 onChange={(e) => setDraft({ ...draft, areaId: e.target.value })}
               >
-                <option value="">Select</option>
+                <option value="">{t("Select")}</option>
                 {areaOptions.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
@@ -356,15 +357,15 @@ export function NewCounterWizard(props: WizardProps) {
             </div>
 
             <div className="field mb-4">
-              <label>Type of Counter *</label>
+              <label>{t("Type of Counter *")}</label>
               <div className="flex flex-wrap gap-2">
-                {counterTypes.map((t) => {
-                  const active = draft.type === t;
+                {counterTypes.map((ct) => {
+                  const active = draft.type === ct;
                   return (
                     <button
-                      key={t}
+                      key={ct}
                       onClick={() =>
-                        setDraft({ ...draft, type: t, typeOther: t === "Others" ? draft.typeOther : "" })
+                        setDraft({ ...draft, type: ct, typeOther: ct === "Others" ? draft.typeOther : "" })
                       }
                       className="chip"
                       style={{
@@ -375,7 +376,7 @@ export function NewCounterWizard(props: WizardProps) {
                         fontSize: 13,
                       }}
                     >
-                      {t}
+                      {t(ct)}
                     </button>
                   );
                 })}
@@ -384,7 +385,7 @@ export function NewCounterWizard(props: WizardProps) {
                 <input
                   className="inp mt-2.5"
                   type="text"
-                  placeholder="Enter counter type, e.g. Medical Store"
+                  placeholder={t("Enter counter type, e.g. Medical Store")}
                   maxLength={60}
                   autoFocus
                   value={draft.typeOther}
@@ -394,17 +395,17 @@ export function NewCounterWizard(props: WizardProps) {
             </div>
             <div className="mb-5 rounded-2xl p-4" style={{ background: "var(--accent-tint)" }}>
               <label className="mb-2.5 block text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>
-                GPS Coordinates *
+                {t("GPS Coordinates *")}
               </label>
               <GpsCapture value={draft.gps} onCapture={(gps) => setDraft({ ...draft, gps })} />
             </div>
             {error && <ErrorText>{error}</ErrorText>}
             <div className="flex gap-3">
               <button className="btn btn-secondary flex-1 justify-center py-3.5" onClick={() => setStep("duplicate")}>
-                Back
+                {t("Back")}
               </button>
               <button className="btn btn-primary flex-1 justify-center py-3.5" onClick={goReview}>
-                Review
+                {t("Review")}
               </button>
             </div>
           </>
@@ -412,16 +413,16 @@ export function NewCounterWizard(props: WizardProps) {
 
         {step === "review" && (
           <>
-            <h4 className="page-title mt-4 mb-4">Review &amp; submit</h4>
+            <h4 className="page-title mt-4 mb-4">{t("Review & submit")}</h4>
             <div className="mb-5 rounded-2xl p-5" style={{ background: "var(--bg-soft)" }}>
               <div className="grid grid-cols-2 gap-x-5 gap-y-3.5 text-[13px]">
-                <Review k="Name" v={draft.name} />
-                <Review k="Type" v={draft.type === "Others" ? draft.typeOther.trim() : draft.type} />
-                <Review k="Address" v={draft.address || "—"} />
-                <Review k="C&F" v={cnfName} />
-                <Review k="Depot" v={depotName} />
-                <Review k="Area" v={areaName} />
-                <Review k="GPS" v={draft.gps || "—"} />
+                <Review k={t("Name")} v={draft.name} />
+                <Review k={t("Type")} v={draft.type === "Others" ? draft.typeOther.trim() : t(draft.type)} />
+                <Review k={t("Address")} v={draft.address || "—"} />
+                <Review k={t("C&F")} v={cnfName} />
+                <Review k={t("Depot")} v={depotName} />
+                <Review k={t("Area")} v={areaName} />
+                <Review k={t("GPS")} v={draft.gps || "—"} />
               </div>
             </div>
             {error && <ErrorText>{error}</ErrorText>}
@@ -431,10 +432,10 @@ export function NewCounterWizard(props: WizardProps) {
                 onClick={() => setStep("details")}
                 disabled={busy}
               >
-                Back
+                {t("Back")}
               </button>
               <button className="btn btn-primary flex-1 justify-center py-3.5" onClick={submit} disabled={busy}>
-                {busy ? "Submitting…" : "Submit counter"}
+                {busy ? t("Submitting…") : t("Submit counter")}
               </button>
             </div>
           </>

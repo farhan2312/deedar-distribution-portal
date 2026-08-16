@@ -1,6 +1,8 @@
 // Presentational (server-compatible) day-log tables shared by the Supervisor
 // day-log screen and the Admin company-wide view on the field day-log page.
 
+import { getT } from "@/lib/i18n/server";
+
 export type DayState = "complete" | "running" | "absent";
 
 export function dayState(startAt: Date | null, endAt: Date | null): DayState {
@@ -27,16 +29,17 @@ const STATE_STYLE: Record<DayState, { label: string; bg: string; color: string }
   absent: { label: "Not started", bg: "var(--bg-soft)", color: "var(--ink-3)" },
 };
 
-export function DayLogTables({ today, history }: { today: TodayRow[]; history: HistoryRow[] }) {
+export async function DayLogTables({ today, history }: { today: TodayRow[]; history: HistoryRow[] }) {
+  const t = await getT();
   return (
     <>
-      <SectionLabel>Today</SectionLabel>
+      <SectionLabel>{t("Today")}</SectionLabel>
       <div className="table-wrap mb-8">
         <table className="table">
           <thead>
             <tr>
               {["Salesman", "Start time", "End time", "On Job", "Status"].map((h) => (
-                <th key={h}>{h}</th>
+                <th key={h}>{t(h)}</th>
               ))}
             </tr>
           </thead>
@@ -48,7 +51,7 @@ export function DayLogTables({ today, history }: { today: TodayRow[]; history: H
                 <td>{r.endLabel}</td>
                 <td>{r.onJobLabel}</td>
                 <td>
-                  <StatusChip state={r.state} forced={r.forced} />
+                  <StatusChip state={r.state} forced={r.forced} t={t} />
                 </td>
               </tr>
             ))}
@@ -56,20 +59,20 @@ export function DayLogTables({ today, history }: { today: TodayRow[]; history: H
         </table>
       </div>
 
-      <SectionLabel>Full history — all salesmen</SectionLabel>
+      <SectionLabel>{t("Full history — all salesmen")}</SectionLabel>
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
               {["Salesman", "Date", "Start", "End", "On Job", "Status"].map((h) => (
-                <th key={h}>{h}</th>
+                <th key={h}>{t(h)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {history.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ color: "var(--ink-3)" }}>No earlier days recorded.</td>
+                <td colSpan={6} style={{ color: "var(--ink-3)" }}>{t("No earlier days recorded.")}</td>
               </tr>
             ) : (
               history.map((h) => (
@@ -80,7 +83,7 @@ export function DayLogTables({ today, history }: { today: TodayRow[]; history: H
                   <td>{h.endLabel}</td>
                   <td>{h.onJobLabel}</td>
                   <td>
-                    <StatusChip state={h.state} forced={h.forced} />
+                    <StatusChip state={h.state} forced={h.forced} t={t} />
                   </td>
                 </tr>
               ))
@@ -92,20 +95,28 @@ export function DayLogTables({ today, history }: { today: TodayRow[]; history: H
   );
 }
 
-function StatusChip({ state, forced }: { state: DayState; forced: boolean }) {
+function StatusChip({
+  state,
+  forced,
+  t,
+}: {
+  state: DayState;
+  forced: boolean;
+  t: (key: string) => string;
+}) {
   const s = STATE_STYLE[state];
   return (
     <span className="inline-flex items-center gap-1.5">
       <span className="chip" style={{ background: s.bg, color: s.color, borderColor: "transparent" }}>
-        {s.label}
+        {t(s.label)}
       </span>
       {forced && (
         <span
           className="chip"
           style={{ background: "rgba(178,94,0,.12)", color: "#B25E00", borderColor: "transparent" }}
-          title="This day was force-closed by the supervisor"
+          title={t("This day was force-closed by the supervisor")}
         >
-          SO-closed
+          {t("SO-closed")}
         </span>
       )}
     </span>

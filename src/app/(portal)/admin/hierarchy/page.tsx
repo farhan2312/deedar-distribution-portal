@@ -1,11 +1,13 @@
 import { db } from "@/db";
 import { areas, cnfs, counters, depots, states, users } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin/guard";
+import { getT } from "@/lib/i18n/server";
 import { AddCnfForm, AddStateForm } from "./hierarchy-forms";
 import { HierarchyTree, type StateNode } from "./tree";
 
 export default async function AdminHierarchyPage() {
   await requireAdmin();
+  const t = await getT();
 
   const [allStates, allCnfs, allDepots, allAreas, allCounters, allUsers] = await Promise.all([
     db.select().from(states),
@@ -56,26 +58,26 @@ export default async function AdminHierarchyPage() {
     <div className="mx-auto max-w-4xl">
       <div className="card mb-5 p-4">
         <div className="text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-          Headquarters
+          {t("Headquarters")}
         </div>
         <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
-          Kanpur · {allStates.length} state{allStates.length === 1 ? "" : "s"} onboarded
+          {t("Kanpur")} · {allStates.length} {t(allStates.length === 1 ? "state" : "states")} {t("onboarded")}
         </div>
       </div>
 
       <div className="mb-6 grid gap-5 sm:grid-cols-2">
         <div className="card p-5">
           <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Add a state
+            {t("Add a state")}
           </h6>
           <AddStateForm />
         </div>
         <div className="card p-5">
           <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Add a C&amp;F HQ
+            {t("Add a C&F HQ")}
           </h6>
           {allStates.length === 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>Add a state first.</p>
+            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("Add a state first.")}</p>
           ) : (
             <AddCnfForm states={allStates.map((s) => ({ id: s.id, name: s.name }))} />
           )}

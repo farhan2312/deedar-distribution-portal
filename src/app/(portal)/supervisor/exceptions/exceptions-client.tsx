@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { forceEndDay } from "@/lib/supervisor/actions";
+import { useT } from "@/lib/i18n/provider";
 
 export type ExceptionRow = {
   repUserId: string;
@@ -22,12 +23,13 @@ function toLocalInput(d: Date): string {
 }
 
 export function ExceptionsClient({ rows }: { rows: ExceptionRow[] }) {
+  const t = useT();
   if (rows.length === 0) {
     return (
       <div className="card p-6 text-center">
-        <p className="text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>No open day logs 🎉</p>
+        <p className="text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>{t("No open day logs 🎉")}</p>
         <p className="mt-1 text-[13px]" style={{ color: "var(--ink-3)" }}>
-          Everyone who started a day has clocked out.
+          {t("Everyone who started a day has clocked out.")}
         </p>
       </div>
     );
@@ -44,6 +46,7 @@ export function ExceptionsClient({ rows }: { rows: ExceptionRow[] }) {
 
 function ExceptionCard({ row }: { row: ExceptionRow }) {
   const router = useRouter();
+  const t = useT();
   const [endValue, setEndValue] = useState(() => toLocalInput(new Date()));
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -52,7 +55,7 @@ function ExceptionCard({ row }: { row: ExceptionRow }) {
     setError(null);
     const local = new Date(endValue);
     if (Number.isNaN(local.getTime())) {
-      setError("Pick a valid end time.");
+      setError(t("Pick a valid end time."));
       return;
     }
     start(async () => {
@@ -75,18 +78,18 @@ function ExceptionCard({ row }: { row: ExceptionRow }) {
             </span>
             {!row.isToday && (
               <span className="chip" style={{ background: "rgba(199,38,59,.1)", color: "#C7263B", borderColor: "transparent" }}>
-                Past day
+                {t("Past day")}
               </span>
             )}
           </div>
           <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
-            {row.dateLabel} · started {row.startLabel} · open {row.elapsedLabel}
+            {row.dateLabel} · {t("started")} {row.startLabel} · {t("open")} {row.elapsedLabel}
           </div>
         </div>
 
         <div className="flex flex-wrap items-end gap-2.5">
           <div className="field mb-0">
-            <label>End time</label>
+            <label>{t("End time")}</label>
             <input
               className="inp"
               type="datetime-local"
@@ -96,7 +99,7 @@ function ExceptionCard({ row }: { row: ExceptionRow }) {
             />
           </div>
           <button className="btn btn-primary" onClick={submit} disabled={pending}>
-            {pending ? "Closing…" : "Force-close day"}
+            {pending ? t("Closing…") : t("Force-close day")}
           </button>
         </div>
       </div>

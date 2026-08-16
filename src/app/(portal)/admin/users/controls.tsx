@@ -14,6 +14,7 @@ import {
   toggleUserDepot,
   type AddUserResult,
 } from "@/lib/admin/actions";
+import { useT } from "@/lib/i18n/provider";
 import { ConfirmDelete } from "@/components/ui/confirm-delete";
 
 /**
@@ -23,6 +24,7 @@ import { ConfirmDelete } from "@/components/ui/confirm-delete";
  * itself on success via a `key` bumped from the result.
  */
 export function AddUserForm() {
+  const t = useT();
   const [state, formAction, pending] = useActionState<AddUserResult | null, FormData>(
     async (_prev, fd) => addUser(fd),
     null,
@@ -31,19 +33,19 @@ export function AddUserForm() {
     <form action={formAction} key={state?.ok ? state.message : "form"}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="field">
-          <label>Name</label>
-          <input className="inp" type="text" name="name" placeholder="Full name" required />
+          <label>{t("Name")}</label>
+          <input className="inp" type="text" name="name" placeholder={t("Full name")} required />
         </div>
         <div className="field">
-          <label>Mobile</label>
-          <input className="inp" type="tel" name="phone" placeholder="10-digit mobile" maxLength={10} required />
+          <label>{t("Mobile")}</label>
+          <input className="inp" type="tel" name="phone" placeholder={t("10-digit mobile")} maxLength={10} required />
         </div>
       </div>
       <button className="btn btn-primary mt-4" type="submit" disabled={pending}>
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" />
         </svg>
-        {pending ? "Adding…" : "Add user"}
+        {pending ? t("Adding…") : t("Add user")}
       </button>
 
       {state && (
@@ -68,7 +70,7 @@ export function AddUserForm() {
         <div className="mt-4 flex items-start gap-2.5 rounded-xl px-3.5 py-3" style={{ background: "var(--bg-soft)" }}>
           <svg className="mt-0.5 h-4 w-4 flex-none" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 16v-4M12 8h.01" /></svg>
           <p className="text-[12.5px]" style={{ color: "var(--ink-2)" }}>
-            Password is the mobile number until first login; assign access below.
+            {t("Password is the mobile number until first login; assign access below.")}
           </p>
         </div>
       )}
@@ -185,6 +187,7 @@ export function SupervisorDepotPicker({
   groups: DepotGroup[];
   checkedDepotIds: Set<string>;
 }) {
+  const t = useT();
   const [cnfId, setCnfId] = useState(() => {
     for (const g of groups) {
       if (g.depots.some((d) => checkedDepotIds.has(d.id))) return g.cnfId;
@@ -204,7 +207,7 @@ export function SupervisorDepotPicker({
         value={cnfId}
         onChange={(e) => setCnfId(e.target.value)}
       >
-        <option value="">Select C&amp;F</option>
+        <option value="">{t("Select C&F")}</option>
         {groups.map((g) => (
           <option key={g.cnfId} value={g.cnfId}>{g.cnfName}</option>
         ))}
@@ -218,7 +221,7 @@ export function SupervisorDepotPicker({
       )}
       {otherCheckedCount > 0 && (
         <p className="text-[11px]" style={{ color: "var(--warning)" }}>
-          + {otherCheckedCount} depot{otherCheckedCount === 1 ? "" : "s"} checked under another C&amp;F (legacy) — switch C&amp;F above to see them.
+          + {otherCheckedCount} {t(otherCheckedCount === 1 ? "depot checked under another C&F (legacy) — switch C&F above to see them." : "depots checked under another C&F (legacy) — switch C&F above to see them.")}
         </p>
       )}
     </div>
@@ -248,6 +251,7 @@ export function DepotSelect({
   value: string | null;
   groups: DepotGroup[];
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [cnfId, setCnfId] = useState(() => groupFor(groups, value)?.cnfId ?? "");
   const depotOptions = groups.find((g) => g.cnfId === cnfId)?.depots ?? [];
@@ -264,7 +268,7 @@ export function DepotSelect({
         value={cnfId}
         onChange={(e) => setCnfId(e.target.value)}
       >
-        <option value="">Select C&amp;F</option>
+        <option value="">{t("Select C&F")}</option>
         {groups.map((g) => (
           <option key={g.cnfId} value={g.cnfId}>{g.cnfName}</option>
         ))}
@@ -283,7 +287,7 @@ export function DepotSelect({
           start(() => setUserDepot(userId, fd));
         }}
       >
-        <option value="">{cnfId ? "Select depot" : "Pick a C&F first"}</option>
+        <option value="">{cnfId ? t("Select depot") : t("Pick a C&F first")}</option>
         {depotOptions.map((d) => (
           <option key={d.id} value={d.id}>{d.name}</option>
         ))}
@@ -302,6 +306,7 @@ export function CnfSelect({
   value: string | null;
   options: { id: string; name: string }[];
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   return (
     <select
@@ -315,7 +320,7 @@ export function CnfSelect({
         start(() => setUserCnf(userId, fd));
       }}
     >
-      <option value="">Select C&amp;F HQ</option>
+      <option value="">{t("Select C&F HQ")}</option>
       {options.map((o) => (
         <option key={o.id} value={o.id}>{o.name}</option>
       ))}
@@ -333,6 +338,7 @@ export function SupervisorSelect({
   value: string | null;
   options: { id: string; name: string }[];
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   return (
     <select
@@ -346,7 +352,7 @@ export function SupervisorSelect({
         start(() => setUserReportsTo(userId, fd));
       }}
     >
-      <option value="">Select supervisor</option>
+      <option value="">{t("Select supervisor")}</option>
       {options.map((o) => (
         <option key={o.id} value={o.id}>{o.name}</option>
       ))}
@@ -360,12 +366,13 @@ export function SupervisorSelect({
  * keeping every visit and counter; reactivating restores access.
  */
 export function ActiveToggle({ userId, active }: { userId: string; active: boolean }) {
+  const t = useT();
   const [pending, start] = useTransition();
   return (
     <button
       type="button"
       disabled={pending}
-      title={active ? "Deactivate — blocks login, keeps their data" : "Reactivate this user"}
+      title={active ? t("Deactivate — blocks login, keeps their data") : t("Reactivate this user")}
       onClick={() => start(() => setUserActive(userId, !active))}
       className="flex h-9 items-center justify-center rounded-lg px-3.5 text-[12.5px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50"
       style={
@@ -376,7 +383,7 @@ export function ActiveToggle({ userId, active }: { userId: string; active: boole
             { border: "1px solid var(--success)", color: "var(--success)", background: "var(--surface)" }
       }
     >
-      {pending ? "…" : active ? "Deactivate" : "Activate"}
+      {pending ? "…" : active ? t("Deactivate") : t("Activate")}
     </button>
   );
 }
@@ -384,15 +391,16 @@ export function ActiveToggle({ userId, active }: { userId: string; active: boole
 /** Trash-icon delete. Uses the app-wide confirmation dialog rather than the
  * native `confirm()`, so every delete in the portal looks and behaves alike. */
 export function DeleteUserButton({ userId, userName }: { userId: string; userName?: string }) {
+  const t = useT();
   return (
     <ConfirmDelete
       action={async () => {
         await removeUser(userId);
       }}
-      itemLabel="user"
+      itemLabel={t("user")}
       itemName={userName}
       trigger="icon"
-      warning="This also permanently deletes all their visits and day logs. To keep their history, deactivate them instead."
+      warning={t("This also permanently deletes all their visits and day logs. To keep their history, deactivate them instead.")}
     />
   );
 }
@@ -414,6 +422,7 @@ export function UsersPanel({
   children: React.ReactNode;
   cnfOptions: { id: string; name: string }[];
 }) {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const [q, setQ] = useState("");
   const [cnf, setCnf] = useState("all");
@@ -442,8 +451,8 @@ export function UsersPanel({
             </svg>
           </span>
           <div>
-            <div className="text-[17px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>Users</div>
-            <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>Manage roles, mapping and reporting structure.</div>
+            <div className="text-[17px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>{t("Users")}</div>
+            <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("Manage roles, mapping and reporting structure.")}</div>
           </div>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
@@ -455,9 +464,9 @@ export function UsersPanel({
               setCnf(e.target.value);
               apply(q, e.target.value);
             }}
-            aria-label="Filter by C&F HQ"
+            aria-label={t("Filter by C&F HQ")}
           >
-            <option value="all">All C&amp;F HQs</option>
+            <option value="all">{t("All C&F HQs")}</option>
             {cnfOptions.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
@@ -471,7 +480,7 @@ export function UsersPanel({
               style={{ paddingLeft: 36 }}
               type="search"
               value={q}
-              placeholder="Search by name or mobile…"
+              placeholder={t("Search by name or mobile…")}
               onChange={(e) => {
                 setQ(e.target.value);
                 apply(e.target.value, cnf);

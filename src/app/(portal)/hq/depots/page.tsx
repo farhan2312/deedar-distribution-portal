@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { deleteArea, deleteDepot } from "@/lib/hq/actions";
 import { getDeleteImpact } from "@/lib/admin/actions";
 import { resolveSelectedCnf } from "@/lib/hq/scope";
+import { getT } from "@/lib/i18n/server";
 import { ConfirmDelete } from "@/components/ui/confirm-delete";
 import { AddAreaForm, AddDepotForm } from "./depot-forms";
 import { Notice } from "@/components/ui/notice";
@@ -20,8 +21,9 @@ export default async function HqDepotsPage({
   if (!user) redirect("/login");
 
   const isAdmin = user.accessRoles.includes("admin");
+  const t = await getT();
   if (!user.accessRoles.includes("hq") && !isAdmin) {
-    return <Notice title="Depots & Areas">You don&apos;t have C&amp;F HQ access.</Notice>;
+    return <Notice title={t("Depots & Areas")}>{t("You don't have C&F HQ access.")}</Notice>;
   }
 
   const { cnf: requestedCnfId } = await searchParams;
@@ -29,7 +31,7 @@ export default async function HqDepotsPage({
   const selectedCnf = resolveSelectedCnf(allCnfs, requestedCnfId, user.cnf?.id ?? null, isAdmin);
 
   if (!selectedCnf) {
-    return <Notice title="Depots & Areas">No C&amp;F HQ set up yet.</Notice>;
+    return <Notice title={t("Depots & Areas")}>{t("No C&F HQ set up yet.")}</Notice>;
   }
 
   const cnfDepots = await db
@@ -55,7 +57,7 @@ export default async function HqDepotsPage({
         {isAdmin && allCnfs.length > 1 && (
           <>
             <span className="flex-1" />
-            <label className="text-[12px]">C&amp;F HQ</label>
+            <label className="text-[12px]">{t("C&F HQ")}</label>
             <CnfPicker options={allCnfs} value={selectedCnf.id} />
           </>
         )}
@@ -64,16 +66,16 @@ export default async function HqDepotsPage({
       <div className="mb-7 grid gap-5 sm:grid-cols-2">
         <div className="card p-5">
           <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Add a depot
+            {t("Add a depot")}
           </h6>
           <AddDepotForm cnfId={selectedCnf.id} />
         </div>
         <div className="card p-5">
           <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Add an area
+            {t("Add an area")}
           </h6>
           {cnfDepots.length === 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>Add a depot first.</p>
+            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("Add a depot first.")}</p>
           ) : (
             <AddAreaForm
               cnfId={selectedCnf.id}
@@ -84,10 +86,10 @@ export default async function HqDepotsPage({
       </div>
 
       <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        Current structure
+        {t("Current structure")}
       </h6>
       {cnfDepots.length === 0 ? (
-        <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>No depots yet.</p>
+        <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No depots yet.")}</p>
       ) : (
         <div className="space-y-2.5">
           {cnfDepots.map((d) => {
@@ -119,7 +121,7 @@ export default async function HqDepotsPage({
                     </span>
                   ))}
                   {depotAreas.length === 0 && (
-                    <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>No areas yet</span>
+                    <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("No areas yet")}</span>
                   )}
                 </div>
               </div>

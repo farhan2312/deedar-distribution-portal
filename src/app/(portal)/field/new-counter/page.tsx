@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { areas, cnfs, depots } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { NewCounterWizard } from "./wizard";
 
@@ -11,7 +12,8 @@ export default async function NewCounterPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="New Counter">You don&apos;t have Field Salesman ISR access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("New Counter")}>{t("You don't have Field Salesman ISR access.")}</Notice>;
   }
 
   const isAdmin = user.accessRoles.includes("admin");
@@ -40,10 +42,10 @@ export default async function NewCounterPage() {
 
   // A field rep belongs to exactly one depot — depot and C&F auto-fill and lock.
   if (!user.depot) {
+    const t = await getT();
     return (
-      <Notice title="New Counter">
-        You aren&apos;t assigned to a depot yet — ask your Sales Officer to map
-        you to one.
+      <Notice title={t("New Counter")}>
+        {t("You aren't assigned to a depot yet — ask your Sales Officer to map you to one.")}
       </Notice>
     );
   }

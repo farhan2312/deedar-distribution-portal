@@ -228,6 +228,539 @@ const HI: Record<string, string> = {
   "Markers grey out after": "मार्कर धूसर हो जाते हैं",
   "minutes without an update.": "मिनट बिना अपडेट के बाद।",
 
+  // ── Field: Beat (client + server) ──
+  // "Beat", "Visits today", "New counters", "Check in", "Open", "Visited",
+  // "remaining", "Find a counter by mobile number", "Search", "Searching…",
+  // "Today's Beat", "Namaste", and the "No counters assigned…" empty state
+  // are already above under Field: Beat / Field: Day Log.
+  "10-digit mobile": "10 अंकों का मोबाइल",
+  "No counter with this number.": "इस नंबर से कोई दुकान नहीं मिली।",
+  "Add it as a new counter →": "इसे नई दुकान के रूप में जोड़ें →",
+  "This mobile is registered to a counter in another depot — you can't access it from here.":
+    "यह नंबर दूसरे डिपो की दुकान से जुड़ा है — आप यहाँ से एक्सेस नहीं कर सकते।",
+  "Found in your depot: check in. In another depot: not accessible. Not found: add it as a new counter.":
+    "आपके डिपो में मिली: चेक-इन करें। दूसरे डिपो में: पहुँच नहीं। नहीं मिली: नई दुकान जोड़ें।",
+  "No beats assigned across the company today yet.":
+    "आज पूरे कंपनी में कोई बीट असाइन नहीं है।",
+  "You aren't assigned to a depot yet — ask your Sales Officer to map you to one.":
+    "आपको अभी तक किसी डिपो से नहीं जोड़ा गया — अपने सेल्स ऑफिसर से पूछें।",
+
+  // ── Field: Day Log server-only labels ──
+  "Not started yet": "अभी शुरू नहीं हुआ",
+  "Not ended yet": "अभी समाप्त नहीं हुआ",
+
+  // ── Field: New Counter wizard ──
+  // "New Counter" already defined above under Sidebar nav items.
+  "Add New Counter": "नई दुकान जोड़ें",
+  "Check Duplicate": "डुप्लीकेट जाँच",
+  "Counter Details": "दुकान का विवरण",
+  Review: "समीक्षा",
+  "Check for duplicates": "डुप्लीकेट के लिए जाँचें",
+  "Search by mobile number first — it's the unique ID for a counter, unlike free-text shop names.":
+    "पहले मोबाइल नंबर से खोजें — यही दुकान की विशिष्ट पहचान है।",
+  "Owner / Counter Mobile Number *": "मालिक / दुकान का मोबाइल नंबर *",
+  "Checking…": "जाँच हो रही है…",
+  "✓ New number — no existing counter with this mobile.":
+    "✓ नया नंबर — इस मोबाइल से कोई मौजूदा दुकान नहीं है।",
+  "This mobile number is already a counter": "यह मोबाइल नंबर पहले से एक दुकान है",
+  "Add a visit to this counter →": "इस दुकान में विज़िट जोड़ें →",
+  "It's in another depot, so you can't add a visit to it from here.":
+    "यह दूसरे डिपो में है, इसलिए आप यहाँ से विज़िट नहीं जोड़ सकते।",
+  Continue: "आगे बढ़ें",
+  "Counter Identity": "दुकान की पहचान",
+  "Name of Counter/Point of Contact *": "दुकान का नाम / संपर्क व्यक्ति *",
+  "e.g. Shree Ganesh Kirana": "जैसे श्री गणेश किराना",
+  Address: "पता",
+  "Street, landmark, village": "गली, लैंडमार्क, गाँव",
+  "C&F": "C&F",
+  "C&F *": "C&F *",
+  "Depot *": "डिपो *",
+  Select: "चुनें",
+  "Pick a C&F first": "पहले C&F चुनें",
+  "Area *": "क्षेत्र *",
+  "Type of Counter *": "दुकान का प्रकार *",
+  "Enter counter type, e.g. Medical Store": "दुकान का प्रकार दर्ज करें, जैसे मेडिकल स्टोर",
+  "GPS Coordinates *": "GPS निर्देशांक *",
+  "GPS Coordinates": "GPS निर्देशांक",
+  Back: "वापस",
+  "Review & submit": "समीक्षा और सबमिट",
+  Name: "नाम",
+  GPS: "GPS",
+  "Submit counter": "दुकान सबमिट करें",
+  "Submitting…": "सबमिट हो रहा है…",
+  "Enter a valid 10-digit mobile number.": "10 अंकों का सही मोबाइल नंबर दर्ज करें।",
+  "Fill name, depot, area and type.": "नाम, डिपो, क्षेत्र और प्रकार भरें।",
+  "Enter the counter type.": "दुकान का प्रकार दर्ज करें।",
+  Kirana: "किराना",
+  Paan: "पान",
+  "Tea Stall": "चाय की दुकान",
+  Wholesale: "थोक",
+  "Vegetable Shop": "सब्ज़ी की दुकान",
+  Others: "अन्य",
+
+  // ── Field: Counter detail page ──
+  // "Counter" already defined above under Live maps.
+  "← Back to beat": "← बीट पर वापस",
+  Edit: "संपादित करें",
+  Mobile: "मोबाइल",
+  "Area/C&F": "क्षेत्र/C&F",
+  "Add Visit for this Counter": "इस दुकान के लिए विज़िट जोड़ें",
+  "This counter is in": "यह दुकान",
+  ", not your depot — you can view it but can't add a visit.":
+    " में है, आपके डिपो में नहीं — आप देख सकते हैं पर विज़िट नहीं जोड़ सकते।",
+  "Visit history": "विज़िट इतिहास",
+  "Today's visits editable for": "आज की विज़िट संपादन योग्य हैं",
+  "until 11:59 PM": "रात 11:59 बजे तक",
+  "No editable visits — visits drop off here once the day ends.":
+    "कोई संपादन योग्य विज़िट नहीं — दिन समाप्त होते ही विज़िट यहाँ से हट जाती हैं।",
+  "Time on counter:": "दुकान पर समय:",
+  Rep: "रेप",
+  "Deedar Rank": "दीदार रैंक",
+  Competitor: "प्रतिस्पर्धी",
+  Sold: "बिका",
+
+  // ── Field: Add / Edit visit ──
+  "Add visit": "विज़िट जोड़ें",
+  "Edit visit": "विज़िट संपादित करें",
+  "Edit counter": "दुकान संपादित करें",
+  "This counter isn't in your depot, so you can't add a visit to it.":
+    "यह दुकान आपके डिपो में नहीं है, इसलिए आप विज़िट नहीं जोड़ सकते।",
+  "This counter isn't in your depot, so you can't edit it.":
+    "यह दुकान आपके डिपो में नहीं है, इसलिए आप संपादित नहीं कर सकते।",
+  "This visit can't be edited — it's either not yours or the day it was recorded on has ended.":
+    "यह विज़िट संपादित नहीं हो सकती — या तो यह आपकी नहीं है या जिस दिन दर्ज हुई थी वह समाप्त हो चुका है।",
+  "Location verified · checked in": "स्थान सत्यापित · चेक-इन हो गया",
+  "time on counter": "दुकान पर समय",
+  "4 quick questions — under 30 seconds.": "4 त्वरित प्रश्न — 30 सेकंड में।",
+  "Packets sold & stock at counter": "बिके पैकेट और दुकान का स्टॉक",
+  "Packets sold & stock": "बिके पैकेट और स्टॉक",
+  sold: "बिका",
+  "Our rank at this counter": "इस दुकान पर हमारी रैंक",
+  "Our rank": "हमारी रैंक",
+  "N/A": "उपलब्ध नहीं",
+  "Competitor presence *": "प्रतिस्पर्धी उपस्थिति *",
+  "Competitor presence": "प्रतिस्पर्धी उपस्थिति",
+  "Name the competitor brand": "प्रतिस्पर्धी ब्रांड का नाम बताएँ",
+  "Remarks (optional)": "टिप्पणी (वैकल्पिक)",
+  Remarks: "टिप्पणी",
+  "e.g. asked for bigger visi-cooler": "जैसे बड़े विज़ी-कूलर की माँग की",
+  "Check these numbers before submitting": "सबमिट करने से पहले इन नंबरों की जाँच करें",
+  " — a visit can only be edited until midnight tonight.":
+    " — विज़िट केवल आज आधी रात तक संपादित की जा सकती है।",
+  "Max": "अधिकतम",
+  "packets sold per SKU.": "पैकेट प्रति SKU बेचे जा सकते हैं।",
+  "Save changes": "बदलाव सहेजें",
+  "Submit visit": "विज़िट सबमिट करें",
+  "Saving…": "सहेजा जा रहा है…",
+  "Name is required.": "नाम आवश्यक है।",
+  None: "कोई नहीं",
+  "Local Brands": "स्थानीय ब्रांड",
+  "National Brands": "राष्ट्रीय ब्रांड",
+
+  // ── Field: GPS capture ──
+  "Location isn't available on this device.": "इस डिवाइस पर स्थान उपलब्ध नहीं है।",
+  "Location permission denied — allow it and try again.":
+    "स्थान अनुमति अस्वीकृत — अनुमति दें और पुनः प्रयास करें।",
+  "Couldn't get your location. Try again.": "आपका स्थान नहीं मिला। पुनः प्रयास करें।",
+  "Locating…": "स्थान खोजा जा रहा है…",
+  "Captured ·": "कैप्चर किया गया ·",
+  "Capture Current Location": "वर्तमान स्थान कैप्चर करें",
+
+  // ── Supervisor: Assign Beat ──
+  "No field reps in your supervised depots yet.":
+    "आपके पर्यवेक्षण वाले डिपो में अभी कोई फील्ड रेप नहीं है।",
+  "Assign Daily Beat": "दैनिक बीट सौंपें",
+  "Build a set of counters and hand them to a sales rep — schedule 1 day ahead or up to a week out.":
+    "दुकानों का सेट बनाकर सेल्स रेप को दें — 1 दिन आगे से एक सप्ताह तक शेड्यूल करें।",
+  "Assign for date": "इस तारीख के लिए सौंपें",
+  // "Rep" already defined above under Field: Counter detail page.
+  Scope: "दायरा",
+  "Select area": "क्षेत्र चुनें",
+  "Search counter name…": "दुकान का नाम खोजें…",
+  "All types": "सभी प्रकार",
+  "All trends": "सभी रुझान",
+  Increasing: "बढ़ रहा",
+  Flat: "स्थिर",
+  Declining: "घट रहा",
+  "counters in scope": "दायरे में दुकानें",
+  selected: "चयनित",
+  "Clear all": "सभी हटाएँ",
+  "Select all": "सभी चुनें",
+  "No counters match.": "कोई दुकान मेल नहीं खाती।",
+  stock: "स्टॉक",
+  "Assigning…": "सौंपा जा रहा है…",
+  "Assign": "सौंपें",
+  "counters to": "दुकानें",
+  "No beats scheduled yet.": "अभी तक कोई बीट शेड्यूल नहीं हुई।",
+  "Assignments for": "इसके लिए असाइनमेंट",
+  counter: "दुकान",
+  counters: "दुकानें",
+
+  // ── Supervisor: Assignment Summary ──
+  beat: "बीट",
+  beats: "बीट",
+  "counters scheduled.": "दुकानें शेड्यूल की गईं।",
+  "No beats scheduled for the coming week — assign one from Assign Beat.":
+    "आने वाले सप्ताह के लिए कोई बीट शेड्यूल नहीं — 'बीट सौंपें' से एक असाइन करें।",
+  "Area:": "क्षेत्र:",
+  "Depot:": "डिपो:",
+
+  // ── Supervisor: New Counter ──
+  "You don't supervise any depots yet.": "आप अभी किसी डिपो का पर्यवेक्षण नहीं करते।",
+
+  // ── Supervisor: Exceptions ──
+  "Reps who clocked in but never clocked out. Force-close the day with the correct end time on their behalf.":
+    "जिन रेप ने क्लॉक-इन तो किया पर क्लॉक-आउट नहीं किया। सही समाप्ति समय के साथ उनके लिए दिन को बंद करें।",
+  "No open day logs 🎉": "कोई खुला दैनिक लॉग नहीं 🎉",
+  "Everyone who started a day has clocked out.":
+    "जिन्होंने दिन शुरू किया, सभी क्लॉक-आउट कर चुके हैं।",
+  "Past day": "बीता दिन",
+  started: "शुरू हुआ",
+  open: "खुला",
+  // "End time" already defined above under Field: Day Log.
+  "Force-close day": "दिन बंद करें",
+  "Closing…": "बंद हो रहा है…",
+  "Pick a valid end time.": "एक सही समाप्ति समय चुनें।",
+
+  // ── Supervisor: Day Log tables ──
+  "Your Depot": "आपका डिपो",
+  "Clock-in / clock-out for every field salesman, company-wide.":
+    "पूरी कंपनी में हर फील्ड सेल्समैन के क्लॉक-इन / क्लॉक-आउट।",
+  "Clock-in / clock-out for every salesman who reports to you.":
+    "आपको रिपोर्ट करने वाले हर सेल्समैन के क्लॉक-इन / क्लॉक-आउट।",
+  "No field reps yet.": "अभी तक कोई फील्ड रेप नहीं।",
+  Today: "आज",
+  "Full history — all salesmen": "पूरा इतिहास — सभी सेल्समैन",
+  // "Start" and "End" already defined above under Field: Day Log.
+  "On Job": "काम पर",
+  "No earlier days recorded.": "कोई पिछला दिन दर्ज नहीं है।",
+  Complete: "पूर्ण",
+  Active: "सक्रिय",
+  "SO-closed": "SO द्वारा बंद",
+  "This day was force-closed by the supervisor": "यह दिन पर्यवेक्षक द्वारा बंद किया गया था",
+
+  // ── Supervisor: Analytics ──
+  "your depot": "आपका डिपो",
+  "all depots": "सभी डिपो",
+  "Reps who report to you": "आपको रिपोर्ट करने वाले रेप",
+  "Active reps": "सक्रिय रेप",
+  "Counters covered": "कवर की गई दुकानें",
+  "Counters in scope": "दायरे में दुकानें",
+  "Open days": "खुले दिन",
+  "clocked in today": "आज क्लॉक-इन",
+  "team total": "टीम कुल",
+  "distinct today": "आज विशिष्ट",
+  "in depot": "डिपो में",
+  "needs attention": "ध्यान चाहिए",
+  "not clocked out": "क्लॉक-आउट नहीं",
+  "all closed": "सभी बंद",
+  "Visits today by rep": "आज की विज़िट (रेप के अनुसार)",
+  "No reps report to you yet.": "अभी तक कोई रेप आपको रिपोर्ट नहीं करता।",
+  "counters covered": "कवर की गई दुकानें",
+  "on job": "काम पर",
+  "not started": "शुरू नहीं हुआ",
+  "Retail density by area (counters)": "क्षेत्र-वार खुदरा घनत्व (दुकानें)",
+  "No counters in scope yet.": "दायरे में अभी कोई दुकान नहीं।",
+  Hot: "उच्च",
+  Thin: "पतला",
+  Gap: "अंतर",
+
+  // ── Depot portal: shared notices ──
+  "You don't have Depot access.": "आपके पास डिपो एक्सेस नहीं है।",
+  "You aren't mapped to a depot yet — ask Central Admin.":
+    "आप अभी किसी डिपो से मैप नहीं हैं — सेंट्रल एडमिन से पूछें।",
+
+  // ── Depot: Counters ──
+  "Retail + wholesale outlets served by this depot.":
+    "इस डिपो द्वारा सेवा किए जाने वाले खुदरा + थोक आउटलेट।",
+  "Salesman market sales (today)": "सेल्समैन बाज़ार बिक्री (आज)",
+  packets: "पैकेट",
+  "From geo-verified beat visits": "जियो-सत्यापित बीट विज़िट से",
+  "Depot counter / bulk sales (today)": "डिपो काउंटर / बल्क बिक्री (आज)",
+  "Bora lifting by counter, tagged separately": "काउंटर द्वारा बोरा लिफ्टिंग, अलग टैग की गई",
+  "Counters under this depot": "इस डिपो के अंतर्गत दुकानें",
+  "Wholesale counters (Sales Officer-added)": "थोक दुकानें (सेल्स ऑफिसर द्वारा जोड़ी)",
+  "No counters under this depot yet.": "इस डिपो के अंतर्गत अभी कोई दुकान नहीं।",
+  "No wholesale counters yet.": "अभी तक कोई थोक दुकान नहीं।",
+  // "Last visit" already defined above under Field: Counter detail page.
+  Dormant: "निष्क्रिय",
+
+  // ── Depot: Schemes ──
+  "Retailer scheme payouts, settled via UPI.":
+    "खुदरा विक्रेता स्कीम भुगतान, UPI से निपटान।",
+  "Scheme payouts today": "आज के स्कीम भुगतान",
+  "100% via UPI, zero cash through salesmen":
+    "100% UPI से, सेल्समैन से कोई नकद नहीं",
+  Retailer: "खुदरा विक्रेता",
+  Code: "कोड",
+  Value: "मूल्य",
+  When: "कब",
+  "No scheme claims yet.": "अभी तक कोई स्कीम दावा नहीं।",
+  Paid: "भुगतान हो गया",
+  Processing: "प्रक्रिया में",
+  Rejected: "अस्वीकृत",
+
+  // ── Depot: Stock ──
+  "Depot Stock": "डिपो स्टॉक",
+  "Daily inward / outward movement, tracked per SKU.":
+    "दैनिक आवक / जावक गति, प्रति SKU ट्रैक की गई।",
+  "Total stock at depot": "डिपो पर कुल स्टॉक",
+  pkts: "पैकेट",
+  "Low-stock SKUs": "कम स्टॉक वाले SKU",
+  "Movements today": "आज की गतियाँ",
+  "Stock by SKU": "SKU के अनुसार स्टॉक",
+  SKU: "SKU",
+  Product: "उत्पाद",
+  "On hand": "उपलब्ध",
+  Level: "स्तर",
+  "No stock recorded for this depot yet.": "इस डिपो के लिए अभी तक कोई स्टॉक दर्ज नहीं।",
+  "Low stock": "कम स्टॉक",
+  Healthy: "पर्याप्त",
+  "Record a stock movement": "स्टॉक गति दर्ज करें",
+  "Close today's stock": "आज का स्टॉक बंद करें",
+  "Closed by": "द्वारा बंद",
+  "— no further edits today.": "— आज कोई और संपादन नहीं।",
+  "Open for today — record movements as they happen.":
+    "आज के लिए खुला — गतियाँ होते ही दर्ज करें।",
+  "Movement type": "गति का प्रकार",
+  "Inward from C&F": "C&F से आवक",
+  "Outward — Retail counters": "जावक — खुदरा दुकानें",
+  "Outward — Wholesale counters": "जावक — थोक दुकानें",
+  "Returns / damage": "वापसी / क्षति",
+  "Manual adjustment": "मैनुअल समायोजन",
+  "Outward — Retail": "जावक — खुदरा",
+  "Outward — Wholesale": "जावक — थोक",
+  "Field Salesman ISR *": "फील्ड सेल्समैन ISR *",
+  "Select salesman": "सेल्समैन चुनें",
+  "Wholesale counter *": "थोक दुकान *",
+  "Select wholesale counter": "थोक दुकान चुनें",
+  Quantity: "मात्रा",
+  "Quantity (+/−)": "मात्रा (+/−)",
+  "e.g. -20": "जैसे -20",
+  "e.g. 50": "जैसे 50",
+  Note: "टिप्पणी",
+  "e.g. Truck no. / counter name / reason":
+    "जैसे ट्रक नं. / दुकान का नाम / कारण",
+  "Enter a quantity.": "मात्रा दर्ज करें।",
+  "Record movement": "गति दर्ज करें",
+  "Daily movement log": "दैनिक गति लॉग",
+  Qty: "मात्रा",
+  "To / by": "किसे / द्वारा",
+  "Logged by": "दर्ज किया",
+  "No movements recorded yet.": "अभी तक कोई गति दर्ज नहीं।",
+  "Historic stock (daily closing balance)":
+    "ऐतिहासिक स्टॉक (दैनिक समापन शेष)",
+  "Logged automatically at each movement — kept for trend analysis.":
+    "हर गति पर स्वचालित रूप से दर्ज — रुझान विश्लेषण के लिए।",
+  Total: "कुल",
+  "No closing balances yet — record a movement to start the log.":
+    "अभी तक कोई समापन शेष नहीं — लॉग शुरू करने के लिए गति दर्ज करें।",
+  // "Open" already defined above under Supervisor: Exceptions.
+
+  // ── C&F HQ: shared ──
+  "No C&F HQ set up yet.": "अभी तक कोई C&F मुख्यालय स्थापित नहीं है।",
+
+  // ── C&F HQ: Dashboard ──
+  "Headquarters (Kanpur) →": "मुख्यालय (कानपुर) →",
+  depots: "डिपो",
+  Overview: "अवलोकन",
+  "Counter visibility": "दुकान दृश्यता",
+  "geo-tagged with owner mobile": "मालिक के मोबाइल के साथ जियो-टैग",
+  "Verified time/day": "सत्यापित समय/दिन",
+  "avg. counter time per salesman": "औसत दुकान समय प्रति सेल्समैन",
+  "Packets sold today": "आज बिके पैकेट",
+  "market sales, all reps": "बाज़ार बिक्री, सभी रेप",
+  "Scheme via UPI": "UPI द्वारा स्कीम",
+  "zero cash disbursement": "शून्य नकद वितरण",
+  "Declining counters": "घटती दुकानें",
+  "flagged for revisit": "पुनः विज़िट के लिए चिह्नित",
+  "Sales trend": "बिक्री रुझान",
+  "Packets sold, by date": "तारीख के अनुसार बिके पैकेट",
+  "Counter health": "दुकान स्वास्थ्य",
+  "Overall health of the C&F, by counter status":
+    "दुकान स्थिति के अनुसार C&F का समग्र स्वास्थ्य",
+  "Counters by depot": "डिपो के अनुसार दुकानें",
+  "Coverage split, by depot": "डिपो के अनुसार कवरेज विभाजन",
+  "Product mix": "उत्पाद मिश्रण",
+  "Packets sold MTD, by SKU": "MTD बिके पैकेट, SKU के अनुसार",
+  "No declining counters — healthy C&F.": "कोई घटती दुकान नहीं — स्वस्थ C&F।",
+
+  // ── C&F HQ: Depots & Areas ──
+  "Add a depot": "डिपो जोड़ें",
+  "Add an area": "क्षेत्र जोड़ें",
+  "Add a depot first.": "पहले डिपो जोड़ें।",
+  "Current structure": "वर्तमान संरचना",
+  "No depots yet.": "अभी तक कोई डिपो नहीं।",
+  "No areas yet": "अभी तक कोई क्षेत्र नहीं",
+  "Depot name": "डिपो का नाम",
+  "e.g. Ramganj Mandi Depot": "जैसे रामगंज मंडी डिपो",
+  "Adding…": "जोड़ा जा रहा है…",
+  "Add depot": "डिपो जोड़ें",
+  "Depot added.": "डिपो जोड़ा गया।",
+  "Area name": "क्षेत्र का नाम",
+  "e.g. Ramganj Town": "जैसे रामगंज शहर",
+  "Add area": "क्षेत्र जोड़ें",
+  "Area added.": "क्षेत्र जोड़ा गया।",
+
+  // ── Kanpur HQ: Dashboard ──
+  States: "राज्य",
+  "C&F HQs": "C&F मुख्यालय",
+  "Field reps": "फील्ड रेप",
+  "Incentives payable": "देय प्रोत्साहन",
+  "Overall company health, by counter status":
+    "दुकान स्थिति के अनुसार कंपनी का समग्र स्वास्थ्य",
+  "Counters by state": "राज्य के अनुसार दुकानें",
+  "Footprint by state — scales as new states onboard":
+    "राज्य के अनुसार फुटप्रिंट — नए राज्य जुड़ने पर बढ़ता है",
+  "Depot performance comparison": "डिपो प्रदर्शन तुलना",
+  Reps: "रेप",
+  // "Visits today" already defined above under Supervisor: Analytics.
+  "Packets today": "आज पैकेट",
+  "Avg counter time": "औसत दुकान समय",
+  "Product mix (MTD)": "उत्पाद मिश्रण (MTD)",
+
+  // ── Admin: Hierarchy ──
+  Headquarters: "मुख्यालय",
+  Kanpur: "कानपुर",
+  onboarded: "जोड़े गए",
+  state: "राज्य",
+  states: "राज्य",
+  "Add a state": "राज्य जोड़ें",
+  "Add a C&F HQ": "C&F मुख्यालय जोड़ें",
+  "Add a state first.": "पहले राज्य जोड़ें।",
+  "State name": "राज्य का नाम",
+  "e.g. Madhya Pradesh": "जैसे मध्य प्रदेश",
+  Country: "देश",
+  India: "भारत",
+  "Add state": "राज्य जोड़ें",
+  "State added.": "राज्य जोड़ा गया।",
+  State: "राज्य",
+  "C&F HQ name": "C&F मुख्यालय का नाम",
+  "e.g. BHOPAL CNF HQ": "जैसे भोपाल CNF मुख्यालय",
+  "Add C&F HQ": "C&F मुख्यालय जोड़ें",
+  "C&F HQ added.": "C&F मुख्यालय जोड़ा गया।",
+  "No states yet — add one above.": "अभी तक कोई राज्य नहीं — ऊपर से जोड़ें।",
+  "One per state ·": "प्रति राज्य एक ·",
+  "Reports to": "रिपोर्ट करता है",
+  reps: "रेप",
+  "New area": "नया क्षेत्र",
+  "New depot": "नया डिपो",
+  Add: "जोड़ें",
+
+  // ── Admin: Users & access ──
+  "Field ISR": "फील्ड ISR",
+  Admin: "एडमिन",
+  Approved: "स्वीकृत",
+  "Central Admin adds every user and controls which sections they see in their sidebar.":
+    "सेंट्रल एडमिन हर उपयोगकर्ता जोड़ते हैं और तय करते हैं कि उन्हें साइडबार में कौन-से सेक्शन दिखें।",
+  "Total users": "कुल उपयोगकर्ता",
+  // "active" already defined above under Bug notification bell.
+  "Pending requests": "लंबित अनुरोध",
+  "Awaiting approval": "स्वीकृति की प्रतीक्षा में",
+  "Add a user": "उपयोगकर्ता जोड़ें",
+  "Access requests — Pending": "एक्सेस अनुरोध — लंबित",
+  'Submitted via "Request Access" on the login page. Approve to create their account with the requested role and password they set; map depot/C&F/reports-to below afterward.':
+    "लॉगिन पेज पर 'एक्सेस अनुरोध' से भेजा गया। स्वीकृति के बाद उनके पासवर्ड और भूमिका के साथ खाता बनेगा; नीचे डिपो/C&F/रिपोर्टिंग मैप करें।",
+  "No pending requests.": "कोई लंबित अनुरोध नहीं।",
+  "You're all caught up!": "सब पूरा है!",
+  Approve: "स्वीकृत करें",
+  Reject: "अस्वीकार करें",
+  "Access requests — decided": "एक्सेस अनुरोध — निर्णीत",
+  "Requested role": "अनुरोधित भूमिका",
+  "Reviewed by": "समीक्षक",
+  Reviewed: "समीक्षित",
+  User: "उपयोगकर्ता",
+  Mapping: "मैपिंग",
+  Deactivated: "निष्क्रिय",
+  "Full access — every section. No depot / C&F / area needed.":
+    "पूरी पहुँच — हर सेक्शन। डिपो / C&F / क्षेत्र की आवश्यकता नहीं।",
+  "Depot (Field ISR)": "डिपो (फील्ड ISR)",
+  "Reports to (SO)": "रिपोर्टिंग (SO)",
+  "Depots (Sales Officer)": "डिपो (सेल्स ऑफिसर)",
+  "Depot (Dealer)": "डिपो (डीलर)",
+  "Company-wide": "कंपनी-व्यापी",
+  you: "आप",
+  "Add user": "उपयोगकर्ता जोड़ें",
+  // "Full name" already defined above under Auth: signup.
+  "Password is the mobile number until first login; assign access below.":
+    "पहले लॉगिन तक पासवर्ड मोबाइल नंबर है; नीचे एक्सेस असाइन करें।",
+  "Select C&F": "C&F चुनें",
+  "depot checked under another C&F (legacy) — switch C&F above to see them.":
+    "डिपो दूसरे C&F के तहत चयनित (लीगेसी) — देखने के लिए ऊपर C&F बदलें।",
+  "depots checked under another C&F (legacy) — switch C&F above to see them.":
+    "डिपो दूसरे C&F के तहत चयनित (लीगेसी) — देखने के लिए ऊपर C&F बदलें।",
+  "Select depot": "डिपो चुनें",
+  "Select C&F HQ": "C&F मुख्यालय चुनें",
+  "Select supervisor": "पर्यवेक्षक चुनें",
+  "Deactivate — blocks login, keeps their data":
+    "निष्क्रिय करें — लॉगिन रोकता है, डेटा रखता है",
+  "Reactivate this user": "इस उपयोगकर्ता को पुनः सक्रिय करें",
+  Deactivate: "निष्क्रिय करें",
+  Activate: "सक्रिय करें",
+  "This also permanently deletes all their visits and day logs. To keep their history, deactivate them instead.":
+    "यह उनकी सभी विज़िट और दैनिक लॉग भी स्थायी रूप से हटा देगा। इतिहास रखने के लिए इसके बजाय निष्क्रिय करें।",
+  user: "उपयोगकर्ता",
+  Users: "उपयोगकर्ता",
+  "Manage roles, mapping and reporting structure.":
+    "भूमिकाएँ, मैपिंग और रिपोर्टिंग संरचना प्रबंधित करें।",
+  "All C&F HQs": "सभी C&F मुख्यालय",
+  "Filter by C&F HQ": "C&F मुख्यालय से फ़िल्टर करें",
+  "Search by name or mobile…": "नाम या मोबाइल से खोजें…",
+
+  // ── Admin: Scheme codes ──
+  "Codes generated to date": "अब तक उत्पन्न कोड",
+  "Generate 10,000 codes": "10,000 कोड उत्पन्न करें",
+
+  // ── Admin: Bug Tracker ──
+  "In progress": "प्रगति में",
+  Resolved: "हल हो गया",
+  Closed: "बंद",
+  "still open.": "अभी भी खुले।",
+  All: "सभी",
+  "No reports yet": "अभी तक कोई रिपोर्ट नहीं",
+  "No reports with status": "इस स्थिति के साथ कोई रिपोर्ट नहीं",
+  "Loading…": "लोड हो रहा है…",
+  "Hide screenshot": "स्क्रीनशॉट छिपाएँ",
+  "View screenshot": "स्क्रीनशॉट देखें",
+  Unknown: "अज्ञात",
+  "Reported screenshot": "रिपोर्ट किया गया स्क्रीनशॉट",
+
+  // ── Account: Change password ──
+  "Set your password": "अपना पासवर्ड सेट करें",
+  "Change password": "पासवर्ड बदलें",
+  "Signed in as": "लॉगिन के रूप में",
+  "Your account was set up with your mobile number as a temporary password. Choose a new one to continue — your current password is your mobile number.":
+    "आपका खाता आपके मोबाइल नंबर को अस्थायी पासवर्ड के रूप में सेट किया गया था। जारी रखने के लिए नया पासवर्ड चुनें — आपका वर्तमान पासवर्ड आपका मोबाइल नंबर है।",
+  "Password updated.": "पासवर्ड अपडेट हो गया।",
+  "Use your new password next time you log in.":
+    "अगली बार लॉगिन करते समय अपना नया पासवर्ड इस्तेमाल करें।",
+  "Change again": "फिर से बदलें",
+  "Current password": "वर्तमान पासवर्ड",
+  "New password": "नया पासवर्ड",
+  "Confirm new password": "नए पासवर्ड की पुष्टि करें",
+  characters: "अक्षर",
+  "Updating…": "अपडेट हो रहा है…",
+  "Update password": "पासवर्ड अपडेट करें",
+
+  // ── Sidebar page blurbs (rendered by the portal shell) ──
+  "Every daily beat assignment scheduled across the week.":
+    "पूरे सप्ताह के लिए शेड्यूल की गई हर दैनिक बीट असाइनमेंट।",
+  "Company-wide view across every state, C&F HQ, depot and area.":
+    "हर राज्य, C&F मुख्यालय, डिपो और क्षेत्र का कंपनी-व्यापी दृश्य।",
+  "Central Admin sets up down to C&F HQ; each C&F Manager then adds their own depots and areas.":
+    "सेंट्रल एडमिन C&F मुख्यालय तक सेट अप करते हैं; फिर हर C&F मैनेजर अपने डिपो और क्षेत्र जोड़ते हैं।",
+  "Unique, one-time-redeemable codes printed on packs/cartons.":
+    "पैक/कार्टन पर छपे विशिष्ट, एक-बार भुनाए जाने वाले कोड।",
+  "Reports filed from the “Report a Bug” button across the portal.":
+    "पोर्टल भर में 'Report a Bug' बटन से दर्ज की गई रिपोर्ट।",
+
+  // ── Roles (profile menu, users table) ──
+  // "Field Salesman ISR" already defined above under Sidebar section titles.
+  // "Sales Officer" already defined above under Sidebar section titles.
+  "Sales Officer (SO)": "सेल्स ऑफिसर (SO)",
+  // "Depot", "C&F HQ", "Kanpur HQ", "Central Admin" already defined above.
+  "No access assigned": "कोई एक्सेस असाइन नहीं",
+
   // ── Live maps: ISR (field) view ──
   "Finding your location…": "आपका स्थान खोजा जा रहा है…",
   "Location blocked — allow access to see how far each counter is.":

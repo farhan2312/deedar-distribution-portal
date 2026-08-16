@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { istDateString } from "@/lib/date";
 import { assignBeat } from "@/lib/supervisor/actions";
+import { useT } from "@/lib/i18n/provider";
 
 export type AssignCounter = {
   id: string;
@@ -57,6 +58,7 @@ export function AssignBeat({
   initialAssignments: AssignmentSummary[];
 }) {
   const router = useRouter();
+  const t = useT();
   const dates = useMemo(() => dateOptions(), []);
   const [date, setDate] = useState(dates[0].value);
   const [repId, setRepId] = useState(reps[0]?.id ?? "");
@@ -135,7 +137,7 @@ export function AssignBeat({
   if (reps.length === 0) {
     return (
       <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
-        No field reps in your supervised depots yet.
+        {t("No field reps in your supervised depots yet.")}
       </p>
     );
   }
@@ -143,17 +145,16 @@ export function AssignBeat({
   return (
     <div>
       <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        Assign Daily Beat
+        {t("Assign Daily Beat")}
       </h4>
       <p className="mt-0.5 mb-5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-        Build a set of counters and hand them to a sales rep — schedule 1 day
-        ahead or up to a week out.
+        {t("Build a set of counters and hand them to a sales rep — schedule 1 day ahead or up to a week out.")}
       </p>
 
       <div className="card mb-5 p-5">
         <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
           <div className="field">
-            <label>Assign for date</label>
+            <label>{t("Assign for date")}</label>
             <select className="inp" value={date} onChange={(e) => setDate(e.target.value)}>
               {dates.map((d) => (
                 <option key={d.value} value={d.value}>{d.label}</option>
@@ -161,7 +162,7 @@ export function AssignBeat({
             </select>
           </div>
           <div className="field">
-            <label>Rep</label>
+            <label>{t("Rep")}</label>
             <select
               className="inp"
               value={repId}
@@ -179,20 +180,20 @@ export function AssignBeat({
             </select>
           </div>
           <div className="field">
-            <label>Scope</label>
+            <label>{t("Scope")}</label>
             <div className="flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
               {(["depot", "area"] as const).map((s) => (
                 <button key={s} onClick={() => setScope(s)} className="seg" style={segStyle(scope === s)}>
-                  {s === "depot" ? "Depot" : "Area"}
+                  {s === "depot" ? t("Depot") : t("Area")}
                 </button>
               ))}
             </div>
           </div>
           {scope === "area" && (
             <div className="field">
-              <label>Area</label>
+              <label>{t("Area")}</label>
               <select className="inp" value={area} onChange={(e) => setArea(e.target.value)}>
-                <option value="">Select area</option>
+                <option value="">{t("Select area")}</option>
                 {areaOptions.map((a) => (
                   <option key={a} value={a}>{a}</option>
                 ))}
@@ -206,19 +207,19 @@ export function AssignBeat({
             className="inp"
             style={{ maxWidth: 220 }}
             type="text"
-            placeholder="Search counter name…"
+            placeholder={t("Search counter name…")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <select className="inp w-auto" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            {TYPE_OPTIONS.map((t) => (
-              <option key={t} value={t}>{t === "all" ? "All types" : t}</option>
+            {TYPE_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>{opt === "all" ? t("All types") : t(opt)}</option>
             ))}
           </select>
           <div className="flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
-            {TREND_OPTIONS.map((t) => (
-              <button key={t} onClick={() => setFilterTrend(t)} style={segStyle(filterTrend === t)}>
-                {t === "all" ? "All trends" : t}
+            {TREND_OPTIONS.map((opt) => (
+              <button key={opt} onClick={() => setFilterTrend(opt)} style={segStyle(filterTrend === opt)}>
+                {opt === "all" ? t("All trends") : t(opt)}
               </button>
             ))}
           </div>
@@ -227,16 +228,16 @@ export function AssignBeat({
 
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[13px]" style={{ color: "var(--ink-2)" }}>
-          {candidates.length} counters in scope · {selected.size} selected
+          {candidates.length} {t("counters in scope")} · {selected.size} {t("selected")}
         </span>
         <button className="link" onClick={toggleAll}>
-          {allSelected ? "Clear all" : "Select all"}
+          {allSelected ? t("Clear all") : t("Select all")}
         </button>
       </div>
 
       <div className="table-wrap mb-5 max-h-[340px] overflow-y-auto">
         {candidates.length === 0 ? (
-          <p className="p-4 text-[13px]" style={{ color: "var(--ink-3)" }}>No counters match.</p>
+          <p className="p-4 text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No counters match.")}</p>
         ) : (
           <table className="table">
             <tbody>
@@ -249,15 +250,15 @@ export function AssignBeat({
                     </td>
                     <td>
                       <div className="font-semibold" style={{ color: "var(--ink-1)" }}>{c.name}</div>
-                      <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>{c.typeLabel} · {c.area}</div>
+                      <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t(c.typeLabel)} · {c.area}</div>
                     </td>
                     <td className="whitespace-nowrap text-right">
                       <div className="text-[13px] font-semibold tabular-nums" style={{ color: "var(--ink-1)" }}>{c.stock}</div>
-                      <div className="text-[11px]" style={{ color: "var(--ink-3)" }}>stock</div>
+                      <div className="text-[11px]" style={{ color: "var(--ink-3)" }}>{t("stock")}</div>
                     </td>
                     <td className="text-right">
                       <span className="chip whitespace-nowrap" style={{ background: ts.bg, color: ts.color, borderColor: "transparent" }}>
-                        {c.trend}
+                        {t(c.trend)}
                       </span>
                     </td>
                   </tr>
@@ -275,14 +276,16 @@ export function AssignBeat({
       )}
 
       <button className="btn btn-primary" onClick={assign} disabled={selected.size === 0 || pending}>
-        {pending ? "Assigning…" : `Assign ${selected.size} counters to ${repName} — ${dateLabel}`}
+        {pending
+          ? t("Assigning…")
+          : `${t("Assign")} ${selected.size} ${t("counters to")} ${repName} — ${dateLabel}`}
       </button>
 
       <h4 className="mt-8 mb-3 text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        Assignments for {dateLabel}
+        {t("Assignments for")} {dateLabel}
       </h4>
       {assignmentsForDate.length === 0 ? (
-        <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>No beats scheduled yet.</p>
+        <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No beats scheduled yet.")}</p>
       ) : (
         <div className="space-y-2.5">
           {assignmentsForDate.map((row) => (
@@ -290,7 +293,7 @@ export function AssignBeat({
               <div>
                 <div className="text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>{row.repName}</div>
                 <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
-                  {row.count} counter{row.count === 1 ? "" : "s"} · {dateLabel}
+                  {row.count} {t(row.count === 1 ? "counter" : "counters")} · {dateLabel}
                 </div>
               </div>
             </div>

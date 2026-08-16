@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { areas, cnfs, counters, depots } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { resolveSelectedCnf } from "@/lib/hq/scope";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { LegendDot } from "@/components/ui/legend-dot";
 import { StatCard } from "@/components/ui/stat-card";
@@ -50,8 +51,9 @@ export default async function HqDashboardPage({
   if (!user) redirect("/login");
 
   const isAdmin = user.accessRoles.includes("admin");
+  const t = await getT();
   if (!user.accessRoles.includes("hq") && !isAdmin) {
-    return <Notice title="C&F HQ">You don&apos;t have C&amp;F HQ access.</Notice>;
+    return <Notice title={t("C&F HQ")}>{t("You don't have C&F HQ access.")}</Notice>;
   }
 
   const { cnf: requestedCnfId } = await searchParams;
@@ -59,7 +61,7 @@ export default async function HqDashboardPage({
   const selectedCnf = resolveSelectedCnf(allCnfs, requestedCnfId, user.cnf?.id ?? null, isAdmin);
 
   if (!selectedCnf) {
-    return <Notice title="C&F HQ">No C&amp;F HQ set up yet.</Notice>;
+    return <Notice title={t("C&F HQ")}>{t("No C&F HQ set up yet.")}</Notice>;
   }
 
   const cnfDepots = await db.select().from(depots).where(eq(depots.cnfId, selectedCnf.id));
@@ -79,7 +81,7 @@ export default async function HqDashboardPage({
   const health = conic(activeCount, dormantCount, decliningCount);
   const declining = counterRows.filter((c) => c.status === "declining");
 
-  const t = trendPaths(TREND);
+  const trend = trendPaths(TREND);
 
   // Depot split donut
   const depotSplit = cnfDepots.map((d, i) => ({
@@ -98,27 +100,27 @@ export default async function HqDashboardPage({
     .join(", ");
 
   const kpis = [
-    { label: "Counter visibility", value: "100%", sub: "geo-tagged with owner mobile" },
-    { label: "Verified time/day", value: "4.1h", sub: "avg. counter time per salesman" },
-    { label: "Packets sold today", value: "35", sub: "market sales, all reps" },
-    { label: "Scheme via UPI", value: "96%", sub: "zero cash disbursement" },
-    { label: "Declining counters", value: String(decliningCount), sub: "flagged for revisit", danger: true },
+    { label: t("Counter visibility"), value: "100%", sub: t("geo-tagged with owner mobile") },
+    { label: t("Verified time/day"), value: "4.1h", sub: t("avg. counter time per salesman") },
+    { label: t("Packets sold today"), value: "35", sub: t("market sales, all reps") },
+    { label: t("Scheme via UPI"), value: "96%", sub: t("zero cash disbursement") },
+    { label: t("Declining counters"), value: String(decliningCount), sub: t("flagged for revisit"), danger: true },
   ];
 
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center gap-2.5 text-[13px]" style={{ color: "var(--ink-2)" }}>
-        <span>Headquarters (Kanpur) → {selectedCnf.name} → {cnfDepots.length} depots</span>
+        <span>{t("Headquarters (Kanpur) →")} {selectedCnf.name} → {cnfDepots.length} {t("depots")}</span>
         {isAdmin && allCnfs.length > 1 && (
           <>
             <span className="flex-1" />
-            <label className="text-[12px]">C&amp;F HQ</label>
+            <label className="text-[12px]">{t("C&F HQ")}</label>
             <CnfPicker options={allCnfs} value={selectedCnf.id} />
           </>
         )}
       </div>
 
-      <h4 className="page-title mb-4">Overview</h4>
+      <h4 className="page-title mb-4">{t("Overview")}</h4>
       <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {kpis.map((k) => (
           <StatCard key={k.label} label={k.label} value={k.value} sub={k.sub} danger={k.danger} />
@@ -127,19 +129,19 @@ export default async function HqDashboardPage({
 
       <div className="mb-4 grid items-stretch gap-4 lg:grid-cols-[1.5fr_1fr]">
         <div className="card p-5">
-          <h6 style={cardTitle}>Sales trend</h6>
-          <p style={cardSub}>Packets sold, by date</p>
+          <h6 style={cardTitle}>{t("Sales trend")}</h6>
+          <p style={cardSub}>{t("Packets sold, by date")}</p>
           <svg viewBox="0 0 320 110" style={{ width: "100%", height: 150 }} preserveAspectRatio="none">
-            <path d={t.area} fill="var(--accent-tint)" stroke="none" />
-            <polyline points={t.polyline} fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-            {t.pts.map((p, i) => (
+            <path d={trend.area} fill="var(--accent-tint)" stroke="none" />
+            <polyline points={trend.polyline} fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            {trend.pts.map((p, i) => (
               <circle key={i} cx={p.x} cy={p.y} r="3" fill="var(--accent)" stroke="#fff" strokeWidth="1.2" />
             ))}
           </svg>
         </div>
         <div className="card flex flex-col p-5">
-          <h6 style={cardTitle}>Counter health</h6>
-          <p style={cardSub}>Overall health of the C&amp;F, by counter status</p>
+          <h6 style={cardTitle}>{t("Counter health")}</h6>
+          <p style={cardSub}>{t("Overall health of the C&F, by counter status")}</p>
           <div className="flex flex-1 items-center gap-4.5">
             <div className="relative h-24 w-24 flex-none rounded-full" style={{ background: health.css }}>
               <div
@@ -150,9 +152,9 @@ export default async function HqDashboardPage({
               </div>
             </div>
             <div className="space-y-1.5 text-[12px]" style={{ color: "var(--ink-2)" }}>
-              <LegendDot color="var(--success)" label={`Active — ${activeCount}`} square />
-              <LegendDot color="var(--warning)" label={`Dormant — ${dormantCount}`} square />
-              <LegendDot color="var(--danger)" label={`Declining — ${decliningCount}`} square />
+              <LegendDot color="var(--success)" label={`${t("Active")} — ${activeCount}`} square />
+              <LegendDot color="var(--warning)" label={`${t("Dormant")} — ${dormantCount}`} square />
+              <LegendDot color="var(--danger)" label={`${t("Declining")} — ${decliningCount}`} square />
             </div>
           </div>
         </div>
@@ -160,8 +162,8 @@ export default async function HqDashboardPage({
 
       <div className="mb-7 grid items-stretch gap-4 sm:grid-cols-2">
         <div className="card flex flex-col p-5">
-          <h6 style={cardTitle}>Counters by depot</h6>
-          <p style={cardSub}>Coverage split, by depot</p>
+          <h6 style={cardTitle}>{t("Counters by depot")}</h6>
+          <p style={cardSub}>{t("Coverage split, by depot")}</p>
           <div className="flex flex-1 items-center gap-4">
             <div className="h-[88px] w-[88px] flex-none rounded-full" style={{ background: `conic-gradient(${depotConicStops})` }} />
             <div className="space-y-1.5 text-[12px]" style={{ color: "var(--ink-2)" }}>
@@ -172,8 +174,8 @@ export default async function HqDashboardPage({
           </div>
         </div>
         <div className="card flex flex-col p-5">
-          <h6 style={cardTitle}>Product mix</h6>
-          <p style={cardSub}>Packets sold MTD, by SKU</p>
+          <h6 style={cardTitle}>{t("Product mix")}</h6>
+          <p style={cardSub}>{t("Packets sold MTD, by SKU")}</p>
           <div className="space-y-1.5 text-[12px]" style={{ color: "var(--ink-2)" }}>
             {PRODUCT_MIX.map((p) => (
               <LegendDot key={p.label} color={p.color} label={`${p.label} — ${p.pct}%`} square />
@@ -182,16 +184,16 @@ export default async function HqDashboardPage({
         </div>
       </div>
 
-      <h4 className="page-title mb-3.5">Declining counters ({declining.length})</h4>
+      <h4 className="page-title mb-3.5">{t("Declining counters")} ({declining.length})</h4>
       {declining.length === 0 ? (
-        <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>No declining counters — healthy C&amp;F.</p>
+        <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No declining counters — healthy C&F.")}</p>
       ) : (
         <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
                 {["Counter", "Area", "Last visit"].map((h) => (
-                  <th key={h}>{h}</th>
+                  <th key={h}>{t(h)}</th>
                 ))}
               </tr>
             </thead>

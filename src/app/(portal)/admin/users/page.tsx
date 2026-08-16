@@ -6,6 +6,7 @@ import { approveAccessRequest, rejectAccessRequest } from "@/lib/admin/actions";
 import { requireAdmin } from "@/lib/admin/guard";
 import { ROLE_LABEL } from "@/lib/auth/roles";
 import { formatISTDate, formatISTTime } from "@/lib/date";
+import { getT } from "@/lib/i18n/server";
 import { NavIconView } from "../../_components/nav-icons";
 import {
   AddUserForm,
@@ -41,6 +42,7 @@ function initials(name: string): string {
 
 export default async function AdminUsersPage() {
   const admin = await requireAdmin();
+  const t = await getT();
 
   const reviewer = alias(users, "reviewer");
   const [allUsers, allDepots, allCnfs, allAreas, allUserAreas, allUserDepots, requestRows] = await Promise.all([
@@ -133,10 +135,9 @@ export default async function AdminUsersPage() {
             <NavIconView icon="userCog" className="h-6 w-6" />
           </span>
           <div className="min-w-0">
-            <h1 className="page-title">Users &amp; access</h1>
+            <h1 className="page-title">{t("Users & access")}</h1>
             <p className="page-subtitle max-w-xl">
-              Central Admin adds every user and controls which sections they see
-              in their sidebar.
+              {t("Central Admin adds every user and controls which sections they see in their sidebar.")}
             </p>
           </div>
         </div>
@@ -144,16 +145,16 @@ export default async function AdminUsersPage() {
           <StatCard
             icon={<UsersIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />}
             iconBg="var(--accent-tint)"
-            label="Total users"
+            label={t("Total users")}
             value={allUsers.length}
-            sub={`${allUsers.filter((u) => u.isActive).length} active`}
+            sub={`${allUsers.filter((u) => u.isActive).length} ${t("active")}`}
           />
           <StatCard
             icon={<ClockIcon className="h-5 w-5" style={{ color: pendingRequests.length > 0 ? "#B25E00" : "var(--ink-3)" }} />}
             iconBg={pendingRequests.length > 0 ? "rgba(224,177,92,.2)" : "var(--bg-soft)"}
-            label="Pending requests"
+            label={t("Pending requests")}
             value={pendingRequests.length}
-            sub="Awaiting approval"
+            sub={t("Awaiting approval")}
           />
         </div>
       </div>
@@ -161,19 +162,17 @@ export default async function AdminUsersPage() {
       {/* Add user + Access requests */}
       <div className="mb-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className="card p-6">
-          <SectionHead icon={<UserPlusIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />} title="Add a user" />
+          <SectionHead icon={<UserPlusIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />} title={t("Add a user")} />
           <AddUserForm />
         </div>
 
         <div className="card p-6">
           <SectionHead
             icon={<ClockIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />}
-            title={`Access requests — Pending (${pendingRequests.length})`}
+            title={`${t("Access requests — Pending")} (${pendingRequests.length})`}
           />
           <p className="mb-4 text-[12.5px] leading-relaxed" style={{ color: "var(--ink-3)" }}>
-            Submitted via &ldquo;Request Access&rdquo; on the login page. Approve to
-            create their account with the requested role and password they set;
-            map depot/C&amp;F/reports-to below afterward.
+            {t('Submitted via "Request Access" on the login page. Approve to create their account with the requested role and password they set; map depot/C&F/reports-to below afterward.')}
           </p>
           {pendingRequests.length === 0 ? (
             <div className="flex items-center gap-3 rounded-2xl border p-5" style={{ borderColor: "rgba(30,158,90,.25)", background: "rgba(30,158,90,.06)" }}>
@@ -181,8 +180,8 @@ export default async function AdminUsersPage() {
                 <CheckIcon className="h-5 w-5" style={{ color: "#1E9E5A" }} />
               </span>
               <div>
-                <div className="text-[14px] font-semibold" style={{ color: "#1E9E5A" }}>No pending requests.</div>
-                <div className="text-[13px]" style={{ color: "var(--ink-2)" }}>You&rsquo;re all caught up!</div>
+                <div className="text-[14px] font-semibold" style={{ color: "#1E9E5A" }}>{t("No pending requests.")}</div>
+                <div className="text-[13px]" style={{ color: "var(--ink-2)" }}>{t("You're all caught up!")}</div>
               </div>
             </div>
           ) : (
@@ -192,15 +191,15 @@ export default async function AdminUsersPage() {
                   <div>
                     <div className="text-[13.5px] font-semibold" style={{ color: "var(--ink-1)" }}>{r.name}</div>
                     <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-                      {r.phone} · {ROLE_LABEL[r.requestedRole]} · {formatISTDate(r.createdAt)}
+                      {r.phone} · {t(ROLE_LABEL[r.requestedRole])} · {formatISTDate(r.createdAt)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 whitespace-nowrap">
                     <form action={approveAccessRequest.bind(null, r.id)} className="inline">
-                      <button className="btn btn-primary btn-sm" type="submit">Approve</button>
+                      <button className="btn btn-primary btn-sm" type="submit">{t("Approve")}</button>
                     </form>
                     <form action={rejectAccessRequest.bind(null, r.id)} className="inline">
-                      <button className="link link-danger" type="submit">Reject</button>
+                      <button className="link link-danger" type="submit">{t("Reject")}</button>
                     </form>
                   </div>
                 </li>
@@ -213,18 +212,18 @@ export default async function AdminUsersPage() {
       {decidedRequests.length > 0 && (
         <details className="mb-6">
           <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>
-            Access requests — decided ({decidedRequests.length})
+            {t("Access requests — decided")} ({decidedRequests.length})
           </summary>
           <div className="table-wrap mt-3">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Mobile</th>
-                  <th>Requested role</th>
-                  <th>Status</th>
-                  <th>Reviewed by</th>
-                  <th>Reviewed</th>
+                  <th>{t("Name")}</th>
+                  <th>{t("Mobile")}</th>
+                  <th>{t("Requested role")}</th>
+                  <th>{t("Status")}</th>
+                  <th>{t("Reviewed by")}</th>
+                  <th>{t("Reviewed")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -234,10 +233,10 @@ export default async function AdminUsersPage() {
                     <tr key={r.id}>
                       <td className="whitespace-nowrap">{r.name}</td>
                       <td className="whitespace-nowrap">{r.phone}</td>
-                      <td>{ROLE_LABEL[r.requestedRole]}</td>
+                      <td>{t(ROLE_LABEL[r.requestedRole])}</td>
                       <td>
                         <span className="chip" style={{ background: st.bg, color: st.color, borderColor: "transparent" }}>
-                          {st.label}
+                          {t(st.label)}
                         </span>
                       </td>
                       <td>{r.reviewerName ?? "—"}</td>
@@ -258,12 +257,12 @@ export default async function AdminUsersPage() {
           <table className="table" style={{ minWidth: 1040 }}>
             <thead>
               <tr>
-                <th>User</th>
-                <th>Mobile</th>
+                <th>{t("User")}</th>
+                <th>{t("Mobile")}</th>
                 {ROLE_COLS.map((c) => (
-                  <th key={c.role} className="text-center">{c.label}</th>
+                  <th key={c.role} className="text-center">{t(c.label)}</th>
                 ))}
-                <th>Mapping</th>
+                <th>{t("Mapping")}</th>
                 <th />
               </tr>
             </thead>
@@ -296,12 +295,12 @@ export default async function AdminUsersPage() {
                           {u.isActive ? (
                             <span className="mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(30,158,90,.12)", color: "#1E9E5A" }}>
                               <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#1E9E5A" }} />
-                              Active
+                              {t("Active")}
                             </span>
                           ) : (
                             <span className="mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "var(--bg-soft)", color: "var(--ink-3)" }}>
                               <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--ink-3)" }} />
-                              Deactivated
+                              {t("Deactivated")}
                             </span>
                           )}
                         </div>
@@ -315,14 +314,14 @@ export default async function AdminUsersPage() {
                     ))}
                     <td style={{ minWidth: 240 }}>
                       {roleSet.has("admin") ? (
-                        <Mapping label="Admin">
-                          <Text>Full access — every section. No depot / C&amp;F / area needed.</Text>
+                        <Mapping label={t("Admin")}>
+                          <Text>{t("Full access — every section. No depot / C&F / area needed.")}</Text>
                         </Mapping>
                       ) : (
                       <>
                       {roleSet.has("field") && (
                         <>
-                          <Mapping label="Depot (Field ISR)">
+                          <Mapping label={t("Depot (Field ISR)")}>
                             <DepotSelect userId={u.id} value={u.depotId} groups={depotGroups} />
                             {u.depotId && depotAreas.length > 0 && (
                               <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -332,7 +331,7 @@ export default async function AdminUsersPage() {
                               </div>
                             )}
                           </Mapping>
-                          <Mapping label="Reports to (SO)">
+                          <Mapping label={t("Reports to (SO)")}>
                             <SupervisorSelect
                               userId={u.id}
                               value={u.reportsToUserId}
@@ -342,7 +341,7 @@ export default async function AdminUsersPage() {
                         </>
                       )}
                       {roleSet.has("supervisor") && (
-                        <Mapping label="Depots (Sales Officer)">
+                        <Mapping label={t("Depots (Sales Officer)")}>
                           <SupervisorDepotPicker
                             userId={u.id}
                             groups={depotGroups}
@@ -351,16 +350,16 @@ export default async function AdminUsersPage() {
                         </Mapping>
                       )}
                       {roleSet.has("dealer") && !roleSet.has("field") && (
-                        <Mapping label="Depot (Dealer)">
+                        <Mapping label={t("Depot (Dealer)")}>
                           <DepotSelect userId={u.id} value={u.depotId} groups={depotGroups} />
                         </Mapping>
                       )}
                       {roleSet.has("hq") && (
-                        <Mapping label="C&F HQ">
+                        <Mapping label={t("C&F HQ")}>
                           <CnfSelect userId={u.id} value={u.cnfId} options={cnfOptions} />
                         </Mapping>
                       )}
-                      {roleSet.has("khq") && <Mapping label="Kanpur HQ"><Text>Company-wide</Text></Mapping>}
+                      {roleSet.has("khq") && <Mapping label={t("Kanpur HQ")}><Text>{t("Company-wide")}</Text></Mapping>}
                       </>
                       )}
                     </td>
@@ -371,7 +370,7 @@ export default async function AdminUsersPage() {
                           <DeleteUserButton userId={u.id} userName={u.name} />
                         </div>
                       ) : (
-                        <span className="block text-center text-[11px]" style={{ color: "var(--ink-3)" }}>you</span>
+                        <span className="block text-center text-[11px]" style={{ color: "var(--ink-3)" }}>{t("you")}</span>
                       )}
                     </td>
                   </tr>

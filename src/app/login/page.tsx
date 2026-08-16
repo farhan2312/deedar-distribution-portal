@@ -19,6 +19,7 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return; // extra guard against Enter-key spamming
     setError("");
     setSubmitting(true);
     try {
@@ -29,14 +30,20 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) {
+        // Failure: re-enable so the rejected credentials can be corrected.
         setError(data.error || t("Something went wrong."));
+        setSubmitting(false);
         return;
       }
+      // Success: deliberately DO NOT clear `submitting`. router.push + refresh
+      // are still fetching the destination page's server components; the
+      // button must stay disabled through that gap or an impatient user can
+      // fire a second login. The component unmounts on navigation, which is
+      // what actually releases the button.
       router.push(data.redirectTo ?? "/dashboard");
       router.refresh();
     } catch {
       setError(t("Could not reach the server. Please try again."));
-    } finally {
       setSubmitting(false);
     }
   }

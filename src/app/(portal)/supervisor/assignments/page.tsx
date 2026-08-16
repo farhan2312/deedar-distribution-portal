@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { getScopeDepots } from "@/lib/supervisor/team";
 import { formatISTDate, istDateRange, istDateString } from "@/lib/date";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 
 /** Beats are scheduled up to a week out (see the Assign Beat date picker). */
@@ -15,8 +16,10 @@ export default async function AssignmentSummaryPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="Assignment Summary">You don&apos;t have Sales Officer access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Assignment Summary")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
+  const t = await getT();
 
   // Same scope as Assign Beat — every rep this SO can schedule appears here,
   // including beats another SO or admin assigned to them.
@@ -89,13 +92,13 @@ export default async function AssignmentSummaryPage() {
     <div>
       {upcoming.length > 0 && (
         <p className="mb-5 text-[13px] font-medium" style={{ color: "var(--ink-2)" }}>
-          {upcoming.length} beat{upcoming.length === 1 ? "" : "s"} · {totalCounters} counters scheduled.
+          {upcoming.length} {t(upcoming.length === 1 ? "beat" : "beats")} · {totalCounters} {t("counters scheduled.")}
         </p>
       )}
 
       {upcoming.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
-          No beats scheduled for the coming week — assign one from Assign Beat.
+          {t("No beats scheduled for the coming week — assign one from Assign Beat.")}
         </p>
       ) : (
         <div className="table-wrap">
@@ -103,7 +106,7 @@ export default async function AssignmentSummaryPage() {
             <thead>
               <tr>
                 {["Date", "Rep", "Scope", "Counters"].map((h) => (
-                  <th key={h}>{h}</th>
+                  <th key={h}>{t(h)}</th>
                 ))}
               </tr>
             </thead>
@@ -113,7 +116,7 @@ export default async function AssignmentSummaryPage() {
                 // area means the beat was scoped to that area.
                 const areaList = [...g.areas].sort((a, b) => a.localeCompare(b));
                 const scope =
-                  areaList.length === 1 ? `Area: ${areaList[0]}` : `Depot: ${g.depotName}`;
+                  areaList.length === 1 ? `${t("Area:")} ${areaList[0]}` : `${t("Depot:")} ${g.depotName}`;
                 return (
                   <tr key={g.key}>
                     <td className="whitespace-nowrap font-semibold">{formatISTDate(g.beatDate)}</td>

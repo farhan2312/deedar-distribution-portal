@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { durationLabel, formatISTDate, formatISTTime, istDateString } from "@/lib/date";
 import { getScopeDepots, getTeamReps, pickDepot } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { DepotPicker } from "../_components/depot-picker";
 import { ExceptionsClient, type ExceptionRow } from "./exceptions-client";
@@ -18,8 +19,10 @@ export default async function SupervisorExceptionsPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="Exceptions">You don&apos;t have Sales Officer access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Exceptions")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
+  const t = await getT();
 
   const { depot: requestedDepot } = await searchParams;
   const depots = await getScopeDepots(user);
@@ -56,10 +59,9 @@ export default async function SupervisorExceptionsPage({
       {/* Own header (nav `customHeader`) so the depot picker sits on the title row. */}
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="page-title">Exceptions</h1>
+          <h1 className="page-title">{t("Exceptions")}</h1>
           <p className="page-subtitle max-w-2xl">
-            Reps who clocked in but never clocked out. Force-close the day with the
-            correct end time on their behalf.
+            {t("Reps who clocked in but never clocked out. Force-close the day with the correct end time on their behalf.")}
           </p>
         </div>
         {depots.length > 1 && <DepotPicker options={depots} value={depot?.id ?? "all"} />}

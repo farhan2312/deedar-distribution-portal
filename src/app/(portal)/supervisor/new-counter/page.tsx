@@ -5,6 +5,7 @@ import { areas, cnfs, depots } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { getScopeDepots } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { NewCounterWizard } from "../../field/new-counter/wizard";
 
@@ -15,12 +16,14 @@ export default async function SupervisorNewCounterPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="New Counter">You don&apos;t have Sales Officer access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("New Counter")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
 
   const depotOptions = await getScopeDepots(user);
   if (depotOptions.length === 0) {
-    return <Notice title="New Counter">You don&apos;t supervise any depots yet.</Notice>;
+    const t = await getT();
+    return <Notice title={t("New Counter")}>{t("You don't supervise any depots yet.")}</Notice>;
   }
   const depotIds = depotOptions.map((d) => d.id);
 

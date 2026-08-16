@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { DepotCountersData, DepotCounterRow, DepotOption } from "@/lib/depot/data";
+import { useT } from "@/lib/i18n/provider";
 import { DepotSelect } from "../_components/depot-select";
 
 const STATUS_STYLE: Record<DepotCounterRow["status"], { label: string; bg: string; color: string }> = {
@@ -21,6 +22,7 @@ export function DepotCountersClient({
   selectedId: string;
   data: DepotCountersData;
 }) {
+  const t = useT();
   const [tab, setTab] = useState<"counters" | "wholesale">("counters");
   const rows = tab === "counters" ? data.counters : data.wholesale;
 
@@ -29,18 +31,26 @@ export function DepotCountersClient({
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            Counters — {depotName}
+            {t("Counters")} — {depotName}
           </h4>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            Retail + wholesale outlets served by this depot.
+            {t("Retail + wholesale outlets served by this depot.")}
           </p>
         </div>
         {scope.length > 1 && <DepotSelect options={scope} value={selectedId} />}
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <StatCard label="Salesman market sales (today)" value={`${data.marketSales} packets`} hint="From geo-verified beat visits" />
-        <StatCard label="Depot counter / bulk sales (today)" value={`${data.bulkSales} packets`} hint="Bora lifting by counter, tagged separately" />
+        <StatCard
+          label={t("Salesman market sales (today)")}
+          value={`${data.marketSales} ${t("packets")}`}
+          hint={t("From geo-verified beat visits")}
+        />
+        <StatCard
+          label={t("Depot counter / bulk sales (today)")}
+          value={`${data.bulkSales} ${t("packets")}`}
+          hint={t("Bora lifting by counter, tagged separately")}
+        />
       </div>
 
       <div className="mb-4 inline-flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
@@ -55,13 +65,13 @@ export function DepotCountersClient({
               cursor: "pointer",
             }}
           >
-            {tk === "counters" ? "Counters" : "Wholesale"}
+            {tk === "counters" ? t("Counters") : t("Wholesale")}
           </button>
         ))}
       </div>
 
       <h4 className="mb-3 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        {tab === "counters" ? "Counters under this depot" : "Wholesale counters (Sales Officer-added)"}
+        {tab === "counters" ? t("Counters under this depot") : t("Wholesale counters (Sales Officer-added)")}
       </h4>
 
       <div className="table-wrap">
@@ -69,7 +79,7 @@ export function DepotCountersClient({
           <thead>
             <tr>
               {["Counter", "Type", "Area", "Stock", "Last visit", "Status"].map((h) => (
-                <th key={h}>{h}</th>
+                <th key={h}>{t(h)}</th>
               ))}
             </tr>
           </thead>
@@ -77,7 +87,7 @@ export function DepotCountersClient({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ color: "var(--ink-3)" }}>
-                  {tab === "counters" ? "No counters under this depot yet." : "No wholesale counters yet."}
+                  {tab === "counters" ? t("No counters under this depot yet.") : t("No wholesale counters yet.")}
                 </td>
               </tr>
             ) : (
@@ -86,13 +96,13 @@ export function DepotCountersClient({
                 return (
                   <tr key={c.id}>
                     <td className="font-semibold">{c.name}</td>
-                    <td>{c.type}</td>
+                    <td>{t(c.type)}</td>
                     <td>{c.area}</td>
                     <td>{c.stock}</td>
                     <td>{c.lastVisitLabel}</td>
                     <td>
                       <span className="chip" style={{ background: st.bg, color: st.color, borderColor: "transparent" }}>
-                        {st.label}
+                        {t(st.label)}
                       </span>
                     </td>
                   </tr>

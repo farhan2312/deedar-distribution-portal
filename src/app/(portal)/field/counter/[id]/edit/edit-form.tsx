@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateCounter, type EditCounterInput } from "@/lib/field/actions";
 import { ALL_COUNTER_TYPES } from "@/lib/field/counter-types";
+import { useT } from "@/lib/i18n/provider";
 import { GpsCapture } from "../../../_components/gps-capture";
 
 export function EditCounterForm({
@@ -24,6 +25,7 @@ export function EditCounterForm({
   };
 }) {
   const router = useRouter();
+  const t = useT();
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -40,11 +42,11 @@ export function EditCounterForm({
   async function save() {
     setError("");
     if (!draft.name.trim()) {
-      setError("Name is required.");
+      setError(t("Name is required."));
       return;
     }
     if (draft.type === "Others" && !draft.typeOther.trim()) {
-      setError("Enter the counter type.");
+      setError(t("Enter the counter type."));
       return;
     }
     setBusy(true);
@@ -73,19 +75,19 @@ export function EditCounterForm({
   return (
     <div className="card mx-auto max-w-xl p-6" style={{ animation: "fadeUp .3s ease" }}>
       <h1 className="mb-4 text-[22px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        Edit counter
+        {t("Edit counter")}
       </h1>
 
       <div className="field mb-3.5">
-        <label>Name of Counter/Point of Contact *</label>
+        <label>{t("Name of Counter/Point of Contact *")}</label>
         <input className="inp" type="text" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
       </div>
       <div className="field mb-3.5">
-        <label>Address</label>
+        <label>{t("Address")}</label>
         <input className="inp" type="text" value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
       </div>
       <div className="field mb-3.5">
-        <label>Area *</label>
+        <label>{t("Area *")}</label>
         <select className="inp" value={draft.areaId} onChange={(e) => setDraft({ ...draft, areaId: e.target.value })}>
           {areaOptions.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
@@ -93,16 +95,16 @@ export function EditCounterForm({
         </select>
       </div>
       <div className="field mb-4">
-        <label>Type of Counter *</label>
+        <label>{t("Type of Counter *")}</label>
         <div className="flex flex-wrap gap-2">
-          {counterTypes.map((t) => {
-            const active = draft.type === t;
+          {counterTypes.map((ct) => {
+            const active = draft.type === ct;
             return (
               <button
-                key={t}
+                key={ct}
                 type="button"
                 onClick={() =>
-                  setDraft({ ...draft, type: t, typeOther: t === "Others" ? draft.typeOther : "" })
+                  setDraft({ ...draft, type: ct, typeOther: ct === "Others" ? draft.typeOther : "" })
                 }
                 className="chip"
                 style={{
@@ -113,7 +115,7 @@ export function EditCounterForm({
                   fontSize: 13,
                 }}
               >
-                {t}
+                {t(ct)}
               </button>
             );
           })}
@@ -122,7 +124,7 @@ export function EditCounterForm({
           <input
             className="inp mt-2.5"
             type="text"
-            placeholder="Enter counter type, e.g. Medical Store"
+            placeholder={t("Enter counter type, e.g. Medical Store")}
             maxLength={60}
             value={draft.typeOther}
             onChange={(e) => setDraft({ ...draft, typeOther: e.target.value })}
@@ -131,7 +133,7 @@ export function EditCounterForm({
       </div>
       <div className="mb-5 rounded-2xl p-4" style={{ background: "var(--accent-tint)" }}>
         <label className="mb-2.5 block text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>
-          GPS Coordinates
+          {t("GPS Coordinates")}
         </label>
         <GpsCapture value={draft.gps} onCapture={(gps) => setDraft({ ...draft, gps })} />
       </div>
@@ -144,10 +146,10 @@ export function EditCounterForm({
           onClick={() => router.push(`/field/counter/${counterId}`)}
           disabled={busy}
         >
-          Cancel
+          {t("Cancel")}
         </button>
         <button className="btn btn-primary flex-1 justify-center py-3.5" onClick={save} disabled={busy}>
-          {busy ? "Saving…" : "Save changes"}
+          {busy ? t("Saving…") : t("Save changes")}
         </button>
       </div>
     </div>

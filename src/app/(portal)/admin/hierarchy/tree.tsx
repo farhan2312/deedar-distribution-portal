@@ -11,6 +11,7 @@ import {
   getDeleteImpact,
   type HierarchyResult,
 } from "@/lib/admin/actions";
+import { useT } from "@/lib/i18n/provider";
 import { ConfirmDelete } from "@/components/ui/confirm-delete";
 
 export type AreaNode = { id: string; name: string; counters: number };
@@ -24,6 +25,7 @@ const subCls = "mt-0.5 text-[12px]";
 const subStyle: React.CSSProperties = { color: "var(--ink-3)" };
 
 export function HierarchyTree({ tree }: { tree: StateNode[] }) {
+  const t = useT();
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (key: string) =>
     setOpen((prev) => {
@@ -34,7 +36,7 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
     });
 
   if (tree.length === 0) {
-    return <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>No states yet — add one above.</p>;
+    return <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No states yet — add one above.")}</p>;
   }
 
   return (
@@ -52,7 +54,7 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
             >
               <div className={nameCls} style={nameStyle}>{st.name}</div>
               <div className={subCls} style={subStyle}>
-                {st.country} · {st.cnfs.length} C&amp;F HQ{st.cnfs.length === 1 ? "" : "s"}
+                {st.country} · {st.cnfs.length} {t(st.cnfs.length === 1 ? "C&F HQ" : "C&F HQs")}
               </div>
             </Row>
 
@@ -69,7 +71,7 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
                       action={<ConfirmDelete action={deleteCnf.bind(null, cf.id)} itemLabel="C&F HQ" itemName={cf.name} loadImpact={() => getDeleteImpact("cnf", cf.id)} />}
                     >
                       <div className={nameCls} style={nameStyle}>{cf.name}</div>
-                      <div className={subCls} style={subStyle}>One per state · {cf.depots.length} depots</div>
+                      <div className={subCls} style={subStyle}>{t("One per state ·")} {cf.depots.length} {t("depots")}</div>
                     </Row>
 
                     {cOpen && (
@@ -87,7 +89,7 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
                               >
                                 <div className={nameCls} style={nameStyle}>{d.name}</div>
                                 <div className={subCls} style={subStyle}>
-                                  Reports to {cf.name} · {d.counters} counters · {d.reps} reps
+                                  {t("Reports to")} {cf.name} · {d.counters} {t("counters")} · {d.reps} {t("reps")}
                                 </div>
                               </Row>
 
@@ -98,19 +100,19 @@ export function HierarchyTree({ tree }: { tree: StateNode[] }) {
                                       <div className="flex items-center justify-between">
                                         <div>
                                           <div className="text-[14px] font-semibold" style={nameStyle}>{a.name}</div>
-                                          <div className={subCls} style={subStyle}>Reports to {d.name} · {a.counters} counters</div>
+                                          <div className={subCls} style={subStyle}>{t("Reports to")} {d.name} · {a.counters} {t("counters")}</div>
                                         </div>
                                         <ConfirmDelete action={deleteArea.bind(null, a.id)} itemLabel="area" itemName={a.name} loadImpact={() => getDeleteImpact("area", a.id)} />
                                       </div>
                                     </div>
                                   ))}
-                                  <InlineAdd action={addArea.bind(null, d.id)} placeholder="New area" indent={72} />
+                                  <InlineAdd action={addArea.bind(null, d.id)} placeholder={t("New area")} indent={72} />
                                 </>
                               )}
                             </div>
                           );
                         })}
-                        <InlineAdd action={addDepot.bind(null, cf.id)} placeholder="New depot" indent={48} />
+                        <InlineAdd action={addDepot.bind(null, cf.id)} placeholder={t("New depot")} indent={48} />
                       </>
                     )}
                   </div>
@@ -171,6 +173,7 @@ function InlineAdd({
   placeholder: string;
   indent: number;
 }) {
+  const t = useT();
   const [state, formAction, pending] = useActionState<HierarchyResult | null, FormData>(
     async (_prev, fd) => action(fd),
     null,
@@ -190,7 +193,7 @@ function InlineAdd({
           disabled={pending}
         />
         <button className="btn btn-primary btn-sm" type="submit" disabled={pending}>
-          {pending ? "Adding…" : "Add"}
+          {pending ? t("Adding…") : t("Add")}
         </button>
       </form>
       {state && !state.ok && (

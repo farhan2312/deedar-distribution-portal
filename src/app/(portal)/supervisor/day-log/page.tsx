@@ -11,6 +11,7 @@ import {
   pickDepot,
 } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { DepotPicker } from "../_components/depot-picker";
 import { dayState, DayLogTables, type HistoryRow, type TodayRow } from "../_components/day-log-tables";
@@ -23,8 +24,10 @@ export default async function SupervisorDayLogPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="Day Log">You don&apos;t have Sales Officer access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Day Log")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
+  const t = await getT();
   const isAdmin = user.accessRoles.includes("admin");
 
   const { depot: requestedDepot } = await searchParams;
@@ -71,7 +74,7 @@ export default async function SupervisorDayLogPage({
     forced: !!h.endForced,
   }));
 
-  const scopeLabel = depot?.name ?? (depots.length > 1 ? "All Depots" : depots[0]?.name ?? "Your Depot");
+  const scopeLabel = depot?.name ?? (depots.length > 1 ? t("All Depots") : depots[0]?.name ?? t("Your Depot"));
 
   return (
     <div>
@@ -83,8 +86,8 @@ export default async function SupervisorDayLogPage({
           </h4>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
             {isAdmin
-              ? "Clock-in / clock-out for every field salesman, company-wide."
-              : "Clock-in / clock-out for every salesman who reports to you."}
+              ? t("Clock-in / clock-out for every field salesman, company-wide.")
+              : t("Clock-in / clock-out for every salesman who reports to you.")}
           </p>
         </div>
         {depots.length > 1 && <DepotPicker options={depots} value={depot?.id ?? "all"} />}
@@ -92,7 +95,11 @@ export default async function SupervisorDayLogPage({
 
       {reps.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
-          {isAdmin ? "No field reps yet." : `No field reps report to you${depot ? " in this depot" : ""} yet.`}
+          {isAdmin
+            ? t("No field reps yet.")
+            : depot
+              ? t("No field reps report to you in this depot yet.")
+              : t("No field reps report to you yet.")}
         </p>
       ) : (
         <DayLogTables today={todayRows} history={history} />

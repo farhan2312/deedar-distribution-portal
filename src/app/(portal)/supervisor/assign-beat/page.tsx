@@ -7,6 +7,7 @@ import { canAccess } from "@/lib/auth/access";
 import { getScopeDepots } from "@/lib/supervisor/team";
 import { istDateString } from "@/lib/date";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { AssignBeat, type AssignCounter, type AssignmentSummary, type RepOption } from "./assign-beat";
 
@@ -14,7 +15,8 @@ export default async function AssignBeatPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "supervisor")) {
-    return <Notice title="Assign Beat">You don&apos;t have Sales Officer access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Assign Beat")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
 
   const depotIds = (await getScopeDepots(user)).map((d) => d.id);

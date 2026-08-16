@@ -13,6 +13,7 @@ import {
   istGreeting,
   minutesLabel,
 } from "@/lib/date";
+import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { DayLogClient, type HistoryRow } from "./day-log-client";
 
@@ -40,8 +41,10 @@ export default async function FieldDayLogPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
-    return <Notice title="Day Log">You don&apos;t have Field Salesman ISR access.</Notice>;
+    const t = await getT();
+    return <Notice title={t("Day Log")}>{t("You don't have Field Salesman ISR access.")}</Notice>;
   }
+  const t = await getT();
 
   const today = istDateString();
   const logs = await db
@@ -85,8 +88,8 @@ export default async function FieldDayLogPage() {
       todayLabel={formatISTDateLong()}
       started={!!todayLog?.startAt}
       ended={!!todayLog?.endAt}
-      startLabel={todayLog?.startAt ? formatISTTime(todayLog.startAt) : "Not started yet"}
-      endLabel={todayLog?.endAt ? formatISTTime(todayLog.endAt) : "Not ended yet"}
+      startLabel={todayLog?.startAt ? formatISTTime(todayLog.startAt) : t("Not started yet")}
+      endLabel={todayLog?.endAt ? formatISTTime(todayLog.endAt) : t("Not ended yet")}
       onJobLabel={durationLabel(todayLog?.startAt ?? null, todayLog?.endAt ?? null)}
       history={history}
       daysLoggedThisWeek={daysLoggedThisWeek}
