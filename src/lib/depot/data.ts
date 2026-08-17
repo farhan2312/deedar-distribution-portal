@@ -56,15 +56,18 @@ export type DepotCounterRow = {
 };
 
 export type DepotCountersData = {
-  marketSales: number;
   bulkSales: number;
+  /** Wholesale counters only — retail outlets belong to the field reps and are
+   * intentionally hidden from the Depot portal (they aren't the depot's list
+   * to manage). */
   counters: DepotCounterRow[];
-  wholesale: DepotCounterRow[];
 };
 
 export async function getDepotCountersData(depotId: string): Promise<DepotCountersData> {
   const bounds = istDayBounds();
   const [counterRows, visitRows, outwardToday] = await Promise.all([
+    // Scoped to Wholesale at the SQL layer so retail rows never even leave
+    // the DB — the client can't reveal them via devtools either.
     db
       .select({
         id: counters.id,
@@ -77,16 +80,20 @@ export async function getDepotCountersData(depotId: string): Promise<DepotCounte
       })
       .from(counters)
       .innerJoin(areas, eq(areas.id, counters.areaId))
-      .where(eq(counters.depotId, depotId))
+      .where(and(eq(counters.depotId, depotId), eq(counters.type, "Wholesale")))
       .orderBy(asc(counters.name)),
+    // Only used to hydrate the per-counter "last observed stock" on the
+    // wholesale rows — scoped to wholesale counters so we don't pull retail
+    // visits we'd then throw away.
     db
-      .select({ counterId: visits.counterId, stock: visits.stock, sold: visits.sold, visitedAt: visits.visitedAt })
+      .select({ counterId: visits.counterId, stock: visits.stock })
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
-      .where(eq(counters.depotId, depotId))
+      .where(and(eq(counters.depotId, depotId), eq(counters.type, "Wholesale")))
       .orderBy(desc(visits.visitedAt)),
-    // "Bulk sales" = bora lifting by wholesale counters. Retail outward goes
-    // to a field rep's beat and is already counted as salesman market sales.
+    // "Bulk sales" = bora lifting by wholesale counters. This is what the
+    // depot actually cares about — retail sales are the reps' number, not
+    // the depot's, so no "salesman market sales" tile here.
     db
       .select({ qty: stockMovements.qty })
       .from(stockMovements)
@@ -100,11 +107,10 @@ export async function getDepotCountersData(depotId: string): Promise<DepotCounte
       ),
   ]);
 
+  // Rows are newest-first, so the first hit per counter wins.
   const latestStock = new Map<string, number>();
-  let marketSales = 0;
   for (const v of visitRows) {
-    if (!latestStock.has(v.counterId)) latestStock.set(v.counterId, v.stock); // rows are newest-first
-    if (v.visitedAt >= bounds.start && v.visitedAt < bounds.end) marketSales += v.sold;
+    if (!latestStock.has(v.counterId)) latestStock.set(v.counterId, v.stock);
   }
   // qty is signed (outward is negative) — report it as a positive packet count.
   const bulkSales = outwardToday.reduce((s, m) => s + Math.abs(m.qty), 0);
@@ -119,12 +125,7 @@ export async function getDepotCountersData(depotId: string): Promise<DepotCounte
     status: c.status,
   }));
 
-  return {
-    marketSales,
-    bulkSales,
-    counters: rows.filter((r) => r.type !== "Wholesale"),
-    wholesale: rows.filter((r) => r.type === "Wholesale"),
-  };
+  return { bulkSales, counters: rows };
 }
 
 // ── Schemes page ────────────────────────────────────────────────────────

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import type { DepotCountersData, DepotCounterRow, DepotOption } from "@/lib/depot/data";
 import { useT } from "@/lib/i18n/provider";
 import { DepotSelect } from "../_components/depot-select";
@@ -11,6 +10,12 @@ const STATUS_STYLE: Record<DepotCounterRow["status"], { label: string; bg: strin
   declining: { label: "Declining", bg: "rgba(199,38,59,.1)", color: "var(--danger)" },
 };
 
+/**
+ * Depot Counters view. Wholesale-only by design — retail outlets are the
+ * field reps' territory, not the depot's list to manage. That scoping is
+ * enforced server-side in `getDepotCountersData`; the client just renders
+ * whatever it's handed.
+ */
 export function DepotCountersClient({
   depotName,
   scope,
@@ -23,56 +28,29 @@ export function DepotCountersClient({
   data: DepotCountersData;
 }) {
   const t = useT();
-  const [tab, setTab] = useState<"counters" | "wholesale">("counters");
-  const rows = tab === "counters" ? data.counters : data.wholesale;
+  const rows = data.counters;
 
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            {t("Counters")} — {depotName}
+            {t("Wholesale counters")} — {depotName}
           </h4>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            {t("Retail + wholesale outlets served by this depot.")}
+            {t("Wholesale outlets served by this depot.")}
           </p>
         </div>
         {scope.length > 1 && <DepotSelect options={scope} value={selectedId} />}
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <StatCard
-          label={t("Salesman market sales (today)")}
-          value={`${data.marketSales} ${t("packets")}`}
-          hint={t("From geo-verified beat visits")}
-        />
+      <div className="mb-6 max-w-sm">
         <StatCard
           label={t("Depot counter / bulk sales (today)")}
           value={`${data.bulkSales} ${t("packets")}`}
-          hint={t("Bora lifting by counter, tagged separately")}
+          hint={t("Bora lifting by wholesale counters")}
         />
       </div>
-
-      <div className="mb-4 inline-flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
-        {(["counters", "wholesale"] as const).map((tk) => (
-          <button
-            key={tk}
-            onClick={() => setTab(tk)}
-            className="rounded-full px-4 py-2 text-[13px] font-semibold transition-colors"
-            style={{
-              background: tab === tk ? "var(--accent)" : "transparent",
-              color: tab === tk ? "#fff" : "var(--ink-2)",
-              cursor: "pointer",
-            }}
-          >
-            {tk === "counters" ? t("Counters") : t("Wholesale")}
-          </button>
-        ))}
-      </div>
-
-      <h4 className="mb-3 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        {tab === "counters" ? t("Counters under this depot") : t("Wholesale counters (Sales Officer-added)")}
-      </h4>
 
       <div className="table-wrap">
         <table className="table">
@@ -87,7 +65,7 @@ export function DepotCountersClient({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ color: "var(--ink-3)" }}>
-                  {tab === "counters" ? t("No counters under this depot yet.") : t("No wholesale counters yet.")}
+                  {t("No wholesale counters yet.")}
                 </td>
               </tr>
             ) : (

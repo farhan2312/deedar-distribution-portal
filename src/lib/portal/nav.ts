@@ -71,6 +71,9 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/field/day-log", label: "Day Log", icon: "calendar", customHeader: true },
       { href: "/field/beat", label: "Beat", icon: "target", customHeader: true },
+      // Browsable list of every counter in the rep's depot — a way to check
+      // into a counter that isn't on today's beat without hunting by mobile.
+      { href: "/field/counters", label: "All Counters", icon: "grid", customHeader: true },
       { href: "/field/map", label: "Live map", icon: "mapPin", customHeader: true },
       { href: "/field/new-counter", label: "New Counter", icon: "plusCircle", customHeader: true },
     ],
@@ -90,6 +93,10 @@ export const NAV_SECTIONS: NavSection[] = [
         customHeader: true,
       },
       { href: "/supervisor/assign-beat", label: "Assign Beat", icon: "users", customHeader: true },
+      // Read-only browseable list of every counter in the SO's supervised
+      // depots — for scoping beats and answering "does depot X have this
+      // outlet?" without needing to check-in.
+      { href: "/supervisor/counters", label: "All Counters", icon: "grid", customHeader: true },
       {
         href: "/supervisor/assignments",
         label: "Assignment Summary",
@@ -126,6 +133,14 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Company Dashboard",
         icon: "globe",
         blurb: "Company-wide view across every state, C&F HQ, depot and area.",
+      },
+      {
+        href: "/khq/reports",
+        label: "Reports",
+        icon: "clipboard",
+        // Draws its own header so the Counters/Visits tab pills + Export CSV
+        // button sit on the title row.
+        customHeader: true,
       },
     ],
   },

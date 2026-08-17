@@ -234,6 +234,27 @@ const HI: Record<string, string> = {
   // "Today's Beat", "Namaste", and the "No counters assigned…" empty state
   // are already above under Field: Beat / Field: Day Log.
   "10-digit mobile": "10 अंकों का मोबाइल",
+
+  // ── Field: All Counters (browsable depot list) ──
+  "All Counters": "सभी दुकानें",
+  "Every counter in your depot — tap Check in to open its page.":
+    "आपके डिपो की हर दुकान — पेज खोलने के लिए चेक इन दबाएँ।",
+  "No counters mapped to your depot yet.":
+    "आपके डिपो से अभी तक कोई दुकान मैप नहीं है।",
+  "No counters match — try clearing the filter.":
+    "कोई दुकान मेल नहीं खाती — फ़िल्टर हटाकर देखें।",
+  "This counter is in another depot.":
+    "यह दुकान दूसरे डिपो में है।",
+  "Showing first": "पहले दिखाए जा रहे",
+  "counters — refine the search to narrow down.":
+    "दुकानें — कम करने के लिए खोज को परिष्कृत करें।",
+
+  // ── Supervisor: All Counters (view-only) ──
+  "Every counter in the depots you supervise — view only.":
+    "आपके पर्यवेक्षण वाले डिपो की हर दुकान — केवल देखने के लिए।",
+  "your depots": "आपके डिपो",
+
+
   "No counter with this number.": "इस नंबर से कोई दुकान नहीं मिली।",
   "Add it as a new counter →": "इसे नई दुकान के रूप में जोड़ें →",
   "This mobile is registered to a counter in another depot — you can't access it from here.":
@@ -473,11 +494,15 @@ const HI: Record<string, string> = {
   // ── Depot: Counters ──
   "Retail + wholesale outlets served by this depot.":
     "इस डिपो द्वारा सेवा किए जाने वाले खुदरा + थोक आउटलेट।",
+  "Wholesale counters": "थोक दुकानें",
+  "Wholesale outlets served by this depot.":
+    "इस डिपो द्वारा सेवा किए जाने वाले थोक आउटलेट।",
   "Salesman market sales (today)": "सेल्समैन बाज़ार बिक्री (आज)",
   packets: "पैकेट",
   "From geo-verified beat visits": "जियो-सत्यापित बीट विज़िट से",
   "Depot counter / bulk sales (today)": "डिपो काउंटर / बल्क बिक्री (आज)",
   "Bora lifting by counter, tagged separately": "काउंटर द्वारा बोरा लिफ्टिंग, अलग टैग की गई",
+  "Bora lifting by wholesale counters": "थोक दुकानों द्वारा बोरा लिफ्टिंग",
   "Counters under this depot": "इस डिपो के अंतर्गत दुकानें",
   "Wholesale counters (Sales Officer-added)": "थोक दुकानें (सेल्स ऑफिसर द्वारा जोड़ी)",
   "No counters under this depot yet.": "इस डिपो के अंतर्गत अभी कोई दुकान नहीं।",
@@ -618,6 +643,9 @@ const HI: Record<string, string> = {
   "Packets today": "आज पैकेट",
   "Avg counter time": "औसत दुकान समय",
   "Product mix (MTD)": "उत्पाद मिश्रण (MTD)",
+  "Active reps today": "आज सक्रिय रेप",
+  "No counters yet.": "अभी तक कोई दुकान नहीं।",
+  "No sales this month yet.": "इस महीने अभी तक कोई बिक्री नहीं।",
 
   // ── Admin: Hierarchy ──
   Headquarters: "मुख्यालय",
@@ -753,6 +781,33 @@ const HI: Record<string, string> = {
     "पैक/कार्टन पर छपे विशिष्ट, एक-बार भुनाए जाने वाले कोड।",
   "Reports filed from the “Report a Bug” button across the portal.":
     "पोर्टल भर में 'Report a Bug' बटन से दर्ज की गई रिपोर्ट।",
+
+  // ── Kanpur HQ: Reports ──
+  Reports: "रिपोर्ट",
+  "You don't have Kanpur HQ access.": "आपके पास कानपुर मुख्यालय एक्सेस नहीं है।",
+  "All counters and visits company-wide, exportable to CSV.":
+    "कंपनी-व्यापी सभी दुकानें और विज़िट, CSV में निर्यात योग्य।",
+  // "Visits" already defined above under Live maps: Sales Officer / C&F HQ team view.
+  "Export CSV": "CSV निर्यात करें",
+  "Exporting…": "निर्यात हो रहा है…",
+  "Search counter name or mobile…": "दुकान का नाम या मोबाइल खोजें…",
+  "Search counter or rep name…": "दुकान या रेप का नाम खोजें…",
+  From: "से",
+  To: "तक",
+  "No counters match these filters.": "इन फ़िल्टरों से कोई दुकान मेल नहीं खाती।",
+  "No visits match these filters.": "इन फ़िल्टरों से कोई विज़िट मेल नहीं खाती।",
+  Showing: "दिखा रहे",
+  Created: "बनाया गया",
+  "Created by": "बनाया गया द्वारा",
+  "Total visits": "कुल विज़िट",
+  "Clear dates": "तारीखें हटाएँ",
+  Products: "उत्पाद",
+  "Total Stock": "कुल स्टॉक",
+  "Total Sold": "कुल बिका",
+  "Counter Mobile": "दुकान का मोबाइल",
+  "Competitor Brand": "प्रतिस्पर्धी ब्रांड",
+  Previous: "पिछला",
+  Next: "अगला",
 
   // ── Roles (profile menu, users table) ──
   // "Field Salesman ISR" already defined above under Sidebar section titles.
