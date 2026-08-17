@@ -5,7 +5,7 @@ config({ path: ".env.local" });
 // Adds the Supervisor force-end audit columns to day_logs:
 //   end_forced      — true when a Supervisor closed a day the rep forgot to end
 //   ended_by_user_id — which Supervisor stamped the end time
-// Additive + idempotent (IF NOT EXISTS), so it's safe to re-run.
+// Additive + idempotent (IF NOT EXISTS), so it's safe to re-run.    trsting
 async function main() {
   const postgres = (await import("postgres")).default;
   const url = process.env.DATABASE_URL;
