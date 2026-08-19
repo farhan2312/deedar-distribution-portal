@@ -821,6 +821,9 @@ const HI: Record<string, string> = {
   "Ask something else": "कुछ और पूछें",
   "Answers are live from your data.": "उत्तर आपके लाइव डेटा से हैं।",
   "I need help": "मुझे मदद चाहिए",
+  Hide: "छिपाएँ",
+  "Hide until I tap again": "जब तक दोबारा टैप न करूँ, छिपाएँ",
+  "Show Ask": "पूछें दिखाएँ",
   // "Checking…" already defined above under Field: New Counter wizard.
   "Couldn't fetch that right now. Please try again.":
     "अभी यह नहीं मिल सका। कृपया पुनः प्रयास करें।",
