@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CompetitorPresence, ProductSegment, VisitItem } from "@/db/schema";
 import { createVisit, updateVisit, type VisitInput } from "@/lib/field/visit-actions";
-import { COMPETITOR_OPTIONS, MAX_SOLD_PER_SKU, PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
+import { COMPETITOR_OPTIONS, PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
 import { useT } from "@/lib/i18n/provider";
 
 const SEGMENTS: ProductSegment[] = PRODUCT_SEGMENTS.map((p) => p.value);
@@ -71,14 +71,13 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
   }, [isEdit]);
 
   const totalSold = SEGMENTS.reduce((s, seg) => s + sold[seg], 0);
-  // Cap is per SKU, not combined — flag if any single segment is at its limit.
-  const anyAtCap = SEGMENTS.some((seg) => sold[seg] >= MAX_SOLD_PER_SKU);
 
   function bumpSold(seg: ProductSegment, delta: number) {
-    // Each segment is independently capped at MAX_SOLD_PER_SKU.
+    // Uncapped — the previous 24/SKU ceiling was removed. Floor stays at 0 so
+    // the − button on a 0 counter is a no-op rather than going negative.
     setSold((prev) => ({
       ...prev,
-      [seg]: Math.min(MAX_SOLD_PER_SKU, Math.max(0, prev[seg] + delta)),
+      [seg]: Math.max(0, prev[seg] + delta),
     }));
   }
   function setStockValue(seg: ProductSegment, raw: string) {
@@ -174,7 +173,6 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
                   value={sold[seg]}
                   onDec={() => bumpSold(seg, -1)}
                   onInc={() => bumpSold(seg, 1)}
-                  incDisabled={sold[seg] >= MAX_SOLD_PER_SKU}
                 />
                 <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Stock")}</span>
                 <input
@@ -190,12 +188,6 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
             </div>
           ))}
         </div>
-        {anyAtCap && (
-          <p className="mt-2 text-[11.5px]" style={{ color: "var(--warning)" }}>
-            {t("Max")} {MAX_SOLD_PER_SKU} {t("packets sold per SKU.")}
-          </p>
-        )}
-
         <div className="my-4 h-px" style={{ background: "var(--hairline)" }} />
 
         <h6 className="mb-2 text-[14px] font-semibold" style={{ color: "var(--ink-1)" }}>{t("Our rank at this counter")}</h6>
@@ -380,18 +372,16 @@ function Stepper({
   value,
   onDec,
   onInc,
-  incDisabled,
 }: {
   value: number;
   onDec: () => void;
   onInc: () => void;
-  incDisabled?: boolean;
 }) {
   return (
     <div className="flex items-center gap-1.5">
       <StepBtn label="−" onClick={onDec} disabled={value === 0} />
       <span className="min-w-[22px] text-center text-[15px] font-semibold tabular-nums" style={{ color: "var(--ink-1)" }}>{value}</span>
-      <StepBtn label="+" onClick={onInc} disabled={incDisabled} />
+      <StepBtn label="+" onClick={onInc} />
     </div>
   );
 }

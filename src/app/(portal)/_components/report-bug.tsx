@@ -35,7 +35,9 @@ export function ReportBug() {
   );
 }
 
-function ReportBugDialog({ onClose }: { onClose: () => void }) {
+/** Exported so the chatbot's "I need help" option can hand straight off to the
+ * same form, rather than telling the user to go find the top-bar button. */
+export function ReportBugDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
   const pathname = usePathname();
 

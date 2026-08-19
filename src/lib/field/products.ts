@@ -37,10 +37,6 @@ export function competitorDisplayLabel(
   return competitor !== "none" && brand?.trim() ? `${label} — ${brand.trim()}` : label;
 }
 
-/** Max packets sold PER SKU (product segment) in a single visit — applied to
- * each segment independently, not to the combined total. */
-export const MAX_SOLD_PER_SKU = 24;
-
 /** MM:SS from a whole number of seconds (used for "time on counter"). */
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds == null || seconds < 0) return "—";

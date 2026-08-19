@@ -12,7 +12,7 @@ import {
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
-import { isWithinEditWindow, MAX_SOLD_PER_SKU } from "./products";
+import { isWithinEditWindow } from "./products";
 
 const SEGMENTS: ProductSegment[] = ["DG10", "DG20", "DB20", "DB40"];
 const COMPETITORS: CompetitorPresence[] = ["none", "local", "national"];
@@ -37,10 +37,6 @@ function validate(input: VisitInput): string | null {
   if (items.length === 0) return "Add at least one product with a segment.";
   for (const i of items) {
     if (i.stock < 0 || i.sold < 0) return "Stock and sold cannot be negative.";
-    // Sold is capped PER SKU (segment), not across the whole visit.
-    if (i.sold > MAX_SOLD_PER_SKU) {
-      return `Packets sold per SKU can't exceed ${MAX_SOLD_PER_SKU}.`;
-    }
   }
   // Rank is optional (the form offers "N/A" → null); if given it's 1–5.
   if (input.rank != null && (input.rank < 1 || input.rank > 5)) {

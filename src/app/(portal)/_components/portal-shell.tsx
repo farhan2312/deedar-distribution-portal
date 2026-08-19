@@ -15,6 +15,7 @@ import {
 import { useT } from "@/lib/i18n/provider";
 import { LanguageToggle } from "@/components/language-toggle";
 import { NavIconView } from "./nav-icons";
+import { ChatWidget } from "./chat-widget";
 import { MobileNav } from "./mobile-nav";
 import { ProfileMenu } from "./profile-menu";
 import { ReportBug } from "./report-bug";
@@ -217,6 +218,12 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
         phone={phone}
         roleLabel={roleLabel}
       />
+
+      {/* After MobileNav so it wins the z-40 tie, and a root-level sibling so
+          `fixed` isn't scoped by the top bar's stacking context. Sits below the
+          `mustRedirect` early return above, so a forced-password-reset user
+          doesn't get a chatbot instead of the password form. */}
+      <ChatWidget accessRoles={accessRoles} />
     </div>
   );
 }
