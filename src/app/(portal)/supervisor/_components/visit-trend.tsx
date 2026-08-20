@@ -171,13 +171,15 @@ export function VisitTrend({
             strokeDasharray="3 3"
             opacity="0.5"
           />
+          {/* Fixed dark chip in both themes — `--ink-1` flips to near-white in
+              dark mode, which made the white text below invisible. */}
           <rect
             x={tipX}
             y={tipY}
             width={tipW}
             height={38}
             rx="8"
-            fill="var(--ink-1)"
+            fill="#1f2233"
             opacity="0.94"
           />
           <text x={tipX + tipW / 2} y={tipY + 15} textAnchor="middle" fontSize="10" fill="rgba(255,255,255,.7)">
