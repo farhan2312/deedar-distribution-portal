@@ -43,11 +43,13 @@ export function DayLogClient({
   const router = useRouter();
   const t = useT();
   const [pending, start] = useTransition();
-  // Unbounded history can grow to months of rows; show a handful and let the
-  // rep expand it rather than always rendering the whole table.
+  // Cap the history to the last week — a rep only needs to sanity-check the
+  // recent stretch here; deeper history belongs in a report, not this card.
+  const HISTORY_WEEK = 7;
+  const weekHistory = history.slice(0, HISTORY_WEEK);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const HISTORY_PREVIEW = 5;
-  const visibleHistory = showAllHistory ? history : history.slice(0, HISTORY_PREVIEW);
+  const visibleHistory = showAllHistory ? weekHistory : weekHistory.slice(0, HISTORY_PREVIEW);
 
   function onStart() {
     const deviceId = getDeviceId();
@@ -164,7 +166,7 @@ export function DayLogClient({
               <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("Your recent visit history")}</div>
             </div>
           </div>
-          {history.length > HISTORY_PREVIEW && (
+          {weekHistory.length > HISTORY_PREVIEW && (
             <button
               type="button"
               onClick={() => setShowAllHistory((v) => !v)}
@@ -177,7 +179,7 @@ export function DayLogClient({
           )}
         </div>
 
-        {history.length === 0 ? (
+        {weekHistory.length === 0 ? (
           <p className="text-[13.5px]" style={{ color: "var(--ink-3)" }}>
             {t("No previous day logs yet.")}
           </p>
