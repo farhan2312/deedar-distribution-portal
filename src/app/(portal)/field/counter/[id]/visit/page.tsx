@@ -5,8 +5,10 @@ import { areas, counters } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { hasStartedToday } from "@/lib/field/day-log";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
+import { StartDayRequired } from "../../../_components/start-day-required";
 import { VisitForm } from "./visit-form";
 
 export default async function NewVisitPage({
@@ -37,7 +39,8 @@ export default async function NewVisitPage({
     .limit(1);
   if (!counter) notFound();
 
-  const canVisit = user.accessRoles.includes("admin") || counter.depotId === user.depot?.id;
+  const isAdmin = user.accessRoles.includes("admin");
+  const canVisit = isAdmin || counter.depotId === user.depot?.id;
   if (!canVisit) {
     const t = await getT();
     return (
@@ -45,6 +48,12 @@ export default async function NewVisitPage({
         {t("This counter isn't in your depot, so you can't add a visit to it.")}
       </Notice>
     );
+  }
+
+  // A rep works inside a started day; admin keeps no day log and is exempt.
+  if (!isAdmin && !(await hasStartedToday(user.id))) {
+    const t = await getT();
+    return <StartDayRequired title={t("Add visit")} />;
   }
 
   return (

@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
+import { hasStartedToday, START_DAY_REQUIRED } from "./day-log";
 import { isWithinEditWindow } from "./products";
 
 const SEGMENTS: ProductSegment[] = ["DG10", "DG20", "DB20", "DB40"];
@@ -76,6 +77,11 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
   const isAdmin = user.accessRoles.includes("admin");
   if (!isAdmin && counter.depotId !== user.depot?.id) {
     return { ok: false, error: "You can only add visits to counters in your own depot." };
+  }
+  // Admin isn't on a beat and keeps no day log, so the clock-in gate is for
+  // reps only.
+  if (!isAdmin && !(await hasStartedToday(user.id))) {
+    return { ok: false, error: START_DAY_REQUIRED };
   }
 
   const items = input.items.filter((i) => SEGMENTS.includes(i.segment));

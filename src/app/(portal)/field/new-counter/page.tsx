@@ -4,8 +4,10 @@ import { db } from "@/db";
 import { areas, cnfs, depots } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
+import { hasStartedToday } from "@/lib/field/day-log";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
+import { StartDayRequired } from "../_components/start-day-required";
 import { NewCounterWizard } from "./wizard";
 
 export default async function NewCounterPage() {
@@ -17,6 +19,12 @@ export default async function NewCounterPage() {
   }
 
   const isAdmin = user.accessRoles.includes("admin");
+
+  // A rep works inside a started day; admin keeps no day log and is exempt.
+  if (!isAdmin && !(await hasStartedToday(user.id))) {
+    const t = await getT();
+    return <StartDayRequired title={t("New Counter")} />;
+  }
 
   // Admin sees the whole hierarchy and can pick any C&F → depot → area.
   if (isAdmin) {

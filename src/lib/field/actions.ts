@@ -7,6 +7,8 @@ import { areas, counters, depots } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { hasStartedToday, START_DAY_REQUIRED } from "@/lib/field/day-log";
+import { GPS_REQUIRED, parseCoords } from "@/lib/field/gps";
 
 export type DuplicateMatch = { name: string; type: string; area: string } | null;
 
@@ -75,6 +77,11 @@ export async function createCounter(input: NewCounterInput) {
   // A field rep belongs to exactly one depot and can only add counters there.
   // Admin has full visibility and may pick any depot.
   const isAdmin = user.accessRoles.includes("admin");
+  // Admin isn't on a beat and keeps no day log, so the clock-in gate is for
+  // reps only.
+  if (!isAdmin && !(await hasStartedToday(user.id))) {
+    return { ok: false as const, error: START_DAY_REQUIRED };
+  }
   if (!isAdmin && input.depotId !== user.depot?.id) {
     return { ok: false as const, error: "You can only add counters in your own depot." };
   }
@@ -104,7 +111,8 @@ export async function createCounter(input: NewCounterInput) {
     .limit(1);
   if (existing) return { ok: false as const, error: "This mobile number is already a counter." };
 
-  const [lat, lng] = input.gps.split(",").map((s) => s.trim());
+  const coords = parseCoords(input.gps);
+  if (!coords) return { ok: false as const, error: GPS_REQUIRED };
 
   await db.insert(counters).values({
     name: input.name.trim(),
@@ -114,8 +122,8 @@ export async function createCounter(input: NewCounterInput) {
     areaId: area.id,
     type: input.type,
     typeOther: typeOther || null,
-    lat: lat || null,
-    lng: lng || null,
+    lat: coords.lat,
+    lng: coords.lng,
     status: "active",
     createdByUserId: user.id,
   });
@@ -168,7 +176,10 @@ export async function updateCounter(counterId: string, input: EditCounterInput) 
     return { ok: false as const, error: "Area does not belong to this counter's depot." };
   }
 
-  const [lat, lng] = input.gps.split(",").map((s) => s.trim());
+  // Also enforced on edit, not just create — that's what closes the gap for
+  // counters added before coordinates were mandatory.
+  const coords = parseCoords(input.gps);
+  if (!coords) return { ok: false as const, error: GPS_REQUIRED };
 
   await db
     .update(counters)
@@ -178,8 +189,8 @@ export async function updateCounter(counterId: string, input: EditCounterInput) 
       areaId: area.id,
       type: input.type,
       typeOther: typeOther || null,
-      lat: lat || null,
-      lng: lng || null,
+      lat: coords.lat,
+      lng: coords.lng,
       updatedAt: new Date(),
     })
     .where(eq(counters.id, counterId));

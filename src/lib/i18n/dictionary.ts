@@ -269,6 +269,11 @@ const HI: Record<string, string> = {
   // ── Field: Day Log server-only labels ──
   "Not started yet": "अभी शुरू नहीं हुआ",
   "Not ended yet": "अभी समाप्त नहीं हुआ",
+  "Start your day log before adding counters or visits.":
+    "काउंटर या विज़िट जोड़ने से पहले अपना डे लॉग शुरू करें।",
+  "Go to Day Log": "डे लॉग पर जाएँ",
+  "Capture the counter's GPS location before saving.":
+    "सहेजने से पहले काउंटर की जीपीएस लोकेशन कैप्चर करें।",
 
   // ── Field: New Counter wizard ──
   // "New Counter" already defined above under Sidebar nav items.

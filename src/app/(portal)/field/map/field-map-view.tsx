@@ -190,7 +190,15 @@ export function FieldMapView({
         </div>
 
         <div className="min-w-0">
-          <LiveMap counters={counters} reps={[{ id: ME, name: "You" }]} positions={positions} />
+          <LiveMap
+            counters={counters}
+            reps={[{ id: ME, name: "You" }]}
+            positions={positions}
+            // Same destination as the beat list's "Check in" button, so a pin
+            // and a row lead to the same place.
+            counterActionLabel={t("Check in")}
+            counterActionHrefBase="/field/counter"
+          />
           <p className="mt-2 text-[12px]" style={{ color: "var(--ink-3)" }}>
             {t("Distances are straight-line from your current location, not road distance.")}
             {missingGps > 0 && (

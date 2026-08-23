@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateCounter, type EditCounterInput } from "@/lib/field/actions";
 import { ALL_COUNTER_TYPES } from "@/lib/field/counter-types";
+import { parseCoords } from "@/lib/field/gps";
 import { useT } from "@/lib/i18n/provider";
 import { GpsCapture } from "../../../_components/gps-capture";
 
@@ -47,6 +48,10 @@ export function EditCounterForm({
     }
     if (draft.type === "Others" && !draft.typeOther.trim()) {
       setError(t("Enter the counter type."));
+      return;
+    }
+    if (!parseCoords(draft.gps)) {
+      setError(t("Capture the counter's GPS location before saving."));
       return;
     }
     setBusy(true);
@@ -133,7 +138,7 @@ export function EditCounterForm({
       </div>
       <div className="mb-5 rounded-2xl p-4" style={{ background: "var(--accent-tint)" }}>
         <label className="mb-2.5 block text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>
-          {t("GPS Coordinates")}
+          {t("GPS Coordinates *")}
         </label>
         <GpsCapture value={draft.gps} onCapture={(gps) => setDraft({ ...draft, gps })} />
       </div>

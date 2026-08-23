@@ -12,6 +12,7 @@ import {
   createCounterBySupervisor,
 } from "@/lib/supervisor/actions";
 import { ALL_COUNTER_TYPES } from "@/lib/field/counter-types";
+import { parseCoords } from "@/lib/field/gps";
 import { useT } from "@/lib/i18n/provider";
 import { GpsCapture } from "../_components/gps-capture";
 
@@ -125,6 +126,10 @@ export function NewCounterWizard(props: WizardProps) {
     }
     if (draft.type === "Others" && !draft.typeOther.trim()) {
       setError(t("Enter the counter type."));
+      return;
+    }
+    if (!parseCoords(draft.gps)) {
+      setError(t("Capture the counter's GPS location before saving."));
       return;
     }
     setStep("review");

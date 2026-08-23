@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { distanceMeters, STALE_AFTER_MS, type RepPosition } from "@/lib/tracking/protocol";
@@ -56,9 +57,16 @@ function counterStatusLabel(c: CounterPin, t: (key: string) => string): string {
   return t("Counter");
 }
 
+/** Marks the popup's action link so the delegated click handler can find it. */
+const ACTION_ATTR = "data-counter-action";
+
 /** Counter detail card shown when a pin is clicked. A thin left-edge bar in the
  * pin's status colour ties the card back to the dot. */
-function counterPopup(c: CounterPin, t: (key: string) => string): string {
+function counterPopup(
+  c: CounterPin,
+  t: (key: string) => string,
+  action?: { label: string; hrefBase: string },
+): string {
   const color = counterColor(c);
   const meta = [c.type, c.area].filter(Boolean).map(esc).join(" · ");
   const facts = [
@@ -67,12 +75,21 @@ function counterPopup(c: CounterPin, t: (key: string) => string): string {
   ]
     .filter(Boolean)
     .join(" · ");
+  // A real href, not a bare button: the link still works if the delegated
+  // handler hasn't attached yet, it just costs a full navigation instead of a
+  // client-side one.
+  const actionHtml = action
+    ? `<a href="${esc(`${action.hrefBase}/${c.id}`)}" ${ACTION_ATTR}="1" style="display:inline-block;margin-top:8px;` +
+      `padding:5px 12px;border-radius:999px;background:var(--accent);color:#fff;` +
+      `font:600 11.5px/1.3 inherit;text-decoration:none">${esc(action.label)}</a>`
+    : "";
   return (
     `<div style="min-width:150px;border-left:3px solid ${color};padding-left:10px;font-family:var(--font-sans)">` +
     `<div style="font:700 13.5px/1.3 inherit;color:#221f3a">${esc(c.name)}</div>` +
     `<div style="font-size:11.5px;color:#8a88a3;margin-top:2px">${meta}</div>` +
     `<div style="font-size:11.5px;color:#5d5b76;margin-top:3px">${facts}</div>` +
     `<div style="font-size:11.5px;font-weight:600;color:${color};margin-top:4px">${counterStatusLabel(c, t)}</div>` +
+    actionHtml +
     `</div>`
   );
 }
@@ -188,16 +205,22 @@ export function LiveMap({
   counters,
   reps,
   positions,
+  counterActionLabel,
+  counterActionHrefBase,
 }: {
   counters: CounterPin[];
   reps: RepMeta[];
   positions: Map<string, RepPosition>;
+  /** Both must be set to render a call-to-action button in counter popups. */
+  counterActionLabel?: string;
+  counterActionHrefBase?: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const repLayerRef = useRef<Map<string, RepMarker>>(new Map());
   const fittedRef = useRef(false);
   const t = useT();
+  const router = useRouter();
 
   const repNames = useMemo(() => new Map(reps.map((r) => [r.id, r.name])), [reps]);
 
@@ -214,11 +237,30 @@ export function LiveMap({
     L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map);
     mapRef.current = map;
 
+    const action =
+      counterActionLabel && counterActionHrefBase
+        ? { label: counterActionLabel, hrefBase: counterActionHrefBase }
+        : undefined;
+
     for (const c of counters) {
       L.marker([c.lat, c.lng], { icon: dotIcon(counterColor(c), 14) })
         .addTo(map)
-        .bindPopup(counterPopup(c, t));
+        .bindPopup(counterPopup(c, t, action));
     }
+
+    // Delegated so it covers every popup without re-binding per open. Routing
+    // through the router keeps the click a client-side navigation; the anchor's
+    // real href is the fallback if this never runs.
+    const onActionClick = (e: MouseEvent) => {
+      const link = (e.target as HTMLElement | null)?.closest<HTMLAnchorElement>(`[${ACTION_ATTR}]`);
+      if (!link) return;
+      // Leave modified clicks (new tab / new window) to the browser.
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      router.push(link.getAttribute("href")!);
+    };
+    const host = hostRef.current;
+    host.addEventListener("click", onActionClick);
 
     if (counters.length > 0) {
       map.fitBounds(L.latLngBounds(counters.map((c) => [c.lat, c.lng] as [number, number])).pad(0.2));
@@ -227,6 +269,7 @@ export function LiveMap({
 
     const repLayer = repLayerRef.current;
     return () => {
+      host.removeEventListener("click", onActionClick);
       // Stop every tween before the map goes away, so no frame fires against a
       // removed marker.
       for (const entry of repLayer.values()) {
@@ -236,9 +279,11 @@ export function LiveMap({
       mapRef.current = null;
       repLayer.clear();
     };
-    // `t` deliberately omitted — see the comment above this effect.
+    // `t` deliberately omitted — see the comment above this effect. The action
+    // props are plain strings, so keying on them is safe: they only change when
+    // the label or destination genuinely does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [counters]);
+  }, [counters, counterActionLabel, counterActionHrefBase, router]);
 
   // Sync live rep markers whenever positions change.
   useEffect(() => {

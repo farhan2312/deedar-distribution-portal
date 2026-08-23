@@ -7,6 +7,7 @@ import { areas, beatAssignments, counters, dayLogs, depots, users } from "@/db/s
 import { getCurrentUser } from "@/lib/auth/dal";
 import type { DuplicateMatch } from "@/lib/field/actions";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { GPS_REQUIRED, parseCoords } from "@/lib/field/gps";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -202,7 +203,8 @@ export async function createCounterBySupervisor(input: SupervisorCounterInput): 
     .limit(1);
   if (existing) return { ok: false, error: "This mobile number is already a counter." };
 
-  const [lat, lng] = input.gps.split(",").map((s) => s.trim());
+  const coords = parseCoords(input.gps);
+  if (!coords) return { ok: false, error: GPS_REQUIRED };
 
   await db.insert(counters).values({
     name: input.name.trim(),
@@ -212,8 +214,8 @@ export async function createCounterBySupervisor(input: SupervisorCounterInput): 
     areaId: area.id,
     type: input.type,
     typeOther: typeOther || null,
-    lat: lat || null,
-    lng: lng || null,
+    lat: coords.lat,
+    lng: coords.lng,
     status: "active",
     createdByUserId: user.id,
   });
