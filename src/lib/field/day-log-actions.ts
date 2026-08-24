@@ -7,6 +7,7 @@ import { dayLogs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { istDateString } from "@/lib/date";
+import { itemsFromQty, totalOf, zeroQty, type SegQty } from "@/lib/field/day-stock";
 
 async function requireField() {
   const user = await getCurrentUser();
@@ -23,13 +24,19 @@ async function requireField() {
  * The first device to start the day wins — a later start call (the day is
  * already open) does NOT reassign ownership.
  */
-export async function startDay(deviceId?: string) {
+export async function startDay(deviceId?: string, pickup?: SegQty) {
   const user = await requireField();
   if (!user) return { ok: false as const, error: "Not authorized." };
 
   const now = new Date();
   const logDate = istDateString(now);
   const trackingDeviceId = deviceId?.trim() || null;
+  // Stock the rep is carrying out of the depot. Normalised here rather than
+  // trusted from the client — this is a server action, so the numbers arrive
+  // straight off the wire.
+  const pickupQty = pickup ?? zeroQty();
+  const pickupItems = itemsFromQty(pickupQty);
+  const pickupTotal = totalOf(pickupQty);
 
   const [existing] = await db
     .select()
@@ -42,10 +49,12 @@ export async function startDay(deviceId?: string) {
   if (existing) {
     await db
       .update(dayLogs)
-      .set({ startAt: now, trackingDeviceId, updatedAt: now })
+      .set({ startAt: now, trackingDeviceId, pickupItems, pickupTotal, updatedAt: now })
       .where(eq(dayLogs.id, existing.id));
   } else {
-    await db.insert(dayLogs).values({ userId: user.id, logDate, startAt: now, trackingDeviceId });
+    await db
+      .insert(dayLogs)
+      .values({ userId: user.id, logDate, startAt: now, trackingDeviceId, pickupItems, pickupTotal });
   }
 
   revalidatePath("/field/day-log");
@@ -54,7 +63,7 @@ export async function startDay(deviceId?: string) {
 }
 
 /** Stamp today's (IST) end time — requires a start first, once per day. */
-export async function endDay() {
+export async function endDay(remaining?: SegQty) {
   const user = await requireField();
   if (!user) return { ok: false as const, error: "Not authorized." };
 
@@ -70,9 +79,16 @@ export async function endDay() {
   if (!existing?.startAt) return { ok: false as const, error: "Start your day first." };
   if (existing.endAt) return { ok: true as const }; // already ended
 
+  const remainingQty = remaining ?? zeroQty();
+
   await db
     .update(dayLogs)
-    .set({ endAt: now, updatedAt: now })
+    .set({
+      endAt: now,
+      remainingItems: itemsFromQty(remainingQty),
+      remainingTotal: totalOf(remainingQty),
+      updatedAt: now,
+    })
     .where(eq(dayLogs.id, existing.id));
 
   revalidatePath("/field/day-log");

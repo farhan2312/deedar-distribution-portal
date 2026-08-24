@@ -10,6 +10,37 @@ import { useT } from "@/lib/i18n/provider";
 
 const SEVERITIES: BugSeverity[] = ["low", "medium", "high", "critical"];
 
+/** Every string and accent that flips when the Type toggle moves. Kept as one
+ * table so the dialog can't end up half-rebranded — the form used to switch
+ * only its submit button, leaving "Report a Bug" and "What happened?" in place
+ * while the user was filing a feature request. */
+const COPY = {
+  bug: {
+    eyebrow: "Report a Bug",
+    heading: "Report a Bug",
+    blurb: "Tell us what went wrong — it goes straight to the admin's Bug Tracker.",
+    thanks: "Your report went straight to the admin's Bug Tracker.",
+    titlePlaceholder: "Short summary of the issue",
+    detailLabel: "What happened?",
+    detailPlaceholder: "Steps to reproduce, what you expected, what actually happened…",
+    rankLabel: "Severity",
+    submit: "Submit Bug",
+    accent: "var(--danger)",
+  },
+  feature: {
+    eyebrow: "Report a Feature",
+    heading: "Report a Feature",
+    blurb: "Tell us what you'd like — it goes straight to the admin's Bug Tracker.",
+    thanks: "Your request went straight to the admin's Bug Tracker.",
+    titlePlaceholder: "Short summary of the idea",
+    detailLabel: "What would you like?",
+    detailPlaceholder: "What should it do, who needs it, and what it would save you…",
+    rankLabel: "Priority",
+    submit: "Submit Feature",
+    accent: "var(--warning)",
+  },
+} as const;
+
 /** Top-bar trigger + modal. Any signed-in user can file a report. */
 export function ReportBug() {
   const t = useT();
@@ -50,6 +81,8 @@ export function ReportBugDialog({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [pending, start] = useTransition();
+
+  const copy = COPY[type];
 
   const fileRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -131,24 +164,24 @@ export function ReportBugDialog({ onClose }: { onClose: () => void }) {
         ref={cardRef}
         role="dialog"
         aria-modal="true"
-        aria-label={t("Report a Bug")}
+        aria-label={t(copy.heading)}
         className="flex h-[85dvh] w-full max-w-md flex-col rounded-t-2xl bg-[var(--surface)] sm:h-auto sm:max-h-[90dvh] sm:rounded-2xl"
         style={{ boxShadow: "var(--shadow-lg)", animation: "fadeUp .2s ease" }}
       >
         {/* Header */}
         <div className="flex flex-none items-start justify-between gap-3 px-5 pt-5 sm:px-6">
           <div>
-            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--danger)" }}>
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--danger)" }} />
-              {t("Report a Bug")}
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: copy.accent }}>
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: copy.accent }} />
+              {t(copy.eyebrow)}
             </div>
             <h3 className="mt-1 text-[20px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-              {done ? t("Thanks!") : t("Report a Bug")}
+              {done ? t("Thanks!") : t(copy.heading)}
             </h3>
             <p className="mt-1 text-[13px]" style={{ color: "var(--ink-3)" }}>
               {done
-                ? t("Your report went straight to the admin's Bug Tracker.")
-                : t("Tell us what went wrong — it goes straight to the admin's Bug Tracker.")}
+                ? t(copy.thanks)
+                : t(copy.blurb)}
             </p>
           </div>
           <button
@@ -212,18 +245,18 @@ export function ReportBugDialog({ onClose }: { onClose: () => void }) {
                 <input
                   className="inp"
                   maxLength={200}
-                  placeholder={t("Short summary of the issue")}
+                  placeholder={t(copy.titlePlaceholder)}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </div>
 
               <div className="field mb-4">
-                <label>{t("What happened?")}</label>
+                <label>{t(copy.detailLabel)}</label>
                 <textarea
                   className="inp"
                   rows={4}
-                  placeholder={t("Steps to reproduce, what you expected, what actually happened…")}
+                  placeholder={t(copy.detailPlaceholder)}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                 />
@@ -231,7 +264,7 @@ export function ReportBugDialog({ onClose }: { onClose: () => void }) {
 
               <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="field">
-                  <label>{t("Severity")}</label>
+                  <label>{t(copy.rankLabel)}</label>
                   <select className="inp" value={severity} onChange={(e) => setSeverity(e.target.value as BugSeverity)}>
                     {SEVERITIES.map((s) => (
                       <option key={s} value={s}>
@@ -312,7 +345,7 @@ export function ReportBugDialog({ onClose }: { onClose: () => void }) {
                 onClick={submit}
                 disabled={pending}
               >
-                {pending ? t("Sending…") : type === "bug" ? t("Submit Bug") : t("Submit Feature")}
+                {pending ? t("Sending…") : t(copy.submit)}
               </button>
             </div>
           </>

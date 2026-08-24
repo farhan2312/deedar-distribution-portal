@@ -205,6 +205,12 @@ export const counters = pgTable("counters", {
 
 // One row per field rep per day (day boundaries computed in IST). Tracks the
 // rep's on-the-clock start/end for the day.
+/** One SKU line in a day-log stock count (pickup at start, remaining at end).
+ * Deliberately a separate shape from `VisitItem`: a visit records two numbers
+ * per SKU (stock seen, packets sold), whereas a day-log line is a single
+ * quantity the rep is carrying. */
+export type DayStockItem = { segment: ProductSegment; qty: number };
+
 export const dayLogs = pgTable(
   "day_logs",
   {
@@ -227,6 +233,15 @@ export const dayLogs = pgTable(
     // day-starter's device streams to the SO/C&F map, never two at once.
     // Null on rows started before this was introduced (treated as unclaimed).
     trackingDeviceId: text("tracking_device_id"),
+    // Stock the rep collects from the depot at start of day, and what's left
+    // on them at end of day — per SKU, mirroring `visits.items`, so the day
+    // reconciles against the visits recorded in between (picked up − sold =
+    // remaining). Totals are kept alongside for cheap aggregation, exactly as
+    // `visits` keeps stock/sold next to its items JSONB.
+    pickupItems: jsonb("pickup_items").$type<DayStockItem[]>().notNull().default([]),
+    pickupTotal: integer("pickup_total").notNull().default(0),
+    remainingItems: jsonb("remaining_items").$type<DayStockItem[]>().notNull().default([]),
+    remainingTotal: integer("remaining_total").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

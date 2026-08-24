@@ -3,14 +3,19 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { endDay, startDay } from "@/lib/field/day-log-actions";
+import { SEGMENTS, clampQty, totalOf, zeroQty, type SegQty } from "@/lib/field/day-stock";
+import { SEGMENT_LABEL } from "@/lib/field/products";
 import { getDeviceId } from "@/lib/tracking/device-id";
 import { useT } from "@/lib/i18n/provider";
+import type { ProductSegment } from "@/db/schema";
 
 export type HistoryRow = {
   dateLabel: string;
   startLabel: string;
   endLabel: string;
   onJobLabel: string;
+  pickupTotal: number;
+  remainingTotal: number;
 };
 
 export function DayLogClient({
@@ -26,6 +31,9 @@ export function DayLogClient({
   daysLoggedThisWeek,
   totalOnJobLabelThisWeek,
   weekPct,
+  pickup,
+  remaining,
+  soldToday,
 }: {
   greeting: string;
   firstName: string;
@@ -39,6 +47,13 @@ export function DayLogClient({
   daysLoggedThisWeek: number;
   totalOnJobLabelThisWeek: string;
   weekPct: number;
+  /** Per-SKU stock already recorded on today s log, if the step is done. */
+  pickup: SegQty;
+  remaining: SegQty;
+  /** Packets sold per SKU across today s visits — the middle term in
+   * picked up − sold = remaining, shown so the rep can sanity-check the count
+   * they are about to submit. */
+  soldToday: SegQty;
 }) {
   const router = useRouter();
   const t = useT();
@@ -51,16 +66,33 @@ export function DayLogClient({
   const HISTORY_PREVIEW = 5;
   const visibleHistory = showAllHistory ? weekHistory : weekHistory.slice(0, HISTORY_PREVIEW);
 
+  // Which stock panel is open. Only one at a time — the two steps are
+  // sequential, so there is never a reason to fill both at once.
+  const [openPanel, setOpenPanel] = useState<null | "pickup" | "remaining">(null);
+  const [pickupDraft, setPickupDraft] = useState<SegQty>(zeroQty);
+  const [remainingDraft, setRemainingDraft] = useState<SegQty>(zeroQty);
+
+  // What the count SHOULD come to if every visit was logged. Shown beside each
+  // input as a cross-check, never prefilled — auto-filling it would just have
+  // the rep confirm our arithmetic instead of counting what is in the bag,
+  // which is the one thing this step exists to capture.
+  const expectedRemaining = SEGMENTS.reduce((acc, seg) => {
+    acc[seg] = Math.max(0, pickup[seg] - soldToday[seg]);
+    return acc;
+  }, zeroQty());
+
   function onStart() {
     const deviceId = getDeviceId();
     start(async () => {
-      await startDay(deviceId);
+      await startDay(deviceId, pickupDraft);
+      setOpenPanel(null);
       router.refresh();
     });
   }
   function onEnd() {
     start(async () => {
-      await endDay();
+      await endDay(remainingDraft);
+      setOpenPanel(null);
       router.refresh();
     });
   }
@@ -110,8 +142,27 @@ export function DayLogClient({
             btnLabel={t("Start")}
             active={!started}
             disabled={started || pending}
-            onClick={onStart}
+            // Starting the day now goes through the stock panel rather than
+            // stamping straight away, so the pickup count is captured at the
+            // one moment the rep actually knows it.
+            onClick={() => setOpenPanel(openPanel === "pickup" ? null : "pickup")}
+            stockLabel={t("Stock picked up")}
+            stockTotal={started ? totalOf(pickup) : null}
           />
+          {openPanel === "pickup" && !started && (
+            <StockPanel
+              title={t("Stock picked up from depot")}
+              hint={t("Packets you are carrying out today. Enter 0 for anything you did not take.")}
+              qty={pickupDraft}
+              onChange={setPickupDraft}
+              confirmLabel={pending ? t("Starting…") : t("Start day")}
+              onConfirm={onStart}
+              onCancel={() => setOpenPanel(null)}
+              busy={pending}
+              t={t}
+            />
+          )}
+
           <PlanRow
             icon={<StopIcon className="h-4 w-4" style={{ color: "var(--accent)" }} />}
             label={t("Visit End Time")}
@@ -119,13 +170,36 @@ export function DayLogClient({
             btnLabel={t("End")}
             active={started && !ended}
             disabled={!started || ended || pending}
-            onClick={onEnd}
-            last
+            onClick={() => setOpenPanel(openPanel === "remaining" ? null : "remaining")}
+            stockLabel={t("Stock remaining")}
+            stockTotal={ended ? totalOf(remaining) : null}
+            last={openPanel !== "remaining"}
           />
+          {openPanel === "remaining" && started && !ended && (
+            <StockPanel
+              title={t("Stock remaining at end of day")}
+              hint={t("Packets still with you. Expected = picked up − sold today.")}
+              qty={remainingDraft}
+              onChange={setRemainingDraft}
+              expected={expectedRemaining}
+              confirmLabel={pending ? t("Ending…") : t("End day")}
+              onConfirm={onEnd}
+              onCancel={() => setOpenPanel(null)}
+              busy={pending}
+              t={t}
+              last
+            />
+          )}
 
           {started && ended && (
             <p className="mt-3 text-[13px]" style={{ color: "var(--ink-2)" }}>
               {t("Day complete")} — {t("On job")}: <strong>{onJobLabel}</strong>
+              {" · "}
+              {t("Picked up")}: <strong>{totalOf(pickup)}</strong>
+              {" · "}
+              {t("Sold")}: <strong>{totalOf(soldToday)}</strong>
+              {" · "}
+              {t("Remaining")}: <strong>{totalOf(remaining)}</strong>
             </p>
           )}
 
@@ -192,6 +266,8 @@ export function DayLogClient({
                   <th>{t("Start time")}</th>
                   <th>{t("End time")}</th>
                   <th>{t("On job")}</th>
+                  <th>{t("Picked up")}</th>
+                  <th>{t("Remaining")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -216,6 +292,8 @@ export function DayLogClient({
                         </span>
                       )}
                     </td>
+                    <td className="tabular-nums">{h.pickupTotal || "—"}</td>
+                    <td className="tabular-nums">{h.remainingTotal || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -273,6 +351,102 @@ function IconBadge({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Per-SKU packet count for one end of the day, shown inline under its plan row.
+ *
+ * Same four SKUs and the same number-input shape as the visit form, so a rep
+ * counting stock here is filling in a form they already know. Confirming is
+ * what actually starts/ends the day — the timestamp and the count are written
+ * together, which is the only way they stay consistent.
+ */
+function StockPanel({
+  title,
+  hint,
+  qty,
+  onChange,
+  expected,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+  busy,
+  last,
+  t,
+}: {
+  title: string;
+  hint: string;
+  qty: SegQty;
+  onChange: (next: SegQty) => void;
+  /** Optional per-SKU cross-check (picked up − sold), shown as a hint. */
+  expected?: SegQty;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy: boolean;
+  last?: boolean;
+  t: (key: string) => string;
+}) {
+  const total = totalOf(qty);
+
+  function setSeg(seg: ProductSegment, raw: string) {
+    onChange({ ...qty, [seg]: clampQty(raw) });
+  }
+
+  return (
+    <div
+      className="rounded-2xl p-4"
+      style={{
+        background: "var(--accent-tint)",
+        marginBottom: last ? 0 : 16,
+      }}
+    >
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h6 className="text-[13.5px] font-bold" style={{ color: "var(--ink-1)" }}>{title}</h6>
+        <span className="text-[12.5px] font-semibold tabular-nums" style={{ color: "var(--accent)" }}>
+          {total} {t("packets")}
+        </span>
+      </div>
+      <p className="mb-2 text-[12px]" style={{ color: "var(--ink-3)" }}>{hint}</p>
+
+      {SEGMENTS.map((seg) => (
+        <div
+          key={seg}
+          className="flex flex-wrap items-center justify-between gap-2 py-2.5"
+          style={{ borderBottom: "1px solid var(--hairline-soft)" }}
+        >
+          <span className="text-[13.5px] font-medium" style={{ color: "var(--ink-1)" }}>
+            {t(SEGMENT_LABEL[seg])}
+          </span>
+          <div className="flex items-center gap-2.5">
+            {expected && (
+              <span className="text-[11.5px] tabular-nums" style={{ color: "var(--ink-3)" }}>
+                {t("Expected")} {expected[seg]}
+              </span>
+            )}
+            <input
+              className="inp text-center"
+              type="number"
+              min={0}
+              inputMode="numeric"
+              style={{ width: 72, padding: "8px 6px" }}
+              value={qty[seg]}
+              onChange={(e) => setSeg(seg, e.target.value)}
+            />
+          </div>
+        </div>
+      ))}
+
+      <div className="mt-3.5 flex gap-2.5">
+        <button className="btn btn-secondary flex-1 justify-center" onClick={onCancel} disabled={busy}>
+          {t("Cancel")}
+        </button>
+        <button className="btn btn-primary flex-1 justify-center" onClick={onConfirm} disabled={busy}>
+          {confirmLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PlanRow({
   icon,
   label,
@@ -282,6 +456,8 @@ function PlanRow({
   disabled,
   onClick,
   last,
+  stockLabel,
+  stockTotal,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -291,6 +467,10 @@ function PlanRow({
   disabled: boolean;
   onClick: () => void;
   last?: boolean;
+  /** Caption for the stock figure recorded at this step. */
+  stockLabel?: string;
+  /** Recorded packet count, or null while the step is still pending. */
+  stockTotal?: number | null;
 }) {
   return (
     <div className="flex items-center justify-between py-4" style={{ borderBottom: last ? "none" : "1px solid var(--hairline-soft)" }}>
@@ -300,7 +480,15 @@ function PlanRow({
         </span>
         <div>
           <div className="text-[14.5px] font-semibold" style={{ color: "var(--ink-1)" }}>{label}</div>
-          <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>{value}</div>
+          <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>
+            {value}
+            {stockTotal != null && (
+              <>
+                {" · "}
+                {stockLabel}: <strong style={{ color: "var(--ink-2)" }}>{stockTotal}</strong>
+              </>
+            )}
+          </div>
         </div>
       </div>
       <button

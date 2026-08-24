@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, counters, visits, type ProductSegment, type VisitItem } from "@/db/schema";
+import { areas, counters, visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { durationLabel, formatISTDate, istDayBounds, istDateString } from "@/lib/date";
 import {
   getCountersVisitedToday,
-  getLatestVisitStock,
   getScopeDepots,
   getTeamDayLogs,
   getTeamReps,
@@ -14,27 +13,15 @@ import {
   pickDepot,
 } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
-import { PRODUCT_SEGMENTS } from "@/lib/field/products";
 import { getT } from "@/lib/i18n/server";
 import { LegendDot } from "@/components/ui/legend-dot";
-import { ProgressBar } from "@/components/ui/progress-bar";
 import { Donut, type DonutSegment } from "@/components/ui/donut";
 import { Notice } from "@/components/ui/notice";
 import { DepotPicker } from "../_components/depot-picker";
 import { DayPicker } from "../_components/day-picker";
 import { RefreshButton } from "../_components/refresh-button";
 import { AreaLeaderboard } from "../_components/area-leaderboard";
-import { VisitTrend, type TrendPoint } from "../_components/visit-trend";
-
-/** Which stock band (Out / Low / Mid / High) a raw packet count falls into.
- * `-1` sentinel band ("Not yet visited") is skipped — that case is handled
- * by the caller before this function ever runs. */
-function bandForStock(n: number): string {
-  if (n <= 0) return "Out of stock";
-  if (n <= 10) return "Low (1–10)";
-  if (n <= 50) return "Mid (11–50)";
-  return "High (51+)";
-}
+import { RepLeaderboard } from "../_components/rep-leaderboard";
 
 /** Retail-density colour thresholds by counters-per-area (matches the legend). */
 function densityColor(count: number): string {
@@ -44,42 +31,6 @@ function densityColor(count: number): string {
   return "#C7263B";
 }
 
-/** Fixed per-SKU colours — same palette as the Kanpur HQ dashboard's product
- * mix donut, so a segment reads as the same colour everywhere in the app. */
-const SEGMENT_COLOR: Record<ProductSegment, string> = {
-  DG10: "#7B2FA0",
-  DG20: "#4C8C2B",
-  DB20: "#B9812E",
-  DB40: "#128A82",
-};
-
-/** Fixed per-counter-type colours — same palette as the KHQ dashboard so a
- * type reads the same colour on both pages. Wholesale is intentionally NOT
- * listed here; retail-only breakdown is what the SO cares about. */
-const TYPE_COLOR: Record<string, string> = {
-  Kirana: "#7B2FA0",
-  Paan: "#4C8C2B",
-  "Tea Stall": "#B9812E",
-  "Vegetable Shop": "#C7263B",
-  Others: "#6B7280",
-};
-
-/** Retail counter types (Wholesale deliberately excluded — those are handled
- * on the Depot portal, not here). Custom-typed counters (`type === "Others"`
- * with a `typeOther` label) all roll up into the "Others" slice. */
-const RETAIL_TYPES = ["Kirana", "Paan", "Tea Stall", "Vegetable Shop", "Others"] as const;
-
-/** Stock-band spec for the "last observed stock" donut. `max === null` means
- * the top band is open-ended. Ordering here is the legend order. */
-const STOCK_BANDS: Array<{ label: string; max: number | null; color: string }> = [
-  { label: "Out of stock", max: 0, color: "#C7263B" },
-  { label: "Low (1–10)", max: 10, color: "#E0A100" },
-  { label: "Mid (11–50)", max: 50, color: "#4C8C2B" },
-  { label: "High (51+)", max: null, color: "#128A82" },
-  { label: "Not yet visited", max: -1, color: "#8A8F98" }, // sentinel — never matches numerically
-];
-
-const TREND_DAYS = 7;
 /** Rep rows visible before the list scrolls (each row ≈ 74px + border). */
 const REP_ROWS_VISIBLE = 5;
 
@@ -94,10 +45,11 @@ function nowInstant(): Date {
   return new Date();
 }
 
-/** Accept only `YYYY-MM-DD`; anything else falls back to today. */
-function normalizeDate(s: string | undefined, fallback: string): string {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return fallback;
-  return s > fallback ? fallback : s; // never allow a future day
+/** The screen offers exactly three days, so anything else in the URL — a
+ * stale bookmark, a hand-typed date — falls back to today rather than
+ * rendering a day none of the controls can select. */
+function normalizeDate(s: string | undefined, allowed: string[]): string {
+  return s && allowed.includes(s) ? s : allowed[0];
 }
 
 /** Midday UTC anchor for an IST date string — safe to add/subtract days from
@@ -142,12 +94,26 @@ export default async function SupervisorAnalyticsPage({
   // ── Selected day (defaults to today) and its comparison day ─────────────
   const now = nowInstant();
   const todayStr = istDateString(now);
-  const dayStr = normalizeDate(requestedDate, todayStr);
+  // The only three days this screen offers, newest first. Also the window the
+  // per-rep history panel covers, so the filter and the drill-down describe
+  // the same stretch of time.
+  const DAY_LABELS = ["Today", "Yesterday", "Day before yesterday"];
+  const dayWindow = DAY_LABELS.map((label, i) => ({
+    value: shiftDays(todayStr, -i),
+    label,
+  }));
+  const dayOptions = dayWindow.map((d) => ({
+    value: d.value,
+    // Both the word and the date: "Yesterday" alone makes an SO work out which
+    // day they are looking at, and a bare date makes them work out how recent
+    // it is. Cheap to show both.
+    label: `${t(d.label)} · ${shortDayLabel(d.value)}`,
+  }));
+  const dayStr = normalizeDate(requestedDate, dayWindow.map((d) => d.value));
   const isToday = dayStr === todayStr;
   const bounds = istDayBounds(anchor(dayStr));
   const prevStr = shiftDays(dayStr, -1);
   const prevBounds = istDayBounds(anchor(prevStr));
-  const weekStart = new Date(bounds.end.getTime() - TREND_DAYS * 24 * 60 * 60 * 1000);
 
   const [
     dayLogs,
@@ -158,9 +124,7 @@ export default async function SupervisorAnalyticsPage({
     prevCovered,
     prevDayLogs,
     visitsPerArea,
-    trendRows,
-    dayItemsRows,
-    counterCatalog,
+    repDayTotals,
   ] = await Promise.all([
     getTeamDayLogs(repIds, dayStr),
     getVisitsToday(repIds, bounds),
@@ -184,36 +148,21 @@ export default async function SupervisorAnalyticsPage({
           .where(and(inArray(visits.userId, repIds), gte(visits.visitedAt, bounds.start), lt(visits.visitedAt, bounds.end)))
           .groupBy(areas.name)
       : Promise.resolve([] as Array<{ area: string; n: number }>),
-    // Trend window (7 days ending on the selected day): visits AND packets
-    // sold per day, in one grouped query rather than two round-trips.
+    // Packets sold per rep on the SELECTED day — the leaderboard ranks on
+    // this, so it is aggregated in SQL rather than derived from the visit list
+    // `getVisitsToday` returns.
     repIds.length
       ? db
           .select({
-            d: sql<string>`(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date::text`,
-            n: sql<number>`count(*)::int`,
+            userId: visits.userId,
             packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
+            stock: sql<number>`coalesce(sum(${visits.stock}), 0)::int`,
           })
           .from(visits)
-          .where(and(inArray(visits.userId, repIds), gte(visits.visitedAt, weekStart), lt(visits.visitedAt, bounds.end)))
-          .groupBy(sql`(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date`)
-      : Promise.resolve([] as Array<{ d: string; n: number; packets: number }>),
-    // Per-SKU breakdown for the SELECTED DAY only (not the 7-day window) —
-    // items is a JSONB array, aggregated in JS same as the KHQ dashboard.
-    repIds.length
-      ? db
-          .select({ items: visits.items })
-          .from(visits)
           .where(and(inArray(visits.userId, repIds), gte(visits.visitedAt, bounds.start), lt(visits.visitedAt, bounds.end)))
-      : Promise.resolve([] as Array<{ items: VisitItem[] }>),
-    // Counter catalog for the type + last-visit-stock donuts. Retail-only —
-    // Wholesale is deliberately dropped in SQL so we don't pull rows we'd
-    // throw away in JS.
-    depotIds.length
-      ? db
-          .select({ id: counters.id, type: counters.type })
-          .from(counters)
-          .where(and(inArray(counters.depotId, depotIds), sql`${counters.type} <> 'Wholesale'`))
-      : Promise.resolve([] as Array<{ id: string; type: string }>),
+          .groupBy(visits.userId)
+      : Promise.resolve([] as Array<{ userId: string; packets: number; stock: number }>)
+
   ]);
 
   // ── Roster status ───────────────────────────────────────────────────────
@@ -253,80 +202,32 @@ export default async function SupervisorAnalyticsPage({
     .map((area) => ({ area, n: visitsByArea.get(area) ?? 0 }))
     .sort((a, b) => b.n - a.n || a.area.localeCompare(b.area));
 
-  // ── Trends (7 days ending on the selected day) ──────────────────────────
-  const visitsByDay = new Map(trendRows.map((r) => [r.d, Number(r.n) || 0]));
-  const packetsByDay = new Map(trendRows.map((r) => [r.d, Number(r.packets) || 0]));
-  const trendDates = Array.from({ length: TREND_DAYS }, (_, i) => shiftDays(dayStr, -(TREND_DAYS - 1 - i)));
-  const trendPoints: TrendPoint[] = trendDates.map((d) => ({ label: shortDayLabel(d), value: visitsByDay.get(d) ?? 0 }));
-  const packetTrendPoints: TrendPoint[] = trendDates.map((d) => ({ label: shortDayLabel(d), value: packetsByDay.get(d) ?? 0 }));
-  const trendHasData = trendPoints.some((p) => p.value > 0);
-  const packetTrendHasData = packetTrendPoints.some((p) => p.value > 0);
-
-  // ── Counters by type (retail, Wholesale excluded) ──────────────────────
-  // Retail counter types roll up into the five fixed buckets; a custom
-  // `typeOther` label lands in "Others".
-  const typeCount = new Map<string, number>();
-  for (const c of counterCatalog) {
-    const key = RETAIL_TYPES.includes(c.type as (typeof RETAIL_TYPES)[number]) ? c.type : "Others";
-    typeCount.set(key, (typeCount.get(key) ?? 0) + 1);
-  }
-  const typeDonut: DonutSegment[] = RETAIL_TYPES.filter((ty) => (typeCount.get(ty) ?? 0) > 0).map((ty) => ({
-    label: ty,
-    value: typeCount.get(ty) ?? 0,
-    color: TYPE_COLOR[ty] ?? "#6B7280",
-  }));
-  const typeTotal = counterCatalog.length;
-
-  // ── Counters by last observed stock ────────────────────────────────────
-  // Needs a follow-up query since the counter ids only exist after the first
-  // pass. Cheap — one indexed lookup on visits.counter_id.
-  const stockByCounter = await getLatestVisitStock(counterCatalog.map((c) => c.id));
-  const bandCount = new Map<string, number>();
-  for (const c of counterCatalog) {
-    const stock = stockByCounter.get(c.id);
-    const key = stock == null ? "Not yet visited" : bandForStock(stock);
-    bandCount.set(key, (bandCount.get(key) ?? 0) + 1);
-  }
-  const stockDonut: DonutSegment[] = STOCK_BANDS.filter((b) => (bandCount.get(b.label) ?? 0) > 0).map((b) => ({
-    label: b.label,
-    value: bandCount.get(b.label) ?? 0,
-    color: b.color,
-  }));
-  const stockTotal = counterCatalog.length;
-
-  // ── Product mix (selected day) ───────────────────────────────────────────
-  const soldBySegment = new Map<string, number>();
-  for (const row of dayItemsRows) {
-    const items = (row.items ?? []) as VisitItem[];
-    if (!Array.isArray(items)) continue;
-    for (const it of items) {
-      if (!it || typeof it.segment !== "string") continue;
-      soldBySegment.set(it.segment, (soldBySegment.get(it.segment) ?? 0) + (Number(it.sold) || 0));
-    }
-  }
-  const packetsTotal = [...soldBySegment.values()].reduce((s, n) => s + n, 0);
-  const productDonut: DonutSegment[] = PRODUCT_SEGMENTS.filter((p) => (soldBySegment.get(p.value) ?? 0) > 0).map((p) => ({
-    label: p.value,
-    value: soldBySegment.get(p.value) ?? 0,
-    color: SEGMENT_COLOR[p.value],
-  }));
-
   // ── Rep leaderboard ─────────────────────────────────────────────────────
+  const soldByRep = new Map(repDayTotals.map((r) => [r.userId, r]));
+
   const repRows = reps
     .map((r) => {
       const v = visitMap.get(r.id);
       const log = dayLogs.get(r.id);
+      const totals = soldByRep.get(r.id);
       return {
         id: r.id,
         name: r.name,
         visits: v?.count ?? 0,
         counters: v?.counters ?? 0,
+        packets: Number(totals?.packets) || 0,
+        // Stock the rep drew from the depot this morning — their target for
+        // the day. Deliberately NOT sum(visits.stock), which is stock sitting
+        // on counters and has nothing to do with what they set out to sell.
+        pickup: log?.pickupTotal ?? 0,
         started: !!log?.startAt,
         onJob: log?.startAt ? durationLabel(log.startAt, log.endAt ?? now) : null,
       };
     })
-    .sort((a, b) => b.visits - a.visits);
-  const repMax = Math.max(1, ...repRows.map((r) => r.visits));
+    // Packets sold is the ranking criterion now, not visit count — a rep who
+    // logs twenty walk-ins and sells nothing shouldn't outrank one who sells.
+    // Visits break ties so a zero-sales day still orders by effort.
+    .sort((a, b) => b.packets - a.packets || b.visits - a.visits);
 
   const statusDonut: DonutSegment[] = [
     { label: t("Completed"), value: completedReps, color: "var(--success)" },
@@ -377,7 +278,7 @@ export default async function SupervisorAnalyticsPage({
           </p>
         </div>
         <div className="flex flex-none flex-wrap items-center gap-2">
-          <DayPicker value={dayStr} max={todayStr} />
+          <DayPicker value={dayStr} options={dayOptions} />
           <RefreshButton />
           {depots.length > 1 && <DepotPicker options={depots} value={depot?.id ?? "all"} />}
         </div>
@@ -409,9 +310,9 @@ export default async function SupervisorAnalyticsPage({
             <div className="flex items-center gap-3">
               <IconTile name="users" tint="var(--accent)" />
               <div>
-                <h6 style={cardTitle}>{isToday ? t("Visits today by rep") : t("Visits by rep")}</h6>
+                <h6 style={cardTitle}>{isToday ? t("Packets sold today by rep") : t("Packets sold by rep")}</h6>
                 <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-                  {totalVisits} {t("visits")} · {covered.size} {t("counters")}
+                  {t("Tap a rep for their last 3 days")}
                 </p>
               </div>
             </div>
@@ -422,44 +323,13 @@ export default async function SupervisorAnalyticsPage({
             )}
           </div>
 
-          {repRows.length === 0 ? (
-            <p className="px-5 py-6 text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No reps report to you yet.")}</p>
-          ) : (
-            // Fixed max-height ≈ 5 rows, then scrolls internally.
-            <div className="overflow-y-auto" style={{ maxHeight: REP_ROWS_VISIBLE * 76 }}>
-              {repRows.map((r, i) => (
-                <div
-                  key={r.id}
-                  className="flex items-center gap-3 px-5 py-3"
-                  style={{ borderBottom: i < repRows.length - 1 ? "1px solid var(--hairline-soft)" : undefined }}
-                >
-                  <RankBadge rank={i + 1} name={r.name} active={r.visits > 0} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-[13.5px] font-semibold" style={{ color: "var(--ink-1)" }}>
-                        {r.name}
-                      </span>
-                      <span className="flex-none text-[12.5px] font-bold tabular-nums" style={{ color: r.visits > 0 ? "var(--ink-1)" : "var(--ink-3)" }}>
-                        {r.visits} <span className="font-medium" style={{ color: "var(--ink-3)" }}>{t("visits")}</span>
-                      </span>
-                    </div>
-                    <div className="mt-1.5">
-                      <ProgressBar
-                        pct={Math.round((r.visits / repMax) * 100)}
-                        height={7}
-                        color={i === 0 && r.visits > 0 ? "var(--success)" : "var(--accent)"}
-                      />
-                    </div>
-                    <div className="mt-1.5 truncate text-[11.5px]" style={{ color: "var(--ink-3)" }}>
-                      {r.counters} {t("counters covered")}
-                      {" · "}
-                      {r.started ? `${r.onJob} ${t("on job")}` : t("Not started")}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <RepLeaderboard
+            rows={repRows}
+            rowsVisible={REP_ROWS_VISIBLE}
+            date={dayStr}
+            emptyLabel={t("No reps report to you yet.")}
+            t={t}
+          />
         </section>
 
         {/* Retail density */}
@@ -499,23 +369,8 @@ export default async function SupervisorAnalyticsPage({
         </section>
       </div>
 
-      {/* Trend (wide) + status donut */}
-      <div className="mb-5 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <section className="card flex flex-col p-5">
-          <div className="mb-2 flex items-center gap-3">
-            <IconTile name="trendUp" tint="#2E9E5A" />
-            <div>
-              <h6 style={cardTitle}>{t("Visit trend")}</h6>
-              <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Team visits, last 7 days")}</p>
-            </div>
-          </div>
-          {!trendHasData ? (
-            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No visits in the last 7 days.")}</p>
-          ) : (
-            <VisitTrend points={trendPoints} unitLabel={t("visits")} />
-          )}
-        </section>
-
+      {/* Team status + top areas */}
+      <div className="grid gap-4 lg:grid-cols-2">
         <section className="card flex flex-col p-5">
           <div className="mb-3.5 flex items-center gap-3">
             <IconTile name="check" tint="var(--accent)" />
@@ -537,97 +392,7 @@ export default async function SupervisorAnalyticsPage({
             </div>
           )}
         </section>
-      </div>
 
-      {/* Packets trend (wide) + product mix donut */}
-      <div className="mb-5 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <section className="card flex flex-col p-5">
-          <div className="mb-2 flex items-center gap-3">
-            <IconTile name="box" tint="#7B2FA0" />
-            <div>
-              <h6 style={cardTitle}>{t("Packets sold trend")}</h6>
-              <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Team packets sold, last 7 days")}</p>
-            </div>
-          </div>
-          {!packetTrendHasData ? (
-            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No packets sold in the last 7 days.")}</p>
-          ) : (
-            <VisitTrend points={packetTrendPoints} unitLabel={t("packets")} color="#7B2FA0" />
-          )}
-        </section>
-
-        <section className="card flex flex-col p-5">
-          <div className="mb-3.5 flex items-center gap-3">
-            <IconTile name="pieChart" tint="#128A82" />
-            <div>
-              <h6 style={cardTitle}>{t("Product mix")}</h6>
-              <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>{isToday ? t("Packets sold today, by SKU") : t("Packets sold this day, by SKU")}</p>
-            </div>
-          </div>
-          {packetsTotal === 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No sales this day yet.")}</p>
-          ) : (
-            <div className="flex flex-1 items-center justify-center gap-5">
-              <Donut segments={productDonut} size={124} centerValue={packetsTotal} centerLabel={t("packets")} />
-              <div className="flex flex-col gap-2">
-                {productDonut.map((seg) => (
-                  <StatusRow key={seg.label} color={seg.color} label={seg.label} n={seg.value} total={packetsTotal} />
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-
-      {/* Counter type mix + Last-observed stock */}
-      <div className="mb-5 grid gap-4 lg:grid-cols-2">
-        <section className="card flex flex-col p-5">
-          <div className="mb-3.5 flex items-center gap-3">
-            <IconTile name="store" tint="#7B2FA0" />
-            <div>
-              <h6 style={cardTitle}>{t("Counters by type")}</h6>
-              <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Retail counter types")}</p>
-            </div>
-          </div>
-          {typeTotal === 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No retail counters in scope yet.")}</p>
-          ) : (
-            <div className="flex flex-1 items-center justify-center gap-5">
-              <Donut segments={typeDonut} size={124} centerValue={typeTotal} centerLabel={t("counters")} />
-              <div className="flex flex-col gap-2">
-                {typeDonut.map((seg) => (
-                  <StatusRow key={seg.label} color={seg.color} label={t(seg.label)} n={seg.value} total={typeTotal} />
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-
-        <section className="card flex flex-col p-5">
-          <div className="mb-3.5 flex items-center gap-3">
-            <IconTile name="box" tint="#128A82" />
-            <div>
-              <h6 style={cardTitle}>{t("Last observed stock")}</h6>
-              <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Counters by last visit's stock level")}</p>
-            </div>
-          </div>
-          {stockTotal === 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No retail counters in scope yet.")}</p>
-          ) : (
-            <div className="flex flex-1 items-center justify-center gap-5">
-              <Donut segments={stockDonut} size={124} centerValue={stockTotal} centerLabel={t("counters")} />
-              <div className="flex flex-col gap-2">
-                {stockDonut.map((seg) => (
-                  <StatusRow key={seg.label} color={seg.color} label={t(seg.label)} n={seg.value} total={stockTotal} />
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-
-      {/* Top areas + highlights */}
-      <div className="grid gap-4 lg:grid-cols-2">
         <section className="card flex flex-col p-5">
           <div className="mb-3.5 flex items-center gap-3">
             <IconTile name="trophy" tint="#B9812E" />
@@ -643,32 +408,6 @@ export default async function SupervisorAnalyticsPage({
           )}
         </section>
 
-        <section className="card flex flex-col p-5">
-          <div className="mb-3.5 flex items-center gap-3">
-            <IconTile name="alert" tint="#C7263B" />
-            <div>
-              <h6 style={cardTitle}>{t("Highlights")}</h6>
-              <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("What needs your attention")}</p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            {highlights.map((h, i) => {
-              const c = h.tone === "good" ? "var(--success)" : h.tone === "warn" ? "var(--warning)" : "var(--danger)";
-              const bg = h.tone === "good" ? "rgba(30,158,90,.08)" : h.tone === "warn" ? "rgba(224,161,0,.1)" : "rgba(199,38,59,.08)";
-              return (
-                <div key={i} className="flex items-center gap-3 rounded-xl p-3" style={{ background: bg }}>
-                  <span
-                    className="flex h-8 w-8 flex-none items-center justify-center rounded-full"
-                    style={{ background: c, color: "#fff" }}
-                  >
-                    <Icon name={h.icon} className="h-4 w-4" />
-                  </span>
-                  <span className="text-[12.5px] font-medium" style={{ color: "var(--ink-1)" }}>{h.text}</span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
       </div>
     </div>
   );
@@ -743,40 +482,6 @@ function DeltaPill({ d, t }: { d: { pct: number | null; isNew: boolean }; t: (k:
   );
 }
 
-/** Avatar-style rank badge: initials, with a medal ring for the top 3. */
-function RankBadge({ rank, name, active }: { rank: number; name: string; active: boolean }) {
-  const initials =
-    name
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((p) => p[0] ?? "")
-      .join("")
-      .toUpperCase() || "?";
-  const medal = rank === 1 ? "#D4A017" : rank === 2 ? "#9BA3AE" : rank === 3 ? "#B0713A" : null;
-  return (
-    <span className="relative flex-none">
-      <span
-        className="flex h-10 w-10 items-center justify-center rounded-full text-[12.5px] font-bold"
-        style={{
-          background: active ? "var(--accent-tint)" : "var(--bg-soft)",
-          color: active ? "var(--accent)" : "var(--ink-3)",
-          border: medal ? `2px solid ${medal}` : "2px solid transparent",
-        }}
-      >
-        {initials}
-      </span>
-      {medal && (
-        <span
-          className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
-          style={{ background: medal, border: "1.5px solid var(--surface)" }}
-        >
-          {rank}
-        </span>
-      )}
-    </span>
-  );
-}
 
 function StatusRow({ color, label, n, total }: { color: string; label: string; n: number; total: number }) {
   const pct = total === 0 ? 0 : Math.round((n / total) * 100);

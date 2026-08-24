@@ -2,34 +2,49 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+export type DayOption = { value: string; label: string };
+
 /**
- * Single-day selector for the analytics screen. Writes `?date=YYYY-MM-DD`
- * (dropped when it equals today, to keep the default URL clean) and preserves
- * every other param — so it composes with the depot picker. Capped at `max`
- * (today) so a future day can't be picked.
+ * Day selector for the analytics screen, limited to the three days an SO
+ * actually acts on: today, yesterday and the day before.
+ *
+ * This replaced a free `<input type="date">`. The calendar let an SO open any
+ * day in history, which sounds useful but isn't what this screen is for —
+ * every card on it ("Visits today by rep", "on job", live status) describes a
+ * working day the SO can still do something about. Older days belong in a
+ * report, not here.
+ *
+ * The URL contract is unchanged: `?date=YYYY-MM-DD`, dropped when it equals
+ * today so the default URL stays clean, and every other param preserved so it
+ * still composes with the depot picker.
  */
-export function DayPicker({ value, max }: { value: string; max: string }) {
+export function DayPicker({ value, options }: { value: string; options: DayOption[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
 
   function select(next: string) {
-    const day = next || max; // clearing the input falls back to today
     const q = new URLSearchParams(params.toString());
-    if (day >= max) q.delete("date");
-    else q.set("date", day);
-    router.push(`${pathname}?${q.toString()}`);
+    // The first option is today — the page's default, so it needs no param.
+    if (next === options[0]?.value) q.delete("date");
+    else q.set("date", next);
+    const query = q.toString();
+    router.push(query ? `${pathname}?${query}` : pathname);
   }
 
   return (
-    <input
-      type="date"
+    <select
       className="inp"
       style={{ width: "auto", padding: "6px 10px", fontSize: 12 }}
       value={value}
-      max={max}
       onChange={(e) => select(e.target.value)}
-      aria-label="Date"
-    />
+      aria-label="Day"
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }

@@ -328,6 +328,71 @@ summary::-webkit-details-marker {
     background: var(--bg-soft);
   }
 
+  /* ---- Clickable list row ----
+     The list equivalent of `.table tbody tr:hover`, for places where rows are
+     links rather than table rows (the SO rep leaderboard). Same --bg-soft wash
+     so a hovered row reads identically whichever shape it takes, plus an
+     accent edge that wipes in and a chevron that leans toward its destination
+     — enough to say "this is clickable" without moving any text. */
+  .list-row {
+    position: relative;
+    transition: background-color 0.14s ease;
+  }
+  .list-row:hover {
+    background: var(--bg-soft);
+  }
+  .list-row::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.14s ease;
+  }
+  .list-row:hover::before {
+    transform: scaleX(1);
+  }
+  .list-row .row-chevron {
+    transition:
+      transform 0.14s ease,
+      color 0.14s ease;
+  }
+  .list-row:hover .row-chevron {
+    transform: translateX(2px);
+    color: var(--accent);
+  }
+  /* Press state — on touch there is no hover, so this is the only feedback
+     between the tap and the destination's loading skeleton appearing. */
+  .list-row:active {
+    background: var(--bg-soft);
+  }
+  .list-row:active::before {
+    transform: scaleX(1);
+  }
+
+  /* Keyboard users get the same affordance as the mouse. */
+  .list-row:focus-visible {
+    background: var(--bg-soft);
+    outline: none;
+  }
+  .list-row:focus-visible::before {
+    transform: scaleX(1);
+  }
+
+  /* Motion is decoration here — the colour change alone carries the meaning. */
+  @media (prefers-reduced-motion: reduce) {
+    .list-row,
+    .list-row::before,
+    .list-row .row-chevron {
+      transition: none;
+    }
+    .list-row:hover .row-chevron {
+      transform: none;
+    }
+  }
+
   /* ---- Centered form shell (login-style standalone forms) ---- */
   .form-shell {
     @apply mx-auto w-full max-w-md;

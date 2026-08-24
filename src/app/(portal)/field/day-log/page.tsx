@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, lt } from "drizzle-orm";
 import { db } from "@/db";
-import { dayLogs } from "@/db/schema";
+import { dayLogs, visits, type VisitItem } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import {
@@ -10,9 +10,11 @@ import {
   formatISTDateLong,
   formatISTTime,
   istDateString,
+  istDayBounds,
   istGreeting,
   minutesLabel,
 } from "@/lib/date";
+import { qtyFromItems, zeroQty } from "@/lib/field/day-stock";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { DayLogClient, type HistoryRow } from "./day-log-client";
@@ -61,7 +63,35 @@ export default async function FieldDayLogPage() {
       startLabel: formatISTTime(l.startAt),
       endLabel: formatISTTime(l.endAt),
       onJobLabel: durationLabel(l.startAt, l.endAt),
+      pickupTotal: l.pickupTotal,
+      remainingTotal: l.remainingTotal,
     }));
+
+  // Packets sold per SKU across today s visits by this rep — the middle term
+  // in "picked up − sold = remaining". Summed in JS from the items JSONB for
+  // the same reason the dashboards do: a jsonb SRF join errors on any
+  // non-array legacy row.
+  const dayBounds = istDayBounds();
+  const todayVisitItems = todayLog?.startAt
+    ? await db
+        .select({ items: visits.items })
+        .from(visits)
+        .where(
+          and(
+            eq(visits.userId, user.id),
+            gte(visits.visitedAt, dayBounds.start),
+            lt(visits.visitedAt, dayBounds.end),
+          ),
+        )
+    : [];
+  const soldToday = zeroQty();
+  for (const row of todayVisitItems) {
+    const items = (row.items ?? []) as VisitItem[];
+    if (!Array.isArray(items)) continue;
+    for (const it of items) {
+      if (it && it.segment in soldToday) soldToday[it.segment] += Number(it.sold) || 0;
+    }
+  }
 
   // This-week banner stats (Mon..today). A day "counts" once it's clocked in,
   // whether or not it's ended yet — matches how "Today's Plan" itself treats
@@ -95,6 +125,9 @@ export default async function FieldDayLogPage() {
       daysLoggedThisWeek={daysLoggedThisWeek}
       totalOnJobLabelThisWeek={minutesLabel(totalOnJobMinutesThisWeek)}
       weekPct={weekPct}
+      pickup={qtyFromItems(todayLog?.pickupItems)}
+      remaining={qtyFromItems(todayLog?.remainingItems)}
+      soldToday={soldToday}
     />
   );
 }
