@@ -290,30 +290,53 @@ export type CompetitorPresence = (typeof competitorPresenceEnum.enumValues)[numb
 export type VisitItem = { segment: ProductSegment; stock: number; sold: number };
 
 // A field rep's visit to a counter. `stock`/`sold` are totals across `items`.
-export const visits = pgTable("visits", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  counterId: uuid("counter_id")
-    .notNull()
-    .references(() => counters.id, { onDelete: "cascade" }),
-  visitedAt: timestamp("visited_at", { withTimezone: true }).notNull().defaultNow(),
-  stock: integer("stock").notNull().default(0),
-  sold: integer("sold").notNull().default(0),
-  items: jsonb("items").$type<VisitItem[]>().notNull().default([]),
-  rank: integer("rank"),
-  competitor: competitorPresenceEnum("competitor"),
-  // Free-text brand name when `competitor` is "local" or "national" (e.g.
-  // "Tata Tea", "Wagh Bakri"). Null when competitor is "none" or unset.
-  competitorBrand: varchar("competitor_brand", { length: 80 }),
-  remarks: text("remarks"),
-  // Seconds spent on the counter — sampled from the client-side "time on
-  // counter" timer at submit. Null for older rows recorded before the timer
-  // was introduced. Not present for edits (kept from the original visit).
-  durationSeconds: integer("duration_seconds"),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const visits = pgTable(
+  "visits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    counterId: uuid("counter_id")
+      .notNull()
+      .references(() => counters.id, { onDelete: "cascade" }),
+    visitedAt: timestamp("visited_at", { withTimezone: true }).notNull().defaultNow(),
+    stock: integer("stock").notNull().default(0),
+    sold: integer("sold").notNull().default(0),
+    items: jsonb("items").$type<VisitItem[]>().notNull().default([]),
+    rank: integer("rank"),
+    competitor: competitorPresenceEnum("competitor"),
+    // Free-text brand name when `competitor` is "local" or "national" (e.g.
+    // "Tata Tea", "Wagh Bakri"). Null when competitor is "none" or unset.
+    competitorBrand: varchar("competitor_brand", { length: 80 }),
+    remarks: text("remarks"),
+    // Seconds spent on the counter — sampled from the client-side "time on
+    // counter" timer at submit. Null for older rows recorded before the timer
+    // was introduced. Not present for edits (kept from the original visit).
+    durationSeconds: integer("duration_seconds"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    // The IST calendar day this visit belongs to, written on insert.
+    //
+    // Redundant with `visited_at`, and deliberately so: a unique index cannot
+    // be built on `(visited_at AT TIME ZONE 'Asia/Kolkata')::date`, because
+    // `AT TIME ZONE` is STABLE rather than IMMUTABLE (the tz database can
+    // change) and Postgres refuses to index it. A stored column can be.
+    //
+    // NULL on every row written before this column existed. That is what makes
+    // the index below buildable without editing history: it is partial, so
+    // those rows — which include counter+day duplicates predating the rule —
+    // are simply not in it.
+    visitDate: date("visit_date"),
+  },
+  (t) => [
+    // One visit per counter per IST day, whoever the rep is. `createVisit`
+    // checks the same rule first and reports it in words; this is the backstop
+    // that two simultaneous submits cannot slip past.
+    uniqueIndex("visits_counter_day_unique")
+      .on(t.counterId, t.visitDate)
+      .where(sql`${t.visitDate} is not null`),
+  ],
+);
 
 // ── Bug / feature reports ───────────────────────────────────────────────
 // Filed from the "Report a Bug" button in the top bar; reviewed by admin in

@@ -15,6 +15,8 @@ export type BeatCounter = {
   areaName: string;
   canVisit: boolean;
   visitedToday: boolean;
+  /** Name of the rep who already called here today, when it wasn't this one. */
+  lockedBy: string | null;
   /** Assigned rep's name — shown to admin only, null otherwise. */
   repName: string | null;
 };
@@ -45,7 +47,7 @@ export function BeatClient({
   const [searching, startSearch] = useTransition();
 
   // Remaining = counters not yet visited today.
-  const remainingCount = beat.filter((c) => !c.visitedToday).length;
+  const remainingCount = beat.filter((c) => !c.visitedToday && !c.lockedBy).length;
 
   function doSearch() {
     if (!/^\d{10}$/.test(phone)) {
@@ -178,8 +180,18 @@ export function BeatClient({
                     <CheckIcon /> {t("Visited")}
                   </span>
                 )}
+
+                {!c.visitedToday && c.lockedBy && (
+                  <span
+                    className="truncate text-[12px] font-semibold"
+                    style={{ color: "var(--ink-3)" }}
+                    title={`${c.lockedBy} ${t("visited this counter today")}`}
+                  >
+                    {t("Done by")} {c.lockedBy}
+                  </span>
+                )}
                 <button className="btn btn-primary btn-sm" onClick={() => openCounter(c.id)}>
-                  {c.visitedToday ? t("Open") : t("Check in")}
+                  {c.visitedToday || c.lockedBy ? t("Open") : t("Check in")}
                 </button>
               </div>
             </div>

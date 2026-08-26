@@ -12,8 +12,9 @@ import {
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
+import { istDateString } from "@/lib/date";
 import { hasStartedToday, START_DAY_REQUIRED } from "./day-log";
-import { ALREADY_VISITED_TODAY, findTodaysVisit } from "./visit-day";
+import { ALREADY_VISITED_TODAY, findTodaysVisit, visitedByOther } from "./visit-day";
 import { isWithinEditWindow } from "./products";
 
 const SEGMENTS: ProductSegment[] = ["DG10", "DG20", "DB20", "DB40"];
@@ -34,7 +35,16 @@ export type VisitInput = {
 
 type Result =
   | { ok: true; visitId: string }
-  | { ok: false; error: string; existingVisitId?: string };
+  | {
+      ok: false;
+      /** English sentence — what a non-UI caller reads, and the dictionary key
+       * the form translates when no `blockedByName` is present. */
+      error: string;
+      existingVisitId?: string;
+      /** Set when another rep owns today's visit, so the form can render the
+       * translated template with the name in it. */
+      blockedByName?: string;
+    };
 
 function validate(input: VisitInput): string | null {
   const items = input.items.filter((i) => SEGMENTS.includes(i.segment));
@@ -53,6 +63,17 @@ function validate(input: VisitInput): string | null {
     return "Name the competitor brand.";
   }
   return null;
+}
+
+/** A Postgres unique-violation on a named constraint. Narrow on purpose:
+ * anything else must keep propagating rather than being swallowed as a
+ * duplicate. */
+function isUniqueViolation(err: unknown, constraint: string): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: unknown; constraint_name?: unknown; constraint?: unknown };
+  return (
+    e.code === "23505" && (e.constraint_name === constraint || e.constraint === constraint)
+  );
 }
 
 function normalizeDuration(v: number | null | undefined): number | null {
@@ -87,13 +108,17 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
     return { ok: false, error: START_DAY_REQUIRED };
   }
 
-  // One visit per counter per day. Admin is exempt for the same reason it is
-  // exempt from the clock-in gate: it works outside the beat, and is the
-  // account that fixes data rather than collects it.
+  // One visit per counter per day, whoever the rep is. Admin is exempt for the
+  // same reason it is exempt from the clock-in gate: it works outside the beat,
+  // and is the account that fixes data rather than collects it.
   if (!isAdmin) {
     const existing = await findTodaysVisit(user.id, counter.id);
     if (existing) {
-      return { ok: false, error: ALREADY_VISITED_TODAY, existingVisitId: existing.id };
+      // Only the owner gets a link to edit — sending someone else there would
+      // let them overwrite a colleague's numbers.
+      return existing.isOwn
+        ? { ok: false, error: ALREADY_VISITED_TODAY, existingVisitId: existing.id }
+        : { ok: false, error: visitedByOther(existing.userName), blockedByName: existing.userName };
     }
   }
 
@@ -105,23 +130,43 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
   const competitorBrand = input.competitor !== "none" ? input.competitorBrand?.trim() || null : null;
   const now = new Date();
 
-  const [v] = await db
-    .insert(visits)
-    .values({
-      userId: user.id,
-      counterId: counter.id,
-      visitedAt: now,
-      stock: totalStock,
-      sold: totalSold,
-      items,
-      rank: input.rank,
-      competitor: input.competitor,
-      competitorBrand,
-      remarks: input.remarks.trim() || null,
-      durationSeconds: normalizeDuration(input.durationSeconds),
-      updatedAt: now,
-    })
-    .returning({ id: visits.id });
+  let v: { id: string };
+  try {
+    [v] = await db
+      .insert(visits)
+      .values({
+        userId: user.id,
+        counterId: counter.id,
+        visitedAt: now,
+        // The IST day the partial unique index keys on. Set for every row this
+        // action writes; historical rows keep NULL and stay out of the index.
+        visitDate: istDateString(now),
+        stock: totalStock,
+        sold: totalSold,
+        items,
+        rank: input.rank,
+        competitor: input.competitor,
+        competitorBrand,
+        remarks: input.remarks.trim() || null,
+        durationSeconds: normalizeDuration(input.durationSeconds),
+        updatedAt: now,
+      })
+      .returning({ id: visits.id });
+  } catch (err) {
+    // 23505 on this index means another rep's visit landed between the check
+    // above and this insert — a real race, not a bug. Re-read so the message
+    // can name them, and report it exactly as the pre-check would have.
+    if (isUniqueViolation(err, "visits_counter_day_unique")) {
+      const existing = await findTodaysVisit(user.id, counter.id);
+      if (existing?.isOwn) {
+        return { ok: false, error: ALREADY_VISITED_TODAY, existingVisitId: existing.id };
+      }
+      return existing
+        ? { ok: false, error: visitedByOther(existing.userName), blockedByName: existing.userName }
+        : { ok: false, error: ALREADY_VISITED_TODAY };
+    }
+    throw err;
+  }
 
   await db.update(counters).set({ lastVisitAt: now }).where(eq(counters.id, counter.id));
 

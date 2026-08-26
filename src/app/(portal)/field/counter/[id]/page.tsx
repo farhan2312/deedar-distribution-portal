@@ -5,7 +5,8 @@ import { db } from "@/db";
 import { areas, cnfs, counters, depots, users, visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
-import { formatISTDate } from "@/lib/date";
+import { formatISTDate, formatISTTime } from "@/lib/date";
+import { findTodaysVisit } from "@/lib/field/visit-day";
 import {
   competitorDisplayLabel,
   editableVisitCutoff,
@@ -95,10 +96,13 @@ export default async function CounterDetailPage({
   );
   const timeLeft = hasEditable ? editWindowRemaining() : null;
 
-  // `history` is already cut at midnight IST and, for a rep, scoped to their
-  // own visits — so their row in it IS today's visit. No extra query needed.
-  // Admin is exempt from the one-a-day rule, so it never looks for one.
-  const ownVisitToday = isAdmin ? null : history.find((h) => h.userId === user.id) ?? null;
+  // Deliberately a separate lookup rather than reading `history`: for a rep
+  // that list is scoped to their OWN visits, so a colleague's call on this
+  // counter today would be invisible in it — and a colleague's call is exactly
+  // what has to block the button. Admin is exempt from the one-a-day rule.
+  const todaysVisit = isAdmin ? null : await findTodaysVisit(user.id, id);
+  const ownVisitToday = todaysVisit?.isOwn ? todaysVisit : null;
+  const otherVisitToday = todaysVisit && !todaysVisit.isOwn ? todaysVisit : null;
 
   return (
     <div className="mx-auto max-w-2xl" style={{ animation: "fadeUp .3s ease" }}>
@@ -142,8 +146,14 @@ export default async function CounterDetailPage({
 
       {/* Add visit */}
       <div className="my-5">
-        {canVisit ? (
-          // A counter is called on once per beat, so once today's visit exists
+        {canVisit && otherVisitToday ? (
+          <p className="card p-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
+            <strong style={{ color: "var(--ink-2)" }}>{otherVisitToday.userName}</strong>{" "}
+            {t("visited this counter today at")} {formatISTTime(otherVisitToday.visitedAt)}.{" "}
+            {t("A counter is visited once a day.")}
+          </p>
+        ) : canVisit ? (
+          // A counter is called on once per day, so once today's visit exists
           // this becomes an edit link rather than offering a duplicate.
           <Link
             href={

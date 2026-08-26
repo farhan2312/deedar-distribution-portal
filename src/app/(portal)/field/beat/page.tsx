@@ -90,13 +90,18 @@ export default async function FieldBeatPage() {
     // (userId, counterId) pairs for today's visits and match per assignment.
     counterIds.length
       ? db
-          .select({ userId: visits.userId, counterId: visits.counterId })
+          .select({ userId: visits.userId, counterId: visits.counterId, repName: users.name })
           .from(visits)
+          .innerJoin(users, eq(users.id, visits.userId))
           .where(and(dayBounds, inArray(visits.counterId, counterIds)))
       : Promise.resolve([]),
   ]);
 
   const visitedPairs = new Set(allVisitedRows.map((v) => `${v.userId}__${v.counterId}`));
+  // Who called on each counter today, whoever they are. A counter is visited
+  // once a day, so a colleague's call closes it for everyone — showing that on
+  // the beat saves the rep walking to a shop they can't log.
+  const visitedBy = new Map(allVisitedRows.map((v) => [v.counterId, v]));
   const beat: BeatCounter[] = assignmentRows.flatMap((a) => {
     const c = counterById.get(a.counterId);
     if (!c) return [];
@@ -110,6 +115,12 @@ export default async function FieldBeatPage() {
       areaName: c.areaName,
       canVisit: isAdmin || c.depotId === user.depot?.id,
       visitedToday: visitedPairs.has(`${a.repUserId}__${a.counterId}`),
+      // Set only when SOMEONE ELSE got there first — the assigned rep's own
+      // visit is `visitedToday`, which reads as done rather than blocked.
+      lockedBy:
+        !isAdmin && visitedBy.get(a.counterId) && visitedBy.get(a.counterId)!.userId !== a.repUserId
+          ? visitedBy.get(a.counterId)!.repName
+          : null,
       // Only surfaced by the client for admin — an ISR viewing their own beat
       // doesn't need to be told their name on every row.
       repName: isAdmin ? a.repName : null,

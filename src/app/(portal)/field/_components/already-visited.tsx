@@ -11,11 +11,16 @@ export async function AlreadyVisited({
   counterId,
   visitId,
   visitedAt,
+  byName,
 }: {
   title: string;
   counterId: string;
-  visitId: string;
+  /** The visit to edit. Null when someone else logged it — their numbers are
+   * not this rep's to change. */
+  visitId: string | null;
   visitedAt: Date;
+  /** Who logged it, when that was not the current rep. */
+  byName?: string;
 }) {
   const t = await getT();
   return (
@@ -23,7 +28,11 @@ export async function AlreadyVisited({
       <div className="card p-8 text-center">
         <span
           className="mx-auto flex h-12 w-12 items-center justify-center rounded-full"
-          style={{ background: "rgba(30,158,90,.12)", color: "var(--success)" }}
+          style={
+            byName
+              ? { background: "var(--bg-soft)", color: "var(--ink-2)" }
+              : { background: "rgba(30,158,90,.12)", color: "var(--success)" }
+          }
         >
           <svg
             width="24"
@@ -46,14 +55,28 @@ export async function AlreadyVisited({
           {title}
         </h2>
         <p className="mt-2 text-[14px] leading-relaxed" style={{ color: "var(--ink-2)" }}>
-          {t("You already visited this counter today at")} {formatISTTime(visitedAt)}.{" "}
-          {t("Edit that visit instead of adding a new one.")}
+          {byName ? (
+            <>
+              {byName} {t("visited this counter today at")} {formatISTTime(visitedAt)}.{" "}
+              {t("A counter is visited once a day.")}
+            </>
+          ) : (
+            <>
+              {t("You already visited this counter today at")} {formatISTTime(visitedAt)}.{" "}
+              {t("Edit that visit instead of adding a new one.")}
+            </>
+          )}
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-3">
-          <Link href={`/field/counter/${counterId}/visit/${visitId}`} className="btn btn-primary">
-            {t("Edit today's visit")}
-          </Link>
-          <Link href={`/field/counter/${counterId}`} className="btn btn-secondary">
+          {visitId && (
+            <Link href={`/field/counter/${counterId}/visit/${visitId}`} className="btn btn-primary">
+              {t("Edit today's visit")}
+            </Link>
+          )}
+          <Link
+            href={`/field/counter/${counterId}`}
+            className={visitId ? "btn btn-secondary" : "btn btn-primary"}
+          >
             {t("Back to counter")}
           </Link>
         </div>

@@ -272,6 +272,11 @@ const HI: Record<string, string> = {
   "Start your day log before adding counters or visits.":
     "काउंटर या विज़िट जोड़ने से पहले अपना डे लॉग शुरू करें।",
   "Go to Day Log": "डे लॉग पर जाएँ",
+  "{name} already visited this counter today. A counter is visited once a day.": "{name} ने आज इस काउंटर पर विज़िट कर ली है। एक काउंटर पर दिन में एक ही विज़िट होती है।",
+  "visited this counter today at": "ने आज इस काउंटर पर विज़िट की",
+  "visited this counter today": "ने आज इस काउंटर पर विज़िट की",
+  "A counter is visited once a day.": "एक काउंटर पर दिन में एक ही विज़िट होती है।",
+  "Done by": "पूरा किया",
   "All time — the day below is filtered by the date picker.": "पूरा समय — नीचे का दिन तिथि चयन से फ़िल्टर होता है।",
   "Days worked": "काम के दिन",
   "Started": "शुरू किया",

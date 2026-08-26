@@ -58,9 +58,9 @@ export default async function NewVisitPage({
     return <StartDayRequired title={t("Add visit")} />;
   }
 
-  // One call per counter per beat — a second visit the same day is a
-  // correction, so send the rep to edit the first rather than logging a
-  // duplicate. Mirrors the guard in `createVisit`.
+  // One call per counter per day, whoever the rep is. The owner is sent to
+  // edit their visit; anyone else is told who got there first. Mirrors the
+  // guard in `createVisit`.
   if (!isAdmin) {
     const existing = await findTodaysVisit(user.id, counter.id);
     if (existing) {
@@ -69,8 +69,9 @@ export default async function NewVisitPage({
         <AlreadyVisited
           title={t("Already visited today")}
           counterId={counter.id}
-          visitId={existing.id}
+          visitId={existing.isOwn ? existing.id : null}
           visitedAt={existing.visitedAt}
+          byName={existing.isOwn ? undefined : existing.userName}
         />
       );
     }

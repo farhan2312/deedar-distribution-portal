@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { CompetitorPresence, ProductSegment, VisitItem } from "@/db/schema";
 import { createVisit, updateVisit, type VisitInput } from "@/lib/field/visit-actions";
 import { COMPETITOR_OPTIONS, PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
+import { fillName, VISITED_BY_OTHER } from "@/lib/field/visit-messages";
 import { useT } from "@/lib/i18n/provider";
 
 const SEGMENTS: ProductSegment[] = PRODUCT_SEGMENTS.map((p) => p.value);
@@ -115,7 +116,15 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
       // value can actually be corrected.
       setBusy(false);
       setStep("form");
-      setError(res.error);
+      // Server actions return English — they have no view of the language
+      // cookie's effect on this component. Translate here: a named block needs
+      // its template translated THEN the name substituted, so Hindi can put
+      // the name where its grammar wants it; everything else is a plain key.
+      setError(
+        res.blockedByName
+          ? fillName(t(VISITED_BY_OTHER), res.blockedByName)
+          : t(res.error),
+      );
       return;
     }
     // Stay disabled on success: the push + refresh are still in flight and this
