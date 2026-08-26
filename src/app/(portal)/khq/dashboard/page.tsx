@@ -18,7 +18,8 @@ import {
 import { getCurrentUser } from "@/lib/auth/dal";
 import { formatISTDate, istDateString, istDayBounds } from "@/lib/date";
 import { PRODUCT_SEGMENTS, COMPETITOR_LABEL } from "@/lib/field/products";
-import { daysInMonth, likeForLikePrevEnd, MONTH_SHORT, resolvePeriod, type PeriodParams } from "@/lib/khq/period";
+import { MONTH_SHORT } from "@/lib/khq/period";
+import { resolveRange, shiftDays, trendGrain, type RangeParams } from "@/lib/khq/range";
 import { getT } from "@/lib/i18n/server";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { type DonutSegment } from "@/components/ui/donut";
@@ -27,15 +28,15 @@ import {
   computeDelta,
   CardHead,
   DonutCard,
-  HighlightList,
   Kpi,
   ScrollBoard,
   type BoardRow,
-  type Highlight,
   type KpiProps,
 } from "../../_components/dashboard-ui";
 import { RefreshButton } from "../../supervisor/_components/refresh-button";
-import { PeriodPicker } from "../_components/period-picker";
+import { IsrLeaderboard } from "../_components/isr-leaderboard";
+import { StatePicker } from "../_components/state-picker";
+import { DateRangePicker } from "../_components/date-range-picker";
 import { SalesTrend, type TrendBar } from "../_components/sales-trend";
 
 // ── Palettes ───────────────────────────────────────────────────────────────
@@ -94,6 +95,13 @@ function nowInstant(): Date {
   return new Date();
 }
 
+/** Last calendar day of an IST "YYYY-MM" month key. */
+function monthEndOf(monthKey: string): string {
+  const y = Number(monthKey.slice(0, 4));
+  const m = Number(monthKey.slice(5, 7));
+  return `${monthKey}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
+}
+
 /** Days since a timestamp, in whole days. `null` for never-visited. */
 function daysSince(d: Date | null, now: Date): number | null {
   if (!d) return null;
@@ -103,29 +111,53 @@ function daysSince(d: Date | null, now: Date): number | null {
 export default async function KhqDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<PeriodParams>;
+  searchParams: Promise<RangeParams & { state?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getT();
 
-  // Oldest visit decides which years the picker offers — no point listing
-  // years that can't contain data.
+  // Oldest visit sets the slider's floor — no point letting it scroll back
+  // through years that can't contain data.
   const [earliest] = await db
-    .select({ y: sql<number | null>`extract(year from min(${visits.visitedAt}) AT TIME ZONE 'Asia/Kolkata')::int` })
+    .select({
+      d: sql<string | null>`min(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date::text`,
+    })
     .from(visits);
 
   const params = await searchParams;
-  const period = resolvePeriod(params, earliest?.y ?? null);
-  // For the CURRENT period, compare against the same elapsed slice of the
-  // previous one — otherwise "day 3 of the month" always looks like a crash.
-  const prevEnd = likeForLikePrevEnd(period);
+  const range = resolveRange(params, earliest?.d ?? null);
+
+  // State scope. Resolved before the aggregates so every query below can be
+  // filtered by the same depot list: state → C&Fs → depots → counters.
+  const stateRows = await db.select().from(states);
+  const selectedState = stateRows.find((s) => s.id === params.state) ?? null;
+  const scopedCnfs = selectedState
+    ? await db.select({ id: cnfs.id }).from(cnfs).where(eq(cnfs.stateId, selectedState.id))
+    : null;
+  const scopedDepots = scopedCnfs
+    ? await db
+        .select({ id: depots.id })
+        .from(depots)
+        .where(scopedCnfs.length ? inArray(depots.cnfId, scopedCnfs.map((c) => c.id)) : sql`false`)
+    : null;
+  const scopedDepotIds = scopedDepots?.map((d) => d.id) ?? null;
+
+  /** Counter-side scope predicate, or undefined company-wide. Every visit
+   * query that uses it joins `counters`, since the state lives up that chain
+   * rather than on the visit itself. */
+  const depotScope = scopedDepotIds
+    ? scopedDepotIds.length
+      ? inArray(counters.depotId, scopedDepotIds)
+      : sql`false`
+    : undefined;
 
   const now = nowInstant();
   const day = istDayBounds(now);
   const today = istDateString(now);
-  const inPeriod = and(gte(visits.visitedAt, period.start), lt(visits.visitedAt, period.end));
-  const inPrev = and(gte(visits.visitedAt, period.prevStart), lt(visits.visitedAt, prevEnd));
+  const inRange = and(gte(visits.visitedAt, range.start), lt(visits.visitedAt, range.end), depotScope);
+  const inPrev = and(gte(visits.visitedAt, range.prevStart), lt(visits.visitedAt, range.prevEnd), depotScope);
+  const inToday = and(gte(visits.visitedAt, day.start), lt(visits.visitedAt, day.end), depotScope);
 
   // All aggregates run in parallel — sequential awaits on a dashboard multiply
   // the DB round-trip cost.
@@ -143,7 +175,7 @@ export default async function KhqDashboardPage({
     prevCore,
     periodByDepot,
     periodByCnf,
-    periodByRep,
+    todayByIsr,
     periodByArea,
     competitorRows,
     rankRows,
@@ -151,6 +183,7 @@ export default async function KhqDashboardPage({
     brandRows,
     trendRows,
     newCountersTodayRow,
+    todayLogs,
   ] = await Promise.all([
     db.select().from(states),
     db.select().from(cnfs),
@@ -166,8 +199,12 @@ export default async function KhqDashboardPage({
         lastVisit: counters.lastVisitAt,
       })
       .from(counters)
-      .innerJoin(areas, eq(areas.id, counters.areaId)),
-    db.select({ id: users.id, depotId: users.depotId, roles: users.accessRoles }).from(users),
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .where(depotScope),
+    db
+      .select({ id: users.id, name: users.name, depotId: users.depotId, roles: users.accessRoles })
+      .from(users)
+      .where(scopedDepotIds ? inArray(users.depotId, scopedDepotIds) : undefined),
     // Per-depot activity TODAY — the bottom table stays a live "today" view
     // regardless of the selected period, which is what an ops table is for.
     db
@@ -179,17 +216,22 @@ export default async function KhqDashboardPage({
       })
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
-      .where(and(gte(visits.visitedAt, day.start), lt(visits.visitedAt, day.end)))
+      .where(inToday)
       .groupBy(counters.depotId),
     db
       .select({ visits: sql<number>`count(*)::int` })
       .from(visits)
-      .where(and(gte(visits.visitedAt, day.start), lt(visits.visitedAt, day.end))),
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .where(inToday),
     db.select({ userId: dayLogs.userId }).from(dayLogs).where(eq(dayLogs.logDate, today)),
     // Product mix — items JSONB aggregated in JS (a jsonb SRF join errors on
     // any non-array legacy row). NOTE: on a year view this pulls a year of
     // items; the heaviest query on the page.
-    db.select({ items: visits.items }).from(visits).where(inPeriod),
+    db
+      .select({ items: visits.items })
+      .from(visits)
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .where(inRange),
     db
       .select({
         visits: sql<number>`count(*)::int`,
@@ -199,19 +241,21 @@ export default async function KhqDashboardPage({
         avgSeconds: sql<number>`coalesce(avg(${visits.durationSeconds}), 0)::int`,
       })
       .from(visits)
-      .where(inPeriod),
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .where(inRange),
     db
       .select({
         visits: sql<number>`count(*)::int`,
         packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
       })
       .from(visits)
+      .innerJoin(counters, eq(counters.id, visits.counterId))
       .where(inPrev),
     db
       .select({ depotId: counters.depotId, packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int` })
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
-      .where(inPeriod)
+      .where(inRange)
       .groupBy(counters.depotId),
     // Per-C&F packets — the company-level cut a KHQ viewer actually wants,
     // and the one thing this dashboard can show that the C&F one can't.
@@ -220,30 +264,39 @@ export default async function KhqDashboardPage({
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
       .innerJoin(depots, eq(depots.id, counters.depotId))
-      .where(inPeriod)
+      .where(inRange)
       .groupBy(depots.cnfId),
     db
-      .select({ name: users.name, packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`, n: sql<number>`count(*)::int` })
+      .select({
+        id: users.id,
+        name: users.name,
+        packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
+        n: sql<number>`count(*)::int`,
+        counters: sql<number>`count(distinct ${visits.counterId})::int`,
+      })
       .from(visits)
       .innerJoin(users, eq(users.id, visits.userId))
-      .where(inPeriod)
-      .groupBy(users.name),
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .where(inToday)
+      .groupBy(users.id, users.name),
     db
       .select({ area: areas.name, packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int` })
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
       .innerJoin(areas, eq(areas.id, counters.areaId))
-      .where(inPeriod)
+      .where(inRange)
       .groupBy(areas.name),
     db
       .select({ competitor: visits.competitor, n: sql<number>`count(*)::int` })
       .from(visits)
-      .where(inPeriod)
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .where(inRange)
       .groupBy(visits.competitor),
     db
       .select({ rank: visits.rank, n: sql<number>`count(*)::int` })
       .from(visits)
-      .where(and(inPeriod, sql`${visits.rank} is not null`))
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .where(and(inRange, sql`${visits.rank} is not null`))
       .groupBy(visits.rank),
     db
       .select({ value: sql<number>`coalesce(sum(${schemeClaims.value}), 0)::int` })
@@ -251,16 +304,18 @@ export default async function KhqDashboardPage({
       .where(
         and(
           eq(schemeClaims.status, "paid"),
-          gte(schemeClaims.createdAt, period.start),
-          lt(schemeClaims.createdAt, period.end),
+          gte(schemeClaims.createdAt, range.start),
+          lt(schemeClaims.createdAt, range.end),
+          scopedDepotIds ? inArray(schemeClaims.depotId, scopedDepotIds) : undefined,
         ),
       ),
     db
       .select({ brand: visits.competitorBrand, n: sql<number>`count(*)::int` })
       .from(visits)
+      .innerJoin(counters, eq(counters.id, visits.counterId))
       .where(
         and(
-          inPeriod,
+          inRange,
           sql`${visits.competitor} <> 'none'`,
           sql`nullif(trim(${visits.competitorBrand}), '') is not null`,
         ),
@@ -268,30 +323,36 @@ export default async function KhqDashboardPage({
       .groupBy(visits.competitorBrand)
       .orderBy(desc(sql`count(*)`))
       .limit(6),
-    // Trend buckets. Grouped by IST month for a year view, by IST day for a
-    // month view — one query either way, shaped by the selected period.
-    period.month == null
-      ? db
-          .select({
-            bucket: sql<number>`extract(month from ${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::int`,
-            packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
-          })
-          .from(visits)
-          .where(inPeriod)
-          .groupBy(sql`extract(month from ${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')`)
-      : db
-          .select({
-            bucket: sql<number>`extract(day from ${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::int`,
-            packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
-          })
-          .from(visits)
-          .where(inPeriod)
-          .groupBy(sql`extract(day from ${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')`),
+    // Trend buckets, keyed by the IST date itself rather than a day- or
+    // month-of-year number. A free range can span year boundaries, where
+    // "month 1" is ambiguous — the date is not.
+    db
+      .select({
+        bucket:
+          trendGrain(range.days) === "month"
+            ? sql<string>`to_char(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM')`
+            : sql<string>`(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date::text`,
+        packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
+      })
+      .from(visits)
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .where(inRange)
+      .groupBy(
+        trendGrain(range.days) === "month"
+          ? sql`to_char(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM')`
+          : sql`(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date`,
+      ),
     // Counters added today.
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(counters)
-      .where(and(gte(counters.createdAt, day.start), lt(counters.createdAt, day.end))),
+      .where(and(gte(counters.createdAt, day.start), lt(counters.createdAt, day.end), depotScope)),
+    // Today's day logs — the pickup each ISR drew from the depot, which is the
+    // target their sales are measured against on the board below.
+    db
+      .select({ userId: dayLogs.userId, pickupTotal: dayLogs.pickupTotal, startAt: dayLogs.startAt })
+      .from(dayLogs)
+      .where(eq(dayLogs.logDate, today)),
   ]);
 
   // Latest observed stock per retail counter — needs ids from the query above,
@@ -401,11 +462,29 @@ export default async function KhqDashboardPage({
     .sort((a, b) => b.packets - a.packets);
   const cnfMax = Math.max(1, ...cnfBoard.map((r) => r.packets));
 
-  const repBoard = periodByRep
-    .map((r) => ({ name: r.name, packets: Number(r.packets) || 0, visits: Number(r.n) || 0 }))
-    .filter((r) => r.packets > 0 || r.visits > 0)
-    .sort((a, b) => b.packets - a.packets);
-  const repMax = Math.max(1, ...repBoard.map((r) => r.packets));
+  // Built from the ROSTER, not from today's visits, so an ISR who has sold
+  // nothing today still has a row — and so is still reachable. Ranking on a
+  // visits aggregate alone silently hid exactly the people a company viewer
+  // most wants to open.
+  const todayByIsrId = new Map(todayByIsr.map((r) => [r.id, r]));
+  const pickupByIsrId = new Map(todayLogs.map((l) => [l.userId, l]));
+  const isrBoard = fieldReps
+    .map((r) => {
+      const a = todayByIsrId.get(r.id);
+      const log = pickupByIsrId.get(r.id);
+      return {
+        id: r.id,
+        name: r.name,
+        packets: Number(a?.packets) || 0,
+        visits: Number(a?.n) || 0,
+        counters: Number(a?.counters) || 0,
+        pickup: log?.pickupTotal ?? 0,
+        started: !!log?.startAt,
+      };
+    })
+    // Sellers first, then anyone who moved, then the rest alphabetically —
+    // so the quiet ISRs sit in a predictable block rather than a random one.
+    .sort((a, b) => b.packets - a.packets || b.visits - a.visits || a.name.localeCompare(b.name));
 
   const areaBoard = periodByArea
     .map((r) => ({ name: r.area, packets: Number(r.packets) || 0 }))
@@ -473,25 +552,42 @@ export default async function KhqDashboardPage({
   const topBrands = brandRows.map((r) => ({ brand: (r.brand ?? "").trim(), n: Number(r.n) || 0 })).filter((r) => r.brand);
 
   // ── Trend bars ──────────────────────────────────────────────────────────
-  const byBucket = new Map(trendRows.map((r) => [Number(r.bucket), Number(r.packets) || 0]));
-  const curMonth = Number(today.slice(5, 7));
-  const curDay = Number(today.slice(8, 10));
-  const trendBars: TrendBar[] =
-    period.month == null
-      ? MONTH_SHORT.map((label, i) => ({
-          // Translated here, not in the picker only — the axis was rendering
-          // raw English while the dropdown beside it showed Hindi.
-          label: t(label),
-          value: byBucket.get(i + 1) ?? 0,
-          drillMonth: i + 1,
-          isCurrent: period.isCurrent && i + 1 === curMonth,
-        }))
-      : Array.from({ length: daysInMonth(period.year, period.month) }, (_, i) => ({
-          label: String(i + 1),
-          value: byBucket.get(i + 1) ?? 0,
-          drillMonth: null,
-          isCurrent: period.isCurrent && i + 1 === curDay,
-        }));
+  // Buckets are generated from the RANGE, not from what the query returned, so
+  // a day with no sales renders a zero bar instead of vanishing and silently
+  // compressing the axis.
+  const grain = trendGrain(range.days);
+  const byBucket = new Map(trendRows.map((r) => [String(r.bucket), Number(r.packets) || 0]));
+
+  const trendBars: TrendBar[] = [];
+  if (grain === "month") {
+    let cursor = `${range.from.slice(0, 7)}-01`;
+    while (cursor.slice(0, 7) <= range.to.slice(0, 7)) {
+      const key = cursor.slice(0, 7);
+      const monthIdx = Number(key.slice(5, 7)) - 1;
+      trendBars.push({
+        // Translated here rather than only in the axis component — the labels
+        // were rendering raw English beside a Hindi UI.
+        label: t(MONTH_SHORT[monthIdx]),
+        value: byBucket.get(key) ?? 0,
+        // Clicking a month narrows the range to that month.
+        drillMonth: monthIdx + 1,
+        drillFrom: `${key}-01`,
+        drillTo: monthEndOf(key),
+        isCurrent: key === today.slice(0, 7),
+      });
+      cursor = shiftDays(monthEndOf(key), 1);
+    }
+  } else {
+    for (let i = 0; i < range.days; i++) {
+      const date = shiftDays(range.from, i);
+      trendBars.push({
+        label: String(Number(date.slice(8, 10))),
+        value: byBucket.get(date) ?? 0,
+        drillMonth: null,
+        isCurrent: date === today,
+      });
+    }
+  }
   const peakBucket = Math.max(0, ...trendBars.map((b) => b.value));
 
   // ── Counters needing attention ──────────────────────────────────────────
@@ -510,27 +606,7 @@ export default async function KhqDashboardPage({
     .sort((a, b) => (b.days ?? 99999) - (a.days ?? 99999))
     .slice(0, 12);
 
-  // ── Highlights ──────────────────────────────────────────────────────────
-  const highlights: Highlight[] = [];
-  if (packetsDelta.pct !== null && packetsDelta.pct > 0) {
-    highlights.push({ tone: "good", icon: "trendUp", text: `${t("Packets are")} ${packetsDelta.pct}% ${t("ahead of the previous period.")}` });
-  } else if (packetsDelta.pct !== null && packetsDelta.pct < 0) {
-    highlights.push({ tone: "warn", icon: "trendDown", text: `${t("Packets are")} ${Math.abs(packetsDelta.pct)}% ${t("behind the previous period.")}` });
-  }
-  if (coveragePct < 50 && totalCounters > 0) {
-    highlights.push({ tone: "warn", icon: "store", text: `${t("Only")} ${coveragePct}% ${t("of counters visited in this period.")}` });
-  }
-  if (decliningCount > 0) {
-    highlights.push({ tone: "bad", icon: "alert", text: `${decliningCount} ${t(decliningCount === 1 ? "counter is declining." : "counters are declining.")}` });
-  }
-  if (contestedPct >= 40 && compTotal > 0) {
-    highlights.push({ tone: "warn", icon: "swords", text: `${contestedPct}% ${t("of visits saw a competitor on shelf.")}` });
-  }
-  if (highlights.length === 0) {
-    highlights.push({ tone: "good", icon: "check", text: t("All good — nothing needs attention right now.") });
-  }
-
-  const periodNote = period.isCurrent ? t("so far") : "";
+  const rangeNote = range.isCurrent ? t("so far") : "";
 
   const kpis: KpiProps[] = [
     { icon: "box", tint: "#7B2FA0", label: t("Packets sold"), value: packets.toLocaleString("en-IN"), delta: packetsDelta, deltaLabel: t("vs last period") },
@@ -551,21 +627,22 @@ export default async function KhqDashboardPage({
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="page-title">
-            {period.label}
-            {periodNote && (
+            {range.label}
+            {rangeNote && (
               <span className="ml-2 text-[13px] font-medium" style={{ color: "var(--ink-3)" }}>
-                {periodNote}
+                {rangeNote}
               </span>
             )}
           </h1>
           <p className="page-subtitle max-w-2xl">
-            {period.month == null
-              ? t("Company-wide totals for the whole year.")
-              : t("Company-wide totals for the selected month.")}
+            {selectedState
+              ? `${t("Totals for")} ${selectedState.name}.`
+              : t("Company-wide totals for the selected dates.")}
           </p>
         </div>
-        <div className="flex flex-none flex-wrap items-center gap-2">
-          <PeriodPicker years={period.years} year={period.year} month={period.month} />
+        <div className="flex flex-none flex-wrap items-end gap-2">
+          <DateRangePicker from={range.from} to={range.to} minDate={range.minDate} maxDate={range.maxDate} />
+          <StatePicker options={allStates} value={selectedState?.id ?? "all"} />
           <RefreshButton />
         </div>
       </div>
@@ -576,7 +653,7 @@ export default async function KhqDashboardPage({
           {formatISTDate(today)}
         </span>
         <span>·</span>
-        <span>{allStates.length} {t("states")}</span>
+        <span>{selectedState ? selectedState.name : `${allStates.length} ${t("states")}`}</span>
         <span>·</span>
         <span>{allCnfs.length} {t("C&F")}</span>
         <span>·</span>
@@ -600,9 +677,9 @@ export default async function KhqDashboardPage({
             tint="#7B2FA0"
             title={t("Sales trend")}
             sub={
-              period.month == null
-                ? `${t("Packets sold by month")} · ${period.year}`
-                : `${t("Packets sold by day")} · ${period.label}`
+              grain === "month"
+                ? `${t("Packets sold by month")} · ${range.label}`
+                : `${t("Packets sold by day")} · ${range.label}`
             }
             right={
               <div className="flex flex-none items-center gap-3">
@@ -611,14 +688,14 @@ export default async function KhqDashboardPage({
                     {peakBucket.toLocaleString("en-IN")}
                   </div>
                   <div className="mt-1 text-[11px]" style={{ color: "var(--ink-3)" }}>
-                    {period.month == null ? t("peak month") : t("peak day")}
+                    {grain === "month" ? t("peak month") : t("peak day")}
                   </div>
                 </div>
-                {period.month != null && <BackToYear year={period.year} label={t("← Back to year")} />}
+                {!range.isYtd && <BackToYtd label={t("← Back to YTD")} />}
               </div>
             }
           />
-          <SalesTrend bars={trendBars} drillable={period.month == null} year={period.year} />
+          <SalesTrend bars={trendBars} drillable={grain === "month"} />
         </section>
 
         <DonutCard
@@ -740,20 +817,34 @@ export default async function KhqDashboardPage({
             pct: Math.round((d.packets / depotMax) * 100),
           }))}
         />
-        <ScrollBoard
-          icon="users"
-          tint="var(--accent)"
-          title={t("Top reps")}
-          sub={t("Packets sold this period")}
-          empty={t("No rep activity in this period.")}
-          rows={repBoard.map<BoardRow>((r) => ({
-            key: r.name,
-            name: r.name,
-            value: r.packets.toLocaleString("en-IN"),
-            pct: Math.round((r.packets / repMax) * 100),
-            meta: `${r.visits} ${t("visits")}`,
-          }))}
-        />
+        <section className="card flex flex-col overflow-hidden p-0">
+          <div
+            className="flex flex-none items-center justify-between gap-3 border-b px-5 py-4"
+            style={{ borderColor: "var(--hairline-soft)" }}
+          >
+            <CardHead
+              icon="users"
+              tint="var(--accent)"
+              title={t("Packets sold today by ISR")}
+              sub={t("Tap an ISR for that day's detail")}
+            />
+            {isrBoard.length > 0 && (
+              <span
+                className="chip flex-none"
+                style={{ background: "var(--bg-soft)", color: "var(--ink-3)", borderColor: "transparent" }}
+              >
+                {isrBoard.length}
+              </span>
+            )}
+          </div>
+          <IsrLeaderboard
+            rows={isrBoard}
+            rowsVisible={5}
+            date={today}
+            emptyLabel={t("No ISR activity today.")}
+            t={t}
+          />
+        </section>
       </div>
 
       {/* Area leaderboard + stock health */}
@@ -834,12 +925,6 @@ export default async function KhqDashboardPage({
           )}
         </section>
       </div>
-
-      {/* Highlights */}
-      <section className="card mb-5 flex flex-col p-5">
-        <CardHead icon="alert" tint="#C7263B" title={t("Highlights")} sub={t("What needs your attention")} />
-        <HighlightList items={highlights} />
-      </section>
 
       {/* Counters needing attention */}
       <section className="card mb-5 overflow-hidden p-0">
@@ -943,9 +1028,11 @@ export default async function KhqDashboardPage({
 
 /** Plain link back to the whole-year view — a server component, so no client
  * JS for what is just a URL change. */
-function BackToYear({ year, label }: { year: number; label: string }) {
+function BackToYtd({ label }: { label: string }) {
+  // Clearing from/to lets `resolveRange` fall back to its YTD default, so the
+  // link doesn't have to know today's date.
   return (
-    <a href={`?year=${year}`} className="link text-[12px]">
+    <a href="?" className="link text-[12px]">
       {label}
     </a>
   );

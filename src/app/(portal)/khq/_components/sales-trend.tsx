@@ -7,9 +7,12 @@ export type TrendBar = {
   /** X-axis label — a short month name in year mode, a day-of-month in month mode. */
   label: string;
   value: number;
-  /** Month number (1-12) a bar drills into. Null in month mode (days are the
-   * finest grain we go to, so day bars aren't clickable). */
+  /** Month number (1-12) a bar drills into. Null for day bars — days are the
+   * finest grain we go to, so they aren't clickable. */
   drillMonth: number | null;
+  /** Range a click narrows to. Set on month bars only. */
+  drillFrom?: string;
+  drillTo?: string;
   /** Marks today's day / the current month, so "so far" periods read as
    * partial rather than as a real drop-off. */
   isCurrent?: boolean;
@@ -26,12 +29,10 @@ export type TrendBar = {
 export function SalesTrend({
   bars,
   drillable,
-  year,
 }: {
   bars: TrendBar[];
-  /** True in year mode — enables the click-through. */
+  /** True when bars are months — enables the click-through. */
   drillable: boolean;
-  year: number;
 }) {
   const t = useT();
   const router = useRouter();
@@ -41,10 +42,13 @@ export function SalesTrend({
   const max = Math.max(1, ...bars.map((b) => b.value));
   const total = bars.reduce((s, b) => s + b.value, 0);
 
-  function drill(month: number) {
+  // Drilling now narrows the dashboard's date range rather than setting a
+  // year/month pair — same gesture, but it composes with the time slider
+  // instead of fighting it.
+  function drill(from: string, to: string) {
     const q = new URLSearchParams(params.toString());
-    q.set("year", String(year));
-    q.set("month", String(month));
+    q.set("from", from);
+    q.set("to", to);
     router.push(`${pathname}?${q.toString()}`);
   }
 
@@ -81,11 +85,11 @@ export function SalesTrend({
             </>
           );
 
-          return drillable && b.drillMonth != null ? (
+          return drillable && b.drillFrom && b.drillTo ? (
             <button
               key={i}
               type="button"
-              onClick={() => drill(b.drillMonth!)}
+              onClick={() => drill(b.drillFrom!, b.drillTo!)}
               title={`${label} — ${t("click to open")}`}
               aria-label={label}
               className="flex h-full flex-1 cursor-pointer flex-col justify-end rounded-t transition-opacity hover:opacity-80"

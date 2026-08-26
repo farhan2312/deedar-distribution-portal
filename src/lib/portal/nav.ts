@@ -207,10 +207,31 @@ export function navItemForPath(pathname: string): NavItem | null {
   return best;
 }
 
+/** Segments whose title-cased form reads wrong. Title-casing turns "rep" into
+ * "Rep" and "isr" into "Isr"; both should read "ISR", the name used for the
+ * role everywhere else in the UI. */
+const SEGMENT_LABEL: Record<string, string> = {
+  rep: "ISR",
+  isr: "ISR",
+  cnf: "C&F",
+};
+
+/** A path segment that identifies a record rather than naming a page — a UUID
+ * or a bare number. Never shown to a user: the breadcrumb walks past these to
+ * the last segment that actually reads as a page name. */
+function isIdSegment(segment: string): boolean {
+  return (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment) ||
+    /^[0-9]+$/.test(segment)
+  );
+}
+
 /**
  * Breadcrumb for the top bar: the role section, then the page. Falls back to
- * a title-cased last path segment for routes with no nav entry (detail pages
- * like /field/counter/[id]).
+ * a title-cased path segment for routes with no nav entry (detail pages like
+ * /field/counter/[id]). Id segments are skipped rather than title-cased —
+ * /supervisor/rep/<uuid> was rendering the raw uuid in the top bar, and every
+ * other detail route had the same problem waiting.
  */
 export function breadcrumbForPath(pathname: string): { section: string; page: string } {
   const role = sectionForPath(pathname);
@@ -219,9 +240,9 @@ export function breadcrumbForPath(pathname: string): { section: string; page: st
   const best = navItemForPath(pathname);
   if (best) return { section: section?.title ?? "Deedar Drive", page: best.label };
 
-  const last = pathname.split("/").filter(Boolean).pop() ?? "";
+  const last = pathname.split("/").filter(Boolean).filter((seg) => !isIdSegment(seg)).pop() ?? "";
   const page = last
-    ? last.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    ? (SEGMENT_LABEL[last] ?? last.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))
     : "Dashboard";
   return { section: section?.title ?? "Deedar Drive", page };
 }

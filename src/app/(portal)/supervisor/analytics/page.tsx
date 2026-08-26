@@ -14,7 +14,6 @@ import {
 } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
 import { getT } from "@/lib/i18n/server";
-import { LegendDot } from "@/components/ui/legend-dot";
 import { Donut, type DonutSegment } from "@/components/ui/donut";
 import { Notice } from "@/components/ui/notice";
 import { DepotPicker } from "../_components/depot-picker";
@@ -23,13 +22,6 @@ import { RefreshButton } from "../_components/refresh-button";
 import { AreaLeaderboard } from "../_components/area-leaderboard";
 import { RepLeaderboard } from "../_components/rep-leaderboard";
 
-/** Retail-density colour thresholds by counters-per-area (matches the legend). */
-function densityColor(count: number): string {
-  if (count >= 30) return "#1E6B3C";
-  if (count >= 15) return "#7AB88A";
-  if (count >= 5) return "#E0B15C";
-  return "#C7263B";
-}
 
 /** Rep rows visible before the list scrolls (each row ≈ 74px + border). */
 const REP_ROWS_VISIBLE = 5;
@@ -186,13 +178,6 @@ export default async function SupervisorAnalyticsPage({
   const activeDelta = delta(activeReps, prevActive);
   const declining = areaRows.filter((r) => r.status === "declining").length;
 
-  // ── Retail density ──────────────────────────────────────────────────────
-  const byArea = new Map<string, number>();
-  for (const r of areaRows) byArea.set(r.area, (byArea.get(r.area) ?? 0) + 1);
-  const densityTiles = [...byArea.entries()]
-    .map(([area, count]) => ({ area, count, color: densityColor(count) }))
-    .sort((a, b) => b.count - a.count);
-
   // ── Areas by visits — EVERY area in scope, not just the ones with a visit
   // today. Unvisited areas show 0 rather than being dropped, so the SO sees
   // the whole depot, not just the winners. ───────────────────────────────
@@ -302,17 +287,17 @@ export default async function SupervisorAnalyticsPage({
         ))}
       </div>
 
-      {/* Main grid: rep leaderboard + density */}
-      <div className="mb-5 grid gap-4 lg:grid-cols-[1.15fr_1fr]">
+      {/* Rep leaderboard — the screen's primary content, full width */}
+      <div className="mb-5">
         {/* Rep leaderboard — scrolls after 5 rows */}
         <section className="card flex flex-col overflow-hidden p-0">
           <div className="flex flex-none items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--hairline-soft)" }}>
             <div className="flex items-center gap-3">
               <IconTile name="users" tint="var(--accent)" />
               <div>
-                <h6 style={cardTitle}>{isToday ? t("Packets sold today by rep") : t("Packets sold by rep")}</h6>
+                <h6 style={cardTitle}>{isToday ? t("Packets sold today by ISR") : t("Packets sold by ISR")}</h6>
                 <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-                  {t("Tap a rep for their last 3 days")}
+                  {t("Tap an ISR for their last 3 days")}
                 </p>
               </div>
             </div>
@@ -332,41 +317,6 @@ export default async function SupervisorAnalyticsPage({
           />
         </section>
 
-        {/* Retail density */}
-        <section className="card flex flex-col p-5">
-          <div className="mb-3.5 flex items-center gap-3">
-            <IconTile name="grid" tint="#128A82" />
-            <div>
-              <h6 style={cardTitle}>{t("Retail density by area")}</h6>
-              <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Counters per area")}</p>
-            </div>
-          </div>
-          {densityTiles.length === 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No counters in scope yet.")}</p>
-          ) : (
-            <div className="mb-3.5 grid grid-cols-[repeat(auto-fill,minmax(78px,1fr))] gap-2">
-              {densityTiles.map((tile) => (
-                <div
-                  key={tile.area}
-                  className="flex aspect-square flex-col items-center justify-center rounded-xl p-1.5 text-center text-white transition-transform hover:scale-[1.04]"
-                  style={{ background: tile.color, boxShadow: "var(--shadow-sm)" }}
-                  title={`${tile.area} — ${tile.count}`}
-                >
-                  <span className="line-clamp-2 text-[10.5px] font-semibold leading-tight">{tile.area}</span>
-                  <span className="mt-0.5 text-[16px] font-bold leading-none" style={{ fontFamily: "var(--font-display)" }}>
-                    {tile.count}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="mt-auto flex flex-wrap gap-2.5">
-            <LegendDot color="#1E6B3C" label={`${t("Hot")} (30+)`} />
-            <LegendDot color="#7AB88A" label={`${t("Active")} (15–30)`} />
-            <LegendDot color="#E0B15C" label={`${t("Thin")} (5–15)`} />
-            <LegendDot color="#C7263B" label={`${t("Gap")} (<5)`} />
-          </div>
-        </section>
       </div>
 
       {/* Team status + top areas */}
