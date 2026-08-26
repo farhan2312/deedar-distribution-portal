@@ -102,6 +102,15 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
     const input = buildInput();
     const res = isEdit ? await updateVisit(visitId, input) : await createVisit(counterId, input);
     if (!res.ok) {
+      // The one-a-day guard fired — reachable from a stale tab, or a second
+      // device. There is nothing to correct on this form, so hand them
+      // straight to the visit they already logged rather than showing an
+      // error above a form that can never submit.
+      if (res.existingVisitId) {
+        router.replace(`/field/counter/${counterId}/visit/${res.existingVisitId}`);
+        router.refresh();
+        return;
+      }
       // Only re-enable on failure. Send them back to the form so the rejected
       // value can actually be corrected.
       setBusy(false);

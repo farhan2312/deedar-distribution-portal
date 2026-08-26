@@ -6,8 +6,10 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { hasStartedToday } from "@/lib/field/day-log";
+import { findTodaysVisit } from "@/lib/field/visit-day";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
+import { AlreadyVisited } from "../../../_components/already-visited";
 import { StartDayRequired } from "../../../_components/start-day-required";
 import { VisitForm } from "./visit-form";
 
@@ -54,6 +56,24 @@ export default async function NewVisitPage({
   if (!isAdmin && !(await hasStartedToday(user.id))) {
     const t = await getT();
     return <StartDayRequired title={t("Add visit")} />;
+  }
+
+  // One call per counter per beat — a second visit the same day is a
+  // correction, so send the rep to edit the first rather than logging a
+  // duplicate. Mirrors the guard in `createVisit`.
+  if (!isAdmin) {
+    const existing = await findTodaysVisit(user.id, counter.id);
+    if (existing) {
+      const t = await getT();
+      return (
+        <AlreadyVisited
+          title={t("Already visited today")}
+          counterId={counter.id}
+          visitId={existing.id}
+          visitedAt={existing.visitedAt}
+        />
+      );
+    }
   }
 
   return (

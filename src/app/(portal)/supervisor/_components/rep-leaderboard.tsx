@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { pickupBarColor, soldAgainstPickup } from "@/lib/field/day-stock";
 
 export type RepRow = {
   id: string;
@@ -13,14 +14,6 @@ export type RepRow = {
   started: boolean;
   onJob: string | null;
 };
-
-/** How much of the day's pickup a rep has sold. Null when nothing was picked
- * up, which is a different state from 0% — there is no target to measure
- * against, so the bar shows effort instead of pretending the rep failed one. */
-function achievedPct(packets: number, pickup: number): number | null {
-  if (pickup <= 0) return null;
-  return Math.min(100, Math.round((packets / pickup) * 100));
-}
 
 /**
  * Packets-sold leaderboard for a Sales Officer's team. Each row links to that
@@ -64,7 +57,7 @@ export function RepLeaderboard({
   return (
     <div className="overflow-y-auto" style={{ maxHeight: rowsVisible * 76 }}>
       {rows.map((r, i) => {
-        const pct = achievedPct(r.packets, r.pickup);
+        const pct = soldAgainstPickup(r.packets, r.pickup);
         return (
           <Link
             key={r.id}
@@ -89,7 +82,7 @@ export function RepLeaderboard({
                 <ProgressBar
                   pct={pct ?? Math.round((r.packets / soldMax) * 100)}
                   height={7}
-                  color={pct == null ? "var(--ink-3)" : pct >= 80 ? "var(--success)" : pct >= 40 ? "var(--accent)" : "var(--warning)"}
+                  color={pickupBarColor(pct)}
                 />
               </div>
               <div className="mt-1.5 truncate text-[11.5px]" style={{ color: "var(--ink-3)" }}>

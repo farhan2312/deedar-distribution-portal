@@ -13,6 +13,7 @@ import {
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { hasStartedToday, START_DAY_REQUIRED } from "./day-log";
+import { ALREADY_VISITED_TODAY, findTodaysVisit } from "./visit-day";
 import { isWithinEditWindow } from "./products";
 
 const SEGMENTS: ProductSegment[] = ["DG10", "DG20", "DB20", "DB40"];
@@ -31,7 +32,9 @@ export type VisitInput = {
   durationSeconds?: number | null;
 };
 
-type Result = { ok: true; visitId: string } | { ok: false; error: string };
+type Result =
+  | { ok: true; visitId: string }
+  | { ok: false; error: string; existingVisitId?: string };
 
 function validate(input: VisitInput): string | null {
   const items = input.items.filter((i) => SEGMENTS.includes(i.segment));
@@ -82,6 +85,16 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
   // reps only.
   if (!isAdmin && !(await hasStartedToday(user.id))) {
     return { ok: false, error: START_DAY_REQUIRED };
+  }
+
+  // One visit per counter per day. Admin is exempt for the same reason it is
+  // exempt from the clock-in gate: it works outside the beat, and is the
+  // account that fixes data rather than collects it.
+  if (!isAdmin) {
+    const existing = await findTodaysVisit(user.id, counter.id);
+    if (existing) {
+      return { ok: false, error: ALREADY_VISITED_TODAY, existingVisitId: existing.id };
+    }
   }
 
   const items = input.items.filter((i) => SEGMENTS.includes(i.segment));

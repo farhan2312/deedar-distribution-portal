@@ -39,3 +39,23 @@ export function clampQty(n: unknown): number {
   const v = Math.floor(Number(n));
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
+
+/**
+ * How much of a day's pickup has been sold, 0–100.
+ *
+ * Null when nothing was picked up — that is a different state from 0%: there
+ * is no target to measure against, so callers show effort (or nothing) rather
+ * than implying the rep missed one. Capped at 100 so selling carried-over
+ * stock can't overflow a progress bar.
+ */
+export function soldAgainstPickup(sold: number, pickup: number): number | null {
+  if (pickup <= 0) return null;
+  return Math.min(100, Math.round((sold / pickup) * 100));
+}
+
+/** Shared colour ramp for a "sold against pickup" bar, so the leaderboard and
+ * the rep page grade the same number the same way. */
+export function pickupBarColor(pct: number | null): string {
+  if (pct == null) return "var(--ink-3)";
+  return pct >= 80 ? "var(--success)" : pct >= 40 ? "var(--accent)" : "var(--warning)";
+}

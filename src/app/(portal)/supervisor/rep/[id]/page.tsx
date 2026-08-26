@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { durationLabel, formatISTDate, formatISTTime, istDateString, istDayBounds } from "@/lib/date";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { pickupBarColor, soldAgainstPickup } from "@/lib/field/day-stock";
 import { competitorDisplayLabel, formatDuration, PRODUCT_SEGMENTS } from "@/lib/field/products";
 import { getTeamReps } from "@/lib/supervisor/team";
 import { getT } from "@/lib/i18n/server";
@@ -179,6 +180,7 @@ export default async function SupervisorRepPage({
       // The day's target and what came back — straight off the rep's day log.
       pickup: log?.pickupTotal ?? 0,
       remaining: log?.remainingTotal ?? 0,
+      achieved: soldAgainstPickup(packets, log?.pickupTotal ?? 0),
       onJob: log?.startAt ? durationLabel(log.startAt, log.endAt ?? (date === todayStr ? now : null)) : "—",
     };
   });
@@ -195,6 +197,9 @@ export default async function SupervisorRepPage({
   // Distinct across the whole window, not a sum of per-day counts — the same
   // counter visited on two days is one counter covered, not two.
   const coveredAll = new Set(visitRows.map((v) => v.counterId)).size;
+  // Fallback scale for days with no pickup logged: compare against the best
+  // day in the window, so the bar still says something rather than sitting
+  // empty. Never used when a real target exists.
   const packetMax = Math.max(1, ...days.map((d) => d.packets));
 
   return (
@@ -283,12 +288,19 @@ export default async function SupervisorRepPage({
                 </div>
               </div>
 
-              {/* Relative bar so the three days compare at a glance */}
+              {/* Sold against that day's pickup — the same basis as the
+                  "38/100" beside it, and as the leaderboard bar. */}
               <div className="px-5 pt-3">
                 <ProgressBar
-                  pct={Math.round((d.packets / packetMax) * 100)}
+                  pct={d.achieved ?? Math.round((d.packets / packetMax) * 100)}
                   height={6}
-                  color={d.packets > 0 ? "var(--accent)" : "var(--hairline)"}
+                  color={
+                    d.achieved != null
+                      ? pickupBarColor(d.achieved)
+                      : d.packets > 0
+                        ? "var(--accent)"
+                        : "var(--hairline)"
+                  }
                 />
               </div>
 

@@ -95,6 +95,11 @@ export default async function CounterDetailPage({
   );
   const timeLeft = hasEditable ? editWindowRemaining() : null;
 
+  // `history` is already cut at midnight IST and, for a rep, scoped to their
+  // own visits — so their row in it IS today's visit. No extra query needed.
+  // Admin is exempt from the one-a-day rule, so it never looks for one.
+  const ownVisitToday = isAdmin ? null : history.find((h) => h.userId === user.id) ?? null;
+
   return (
     <div className="mx-auto max-w-2xl" style={{ animation: "fadeUp .3s ease" }}>
       <Link href="/field/beat" className="link mb-4 inline-flex">
@@ -138,15 +143,21 @@ export default async function CounterDetailPage({
       {/* Add visit */}
       <div className="my-5">
         {canVisit ? (
+          // A counter is called on once per beat, so once today's visit exists
+          // this becomes an edit link rather than offering a duplicate.
           <Link
-            href={`/field/counter/${counter.id}/visit`}
+            href={
+              ownVisitToday
+                ? `/field/counter/${counter.id}/visit/${ownVisitToday.id}`
+                : `/field/counter/${counter.id}/visit`
+            }
             // .btn-primary (not the fixed --gradient-cosmic brand-green) so this
             // follows the field section's own accent, same as every other
             // primary button in the app.
             className="btn btn-primary w-full justify-center gap-2.5 py-4 text-[15px]"
           >
             <CalendarIcon className="h-[18px] w-[18px]" />
-            {t("Add Visit for this Counter")}
+            {ownVisitToday ? t("Edit today's visit") : t("Add Visit for this Counter")}
             <span aria-hidden className="ml-1">→</span>
           </Link>
         ) : (

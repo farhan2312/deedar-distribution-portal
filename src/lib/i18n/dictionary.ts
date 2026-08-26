@@ -272,6 +272,12 @@ const HI: Record<string, string> = {
   "Start your day log before adding counters or visits.":
     "काउंटर या विज़िट जोड़ने से पहले अपना डे लॉग शुरू करें।",
   "Go to Day Log": "डे लॉग पर जाएँ",
+  "Already visited today": "आज पहले ही विज़िट हो चुकी है",
+  "You already visited this counter today at": "आपने आज इस काउंटर पर विज़िट की थी",
+  "Edit that visit instead of adding a new one.": "नई विज़िट जोड़ने के बजाय उसी को एडिट करें।",
+  "You've already visited this counter today. Edit that visit instead of adding a new one.": "आपने आज इस काउंटर पर पहले ही विज़िट कर ली है। नई जोड़ने के बजाय उसी को एडिट करें।",
+  "Edit today's visit": "आज की विज़िट एडिट करें",
+  "Back to counter": "काउंटर पर वापस",
   "Report a Feature": "फ़ीचर रिपोर्ट करें",
   "Tell us what you'd like — it goes straight to the admin's Bug Tracker.": "बताइए आपको क्या चाहिए — यह सीधे एडमिन के बग ट्रैकर में जाता है।",
   "Your request went straight to the admin's Bug Tracker.": "आपका अनुरोध सीधे एडमिन के बग ट्रैकर में चला गया।",
