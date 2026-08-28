@@ -1,7 +1,15 @@
 import "server-only";
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { accessRequests, beatAssignments, counters, dayLogs, stockists, visits } from "@/db/schema";
+import {
+  accessRequests,
+  beatAssignments,
+  counters,
+  dayLogs,
+  stockistStock,
+  stockists,
+  visits,
+} from "@/db/schema";
 import { durationLabel, formatISTTime, istDateString, istDayBounds } from "@/lib/date";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { getBugInbox } from "@/lib/bugs/notifications";
@@ -11,6 +19,7 @@ import {
   getVisitsToday,
   type ScopeUser,
 } from "@/lib/supervisor/team";
+import { SEGMENT_LABEL } from "@/lib/field/products";
 import { INTENTS, type IntentAnswer } from "./catalog";
 
 /**
@@ -271,6 +280,115 @@ async function teamTopRep(user: AnswerUser, t: T): Promise<IntentAnswer> {
   };
 }
 
+// ── Depot / Dealer / Sub-Dealer ──────────────────────────────────────────
+
+/**
+ * The stockists a stockist-role user's answers cover: their own, plus — when
+ * theirs is a dealer — its sub-dealers. Mirrors `stockistScope` on the portal,
+ * so the chatbot reports the same numbers the Stock screen shows.
+ */
+async function myStockistIds(user: AnswerUser): Promise<string[]> {
+  if (!user.depot) return [];
+  const [self] = await db
+    .select({ id: stockists.id, kind: stockists.kind })
+    .from(stockists)
+    .where(eq(stockists.id, user.depot.id))
+    .limit(1);
+  if (!self) return [];
+  if (self.kind !== "dealer") return [self.id];
+  const kids = await db
+    .select({ id: stockists.id })
+    .from(stockists)
+    .where(eq(stockists.parentId, self.id));
+  return [self.id, ...kids.map((k) => k.id)];
+}
+
+async function myStockTotal(user: AnswerUser, t: T): Promise<IntentAnswer> {
+  const ids = await myStockistIds(user);
+  if (ids.length === 0) return { text: t("You aren't mapped to a stockist yet — ask Central Admin.") };
+
+  const rows = await db
+    .select({ segment: stockistStock.segment, onHand: stockistStock.onHand })
+    .from(stockistStock)
+    .where(inArray(stockistStock.stockistId, ids));
+
+  // Summed per SKU, since a dealer's list spans their sub-dealers too.
+  const bySeg = new Map<string, number>();
+  for (const r of rows) bySeg.set(r.segment, (bySeg.get(r.segment) ?? 0) + r.onHand);
+  const total = [...bySeg.values()].reduce((s, n) => s + n, 0);
+
+  if (total === 0) return { text: t("No stock recorded yet."), link: { href: "/depot/stock", label: t("Open Stock") } };
+
+  return {
+    text: `${total.toLocaleString("en-IN")} ${t("packets on hand")}${ids.length > 1 ? ` (${t("incl. sub-dealers")})` : ""}.`,
+    items: capItems(
+      [...bySeg.entries()]
+        .sort((x, y) => y[1] - x[1])
+        .map(([seg, n]) => ({
+          label: SEGMENT_LABEL[seg as keyof typeof SEGMENT_LABEL] ?? seg,
+          value: n.toLocaleString("en-IN"),
+        })),
+      t,
+    ),
+    link: { href: "/depot/stock", label: t("Open Stock") },
+  };
+}
+
+async function myStockLow(user: AnswerUser, t: T): Promise<IntentAnswer> {
+  const ids = await myStockistIds(user);
+  if (ids.length === 0) return { text: t("You aren't mapped to a stockist yet — ask Central Admin.") };
+
+  const rows = await db
+    .select({
+      segment: stockistStock.segment,
+      onHand: stockistStock.onHand,
+      lowThreshold: stockistStock.lowThreshold,
+    })
+    .from(stockistStock)
+    .where(inArray(stockistStock.stockistId, ids));
+
+  const bySeg = new Map<string, { onHand: number; low: number }>();
+  for (const r of rows) {
+    const acc = bySeg.get(r.segment) ?? { onHand: 0, low: 0 };
+    acc.onHand += r.onHand;
+    acc.low += r.lowThreshold;
+    bySeg.set(r.segment, acc);
+  }
+  const low = [...bySeg.entries()].filter(([, v]) => v.onHand < v.low);
+
+  if (bySeg.size === 0) return { text: t("No stock recorded yet."), link: { href: "/depot/stock", label: t("Open Stock") } };
+  if (low.length === 0) return { text: t("Nothing is below its threshold."), link: { href: "/depot/stock", label: t("Open Stock") } };
+
+  return {
+    text: `${low.length} ${t(low.length === 1 ? "product is running low." : "products are running low.")}`,
+    items: low.map(([seg, v]) => ({
+      label: SEGMENT_LABEL[seg as keyof typeof SEGMENT_LABEL] ?? seg,
+      value: `${v.onHand} / ${v.low}`,
+    })),
+    link: { href: "/depot/stock", label: t("Open Stock") },
+  };
+}
+
+async function myCounters(user: AnswerUser, t: T): Promise<IntentAnswer> {
+  const ids = await myStockistIds(user);
+  if (ids.length === 0) return { text: t("You aren't mapped to a stockist yet — ask Central Admin.") };
+
+  const rows = await db
+    .select({ status: counters.status, n: sql<number>`count(*)::int` })
+    .from(counters)
+    .where(inArray(counters.stockistId, ids))
+    .groupBy(counters.status);
+
+  const total = rows.reduce((s, r) => s + r.n, 0);
+  if (total === 0) return { text: t("No counters mapped to your stockist yet.") };
+
+  return {
+    text: `${total.toLocaleString("en-IN")} ${t(total === 1 ? "counter" : "counters")}${ids.length > 1 ? ` (${t("incl. sub-dealers")})` : ""}.`,
+    items: rows.map((r) => ({ label: t(r.status), value: String(r.n) })),
+    link: { href: "/depot/counters", label: t("Open Counters") },
+  };
+}
+
 // ── C&F HQ / Kanpur HQ / Admin ───────────────────────────────────────────
 
 /** Visit-scope predicate for company questions, honouring the C&F limit. */
@@ -337,20 +455,31 @@ async function topDepotToday(user: AnswerUser, t: T): Promise<IntentAnswer> {
   const { start, end } = istDayBounds();
 
   const rows = await db
-    .select({ name: stockists.name, n: sql<number>`count(*)::int` })
+    .select({ name: stockists.name, kind: stockists.kind, n: sql<number>`count(*)::int` })
     .from(visits)
     .innerJoin(counters, eq(counters.id, visits.counterId))
     .innerJoin(stockists, eq(stockists.id, counters.stockistId))
     .where(visitScope(stockistIds, start, end))
-    .groupBy(stockists.name)
+    .groupBy(stockists.name, stockists.kind)
     .orderBy(desc(sql`count(*)`))
     .limit(4);
 
   if (rows.length === 0) return { text: t("No visits recorded today yet.") };
 
+  // The kind is named because three now exist — "Indergarh" alone does not say
+  // whether the winner is a depot, a dealer or a sub-dealer.
+  const kindLabel: Record<string, string> = {
+    depot: "Depot",
+    dealer: "Dealer",
+    sub_dealer: "Sub-Dealer",
+  };
+
   return {
-    text: `${rows[0].name} — ${rows[0].n} ${t(rows[0].n === 1 ? "visit" : "visits")}.`,
-    items: rows.slice(1).map((r) => ({ label: r.name, value: String(r.n) })),
+    text: `${rows[0].name} (${t(kindLabel[rows[0].kind] ?? rows[0].kind)}) — ${rows[0].n} ${t(rows[0].n === 1 ? "visit" : "visits")}.`,
+    items: rows.slice(1).map((r) => ({
+      label: `${r.name} · ${t(kindLabel[r.kind] ?? r.kind)}`,
+      value: String(r.n),
+    })),
     link: { href: "/khq/dashboard", label: t("Open Company Dashboard") },
   };
 }
@@ -401,6 +530,9 @@ const RUNNERS: Record<string, (user: AnswerUser, t: T) => Promise<IntentAnswer>>
   packets_sold_today: packetsSoldToday,
   visits_company_today: visitsCompanyToday,
   declining_counters: decliningCounters,
+  my_stock_total: myStockTotal,
+  my_stock_low: myStockLow,
+  my_counters: myCounters,
   top_depot_today: topDepotToday,
   pending_access_requests: pendingAccessRequests,
   open_bug_reports: openBugReports,

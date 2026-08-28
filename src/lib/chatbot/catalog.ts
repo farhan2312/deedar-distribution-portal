@@ -11,7 +11,7 @@ import type { AccessRole } from "@/db/schema";
  */
 
 /** Menu section a question is filed under. */
-export type IntentGroup = "Today" | "My team" | "Company";
+export type IntentGroup = "Today" | "My team" | "My stockist" | "Company";
 
 /**
  * A rendered answer. Text arrives already translated — the server action runs
@@ -58,17 +58,24 @@ export const INTENTS: Intent[] = [
   { id: "team_open_days", roles: ["supervisor"], group: "My team", label: "Who has a day still open?" },
   { id: "team_top_rep", roles: ["supervisor"], group: "My team", label: "Who has done the most visits today?" },
 
+  // ── Depot / Dealer / Sub-Dealer ───────────────────────────────────────
+  // Both stockist roles share these: the screens behind them are the same, and
+  // a dealer's answers roll their sub-dealers in.
+  { id: "my_stock_total", roles: ["depot", "dealer"], group: "My stockist", label: "How much stock do I have?" },
+  { id: "my_stock_low", roles: ["depot", "dealer"], group: "My stockist", label: "Which products are running low?" },
+  { id: "my_counters", roles: ["depot", "dealer"], group: "My stockist", label: "How many counters do I have?" },
+
   // ── C&F HQ / Kanpur HQ / Admin ────────────────────────────────────────
   { id: "packets_sold_today", roles: ["hq", "khq"], group: "Company", label: "How many packets were sold today?" },
   { id: "visits_company_today", roles: ["hq", "khq"], group: "Company", label: "How many visits company-wide today?" },
   { id: "declining_counters", roles: ["hq", "khq"], group: "Company", label: "How many declining counters?" },
-  { id: "top_depot_today", roles: ["hq", "khq"], group: "Company", label: "Which depot did the most visits today?" },
+  { id: "top_depot_today", roles: ["hq", "khq"], group: "Company", label: "Which stockist did the most visits today?" },
   { id: "pending_access_requests", roles: ["admin"], group: "Company", label: "How many users are awaiting approval?" },
   { id: "open_bug_reports", roles: ["admin"], group: "Company", label: "How many bug reports are open?" },
 ];
 
 /** Group headers in display order. Empty groups are skipped by the caller. */
-export const INTENT_GROUPS: IntentGroup[] = ["Today", "My team", "Company"];
+export const INTENT_GROUPS: IntentGroup[] = ["Today", "My team", "My stockist", "Company"];
 
 /**
  * Questions this user may ask. Admin sees everything — matching how the
