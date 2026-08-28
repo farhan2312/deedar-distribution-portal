@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { areas, beatAssignments, counters, users, visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
-import { getScopeDepots } from "@/lib/supervisor/team";
+import { getScopeStockists } from "@/lib/supervisor/team";
 import { istDateString } from "@/lib/date";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { getT } from "@/lib/i18n/server";
@@ -19,9 +19,9 @@ export default async function AssignBeatPage() {
     return <Notice title={t("Assign Beat")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
 
-  const depotIds = (await getScopeDepots(user)).map((d) => d.id);
+  const stockistIds = (await getScopeStockists(user)).map((d) => d.id);
 
-  const counterRows = depotIds.length
+  const counterRows = stockistIds.length
     ? await db
         .select({
           id: counters.id,
@@ -30,22 +30,22 @@ export default async function AssignBeatPage() {
           typeOther: counters.typeOther,
           area: areas.name,
           status: counters.status,
-          depotId: counters.depotId,
+          stockistId: counters.stockistId,
         })
         .from(counters)
         .innerJoin(areas, eq(areas.id, counters.areaId))
-        .where(inArray(counters.depotId, depotIds))
+        .where(inArray(counters.stockistId, stockistIds))
     : [];
 
-  // Only FIELD reps (ISRs) in the supervised depots are assignable — a beat is
-  // a field-visit list. Depot managers, SOs, etc. share the same depotId but
+  // Only FIELD reps (ISRs) in the supervised stockists are assignable — a beat is
+  // a field-visit list. Depot managers, SOs, etc. share the same stockistId but
   // must not appear here.
-  const repRows = depotIds.length
+  const repRows = stockistIds.length
     ? (
         await db
-          .select({ id: users.id, name: users.name, depotId: users.depotId, accessRoles: users.accessRoles })
+          .select({ id: users.id, name: users.name, stockistId: users.stockistId, accessRoles: users.accessRoles })
           .from(users)
-          .where(inArray(users.depotId, depotIds))
+          .where(inArray(users.stockistId, stockistIds))
       ).filter((u) => u.accessRoles.includes("field"))
     : [];
 
@@ -68,13 +68,13 @@ export default async function AssignBeatPage() {
     type: c.type,
     typeLabel: counterTypeLabel(c.type, c.typeOther),
     area: c.area,
-    depotId: c.depotId,
+    stockistId: c.stockistId,
     stock: stockByCounter.get(c.id) ?? 0,
     trend: c.status === "declining" ? "Declining" : c.status === "dormant" ? "Flat" : "Increasing",
   }));
 
   const reps: RepOption[] = repRows.length
-    ? repRows.map((r) => ({ id: r.id, name: r.name, depotId: r.depotId }))
+    ? repRows.map((r) => ({ id: r.id, name: r.name, stockistId: r.stockistId }))
     : [];
 
 

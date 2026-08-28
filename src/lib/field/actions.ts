@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, counters, depots } from "@/db/schema";
+import { areas, counters, stockists } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
@@ -16,7 +16,7 @@ export type DuplicateMatch = { name: string; type: string; area: string } | null
  * it's in the rep's own depot, so the wizard can offer "add a visit instead"
  * rather than just blocking. */
 export type FieldDuplicateMatch =
-  | { id: string; name: string; type: string; area: string; depotName: string; canVisit: boolean }
+  | { id: string; name: string; type: string; area: string; stockistName: string; canVisit: boolean }
   | null;
 
 export async function checkDuplicate(phone: string): Promise<FieldDuplicateMatch> {
@@ -31,12 +31,12 @@ export async function checkDuplicate(phone: string): Promise<FieldDuplicateMatch
       type: counters.type,
       typeOther: counters.typeOther,
       area: areas.name,
-      depotId: counters.depotId,
-      depotName: depots.name,
+      stockistId: counters.stockistId,
+      stockistName: stockists.name,
     })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
-    .innerJoin(depots, eq(depots.id, counters.depotId))
+    .innerJoin(stockists, eq(stockists.id, counters.stockistId))
     .where(eq(counters.phone, phone))
     .limit(1);
   if (!match) return null;
@@ -47,8 +47,8 @@ export async function checkDuplicate(phone: string): Promise<FieldDuplicateMatch
     name: match.name,
     type: counterTypeLabel(match.type, match.typeOther),
     area: match.area,
-    depotName: match.depotName,
-    canVisit: isAdmin || match.depotId === user.depot?.id,
+    stockistName: match.stockistName,
+    canVisit: isAdmin || match.stockistId === user.depot?.id,
   };
 }
 
@@ -56,7 +56,7 @@ export type NewCounterInput = {
   name: string;
   phone: string;
   address: string;
-  depotId: string;
+  stockistId: string;
   areaId: string;
   type: "Kirana" | "Paan" | "Tea Stall" | "Wholesale" | "Vegetable Shop" | "Others";
   /** Free-text label, required when `type` is "Others" (e.g. "Medical Store").
@@ -82,7 +82,7 @@ export async function createCounter(input: NewCounterInput) {
   if (!isAdmin && !(await hasStartedToday(user.id))) {
     return { ok: false as const, error: START_DAY_REQUIRED };
   }
-  if (!isAdmin && input.depotId !== user.depot?.id) {
+  if (!isAdmin && input.stockistId !== user.depot?.id) {
     return { ok: false as const, error: "You can only add counters in your own depot." };
   }
   // Wholesale counters are Supervisor-added only — this action backs the
@@ -96,11 +96,11 @@ export async function createCounter(input: NewCounterInput) {
     return { ok: false as const, error: "Enter the counter type." };
   }
 
-  const [depot] = await db.select().from(depots).where(eq(depots.id, input.depotId)).limit(1);
+  const [depot] = await db.select().from(stockists).where(eq(stockists.id, input.stockistId)).limit(1);
   if (!depot) return { ok: false as const, error: "Unknown depot." };
 
   const [area] = await db.select().from(areas).where(eq(areas.id, input.areaId)).limit(1);
-  if (!area || area.depotId !== depot.id) {
+  if (!area || area.stockistId !== depot.id) {
     return { ok: false as const, error: "Area does not belong to the selected depot." };
   }
 
@@ -118,7 +118,7 @@ export async function createCounter(input: NewCounterInput) {
     name: input.name.trim(),
     phone: input.phone,
     address: input.address.trim() || null,
-    depotId: depot.id,
+    stockistId: depot.id,
     areaId: area.id,
     type: input.type,
     typeOther: typeOther || null,
@@ -150,14 +150,14 @@ export async function updateCounter(counterId: string, input: EditCounterInput) 
   if (!input.name.trim()) return { ok: false as const, error: "Name is required." };
 
   const [counter] = await db
-    .select({ id: counters.id, depotId: counters.depotId, type: counters.type })
+    .select({ id: counters.id, stockistId: counters.stockistId, type: counters.type })
     .from(counters)
     .where(eq(counters.id, counterId))
     .limit(1);
   if (!counter) return { ok: false as const, error: "Counter not found." };
 
   const isAdmin = user.accessRoles.includes("admin");
-  if (!isAdmin && counter.depotId !== user.depot?.id) {
+  if (!isAdmin && counter.stockistId !== user.depot?.id) {
     return { ok: false as const, error: "You can only edit counters in your own depot." };
   }
   // This action backs the field counter form, which never offers Wholesale,
@@ -172,7 +172,7 @@ export async function updateCounter(counterId: string, input: EditCounterInput) 
   }
 
   const [area] = await db.select().from(areas).where(eq(areas.id, input.areaId)).limit(1);
-  if (!area || area.depotId !== counter.depotId) {
+  if (!area || area.stockistId !== counter.stockistId) {
     return { ok: false as const, error: "Area does not belong to this counter's depot." };
   }
 
@@ -211,7 +211,7 @@ export type CounterSearchResult =
       name: string;
       type: string;
       area: string;
-      depotName: string;
+      stockistName: string;
     }
   | {
       // Match exists but it belongs to a different depot — we intentionally
@@ -236,19 +236,19 @@ export async function searchCounterByPhone(phone: string): Promise<CounterSearch
       type: counters.type,
       typeOther: counters.typeOther,
       area: areas.name,
-      depotId: counters.depotId,
-      depotName: depots.name,
+      stockistId: counters.stockistId,
+      stockistName: stockists.name,
     })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
-    .innerJoin(depots, eq(depots.id, counters.depotId))
+    .innerJoin(stockists, eq(stockists.id, counters.stockistId))
     .where(eq(counters.phone, phone))
     .limit(1);
 
   if (!c) return { found: false };
 
   const isAdmin = user.accessRoles.includes("admin");
-  const canVisit = isAdmin || c.depotId === user.depot?.id;
+  const canVisit = isAdmin || c.stockistId === user.depot?.id;
   if (!canVisit) return { found: true, canVisit: false };
 
   return {
@@ -258,7 +258,7 @@ export async function searchCounterByPhone(phone: string): Promise<CounterSearch
     name: c.name,
     type: counterTypeLabel(c.type, c.typeOther),
     area: c.area,
-    depotName: c.depotName,
+    stockistName: c.stockistName,
   };
 }
 

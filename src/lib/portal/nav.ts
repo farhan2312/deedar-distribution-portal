@@ -18,6 +18,8 @@ export type RoleTheme = {
 export const ROLE_THEME: Record<AccessRole, RoleTheme> = {
   field: { strong: "#7B2FA0", deep: "#5B1C7A", bg: "#F3E5FB", dot: "#B565D8", muted: "#9C6FB8", rgb: "123, 47, 160" },
   supervisor: { strong: "#4C8C2B", deep: "#356B1B", bg: "#EAF6E1", dot: "#8FCB63", muted: "#7CA36B", rgb: "76, 140, 43" },
+  depot: { strong: "#128A82", deep: "#0A6660", bg: "#DFF5F3", dot: "#4FC3B8", muted: "#5FA39D", rgb: "18, 138, 130" },
+  // Dealers use the same portal as depots, so they read as the same section.
   dealer: { strong: "#128A82", deep: "#0A6660", bg: "#DFF5F3", dot: "#4FC3B8", muted: "#5FA39D", rgb: "18, 138, 130" },
   hq: { strong: "#B9812E", deep: "#8F611D", bg: "#FBEAD1", dot: "#E3A542", muted: "#CBA06B", rgb: "185, 129, 46" },
   khq: { strong: "#C1442A", deep: "#93301C", bg: "#FBE5E1", dot: "#E8836C", muted: "#C17A6A", rgb: "193, 68, 42" },
@@ -94,7 +96,7 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       { href: "/supervisor/assign-beat", label: "Assign Beat", icon: "users", customHeader: true },
       // Read-only browseable list of every counter in the SO's supervised
-      // depots — for scoping beats and answering "does depot X have this
+      // stockists — for scoping beats and answering "does depot X have this
       // outlet?" without needing to check-in.
       { href: "/supervisor/counters", label: "All Counters", icon: "grid", customHeader: true },
       {
@@ -107,8 +109,8 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    role: "dealer",
-    title: "Depot",
+    role: "depot",
+    title: "Stockist",
     items: [
       { href: "/depot/counters", label: "Counters", icon: "grid", customHeader: true },
       { href: "/depot/schemes", label: "Schemes", icon: "tag", customHeader: true },
@@ -121,7 +123,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/hq/dashboard", label: "Dashboard", icon: "dashboard", customHeader: true },
       { href: "/hq/map", label: "Live map", icon: "mapPin", customHeader: true },
-      { href: "/hq/depots", label: "Depots & Areas", icon: "building", customHeader: true },
+      { href: "/hq/depots", label: "Stockists & Areas", icon: "building", customHeader: true },
     ],
   },
   {
@@ -183,7 +185,7 @@ export const NAV_SECTIONS: NavSection[] = [
 export function sectionForPath(pathname: string): AccessRole {
   if (pathname.startsWith("/field")) return "field";
   if (pathname.startsWith("/supervisor")) return "supervisor";
-  if (pathname.startsWith("/depot")) return "dealer";
+  if (pathname.startsWith("/depot")) return "depot";
   if (pathname.startsWith("/hq")) return "hq";
   if (pathname.startsWith("/khq")) return "khq";
   return "admin";

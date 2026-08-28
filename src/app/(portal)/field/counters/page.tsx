@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { and, asc, eq, gte, lt } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, counters, depots, visits } from "@/db/schema";
+import { areas, counters, stockists, visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { istDayBounds } from "@/lib/date";
@@ -25,13 +25,13 @@ export default async function FieldCountersPage() {
   if (!isAdmin && !user.depot) {
     return (
       <Notice title={t("All Counters")}>
-        {t("You aren't assigned to a depot yet — ask your Sales Officer to map you to one.")}
+        {t("You aren't assigned to a stockist yet — ask your Sales Officer to map you to one.")}
       </Notice>
     );
   }
 
   // ISR → their own depot; admin → all counters (bounded).
-  const depotFilter = user.depot ? eq(counters.depotId, user.depot.id) : undefined;
+  const depotFilter = user.depot ? eq(counters.stockistId, user.depot.id) : undefined;
 
   const [counterRows, todaysVisitRows] = await Promise.all([
     db
@@ -43,13 +43,13 @@ export default async function FieldCountersPage() {
         typeOther: counters.typeOther,
         areaId: counters.areaId,
         areaName: areas.name,
-        depotId: counters.depotId,
-        depotName: depots.name,
+        stockistId: counters.stockistId,
+        stockistName: stockists.name,
         status: counters.status,
       })
       .from(counters)
       .innerJoin(areas, eq(areas.id, counters.areaId))
-      .innerJoin(depots, eq(depots.id, counters.depotId))
+      .innerJoin(stockists, eq(stockists.id, counters.stockistId))
       .where(depotFilter)
       .orderBy(asc(counters.name))
       .limit(MAX_ROWS),
@@ -80,10 +80,10 @@ export default async function FieldCountersPage() {
     type: counterTypeLabel(c.type, c.typeOther),
     areaId: c.areaId,
     areaName: c.areaName,
-    depotId: c.depotId,
-    depotName: c.depotName,
+    stockistId: c.stockistId,
+    stockistName: c.stockistName,
     status: c.status,
-    canVisit: isAdmin || c.depotId === user.depot?.id,
+    canVisit: isAdmin || c.stockistId === user.depot?.id,
     visitedToday: visitedToday.has(c.id),
   }));
 
@@ -94,7 +94,7 @@ export default async function FieldCountersPage() {
     .map(([id, name]) => ({ id, name }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const depotsInScope = Array.from(
-    new Map(counterRows.map((c) => [c.depotId, c.depotName])).entries(),
+    new Map(counterRows.map((c) => [c.stockistId, c.stockistName])).entries(),
   )
     .map(([id, name]) => ({ id, name }))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -106,9 +106,9 @@ export default async function FieldCountersPage() {
     <CountersListClient
       rows={rows}
       areas={areasInScope}
-      depots={depotsInScope}
+      stockists={depotsInScope}
       title={title}
-      subtitle={t("Every counter in your depot — tap Check in to open its page.")}
+      subtitle={t("Every counter at your stockist — tap Check in to open its page.")}
       truncated={counterRows.length >= MAX_ROWS}
       maxRows={MAX_ROWS}
       showCheckIn={true}

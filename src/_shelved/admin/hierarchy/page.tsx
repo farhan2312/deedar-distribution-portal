@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { areas, cnfs, counters, depots, states } from "@/db/schema";
+import { areas, cnfs, counters, stockists, states } from "@/db/schema";
 import {
   addArea,
   addCnf,
@@ -16,10 +16,10 @@ import { AddInlineForm, DeleteButton } from "../_components/controls";
 export default async function AdminHierarchyPage() {
   await requireAdmin();
 
-  const [allStates, allCnfs, allDepots, allAreas, allCounters] = await Promise.all([
+  const [allStates, allCnfs, allStockists, allAreas, allCounters] = await Promise.all([
     db.select().from(states),
     db.select().from(cnfs),
-    db.select().from(depots),
+    db.select().from(stockists),
     db.select().from(areas),
     db.select({ areaId: counters.areaId }).from(counters),
   ]);
@@ -34,7 +34,7 @@ export default async function AdminHierarchyPage() {
       <h1 className="text-2xl font-bold text-[#0d3b2e]">Hierarchy</h1>
       <p className="mt-1 text-sm text-zinc-500">
         State → C&amp;F HQ → Depot → Area — one C&amp;F HQ per state, many
-        depots per C&amp;F, many areas per depot.
+        stockists per C&amp;F, many areas per depot.
       </p>
 
       <div className="mt-6 space-y-4">
@@ -49,7 +49,7 @@ export default async function AdminHierarchyPage() {
 
               <div className="mt-3 ml-3 space-y-4 border-l border-zinc-100 pl-4">
                 {stateCnfs.map((cnf) => {
-                  const cnfDepots = allDepots.filter((d) => d.cnfId === cnf.id);
+                  const cnfStockists = allStockists.filter((d) => d.cnfId === cnf.id);
                   return (
                     <div key={cnf.id}>
                       <div className="flex items-center justify-between">
@@ -58,8 +58,8 @@ export default async function AdminHierarchyPage() {
                       </div>
 
                       <div className="mt-2 ml-3 space-y-2.5 border-l border-zinc-100 pl-4">
-                        {cnfDepots.map((depot) => {
-                          const depotAreas = allAreas.filter((a) => a.depotId === depot.id);
+                        {cnfStockists.map((depot) => {
+                          const depotAreas = allAreas.filter((a) => a.stockistId === depot.id);
                           return (
                             <div key={depot.id}>
                               <div className="flex items-center justify-between">

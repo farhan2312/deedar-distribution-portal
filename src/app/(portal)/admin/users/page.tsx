@@ -5,10 +5,10 @@ import {
   accessRequests,
   areas,
   cnfs,
-  depots,
+  stockists,
   passwordResetRequests,
   userAreas,
-  userDepots,
+  userStockists,
   users,
   type AccessRole,
 } from "@/db/schema";
@@ -41,7 +41,8 @@ const REQUEST_STATUS_STYLE: Record<string, { label: string; bg: string; color: s
 const ROLE_COLS: { role: AccessRole; label: string }[] = [
   { role: "field", label: "Field ISR" },
   { role: "supervisor", label: "Sales Officer" },
-  { role: "dealer", label: "Depot" },
+  { role: "depot", label: "Depot" },
+  { role: "dealer", label: "Dealer" },
   { role: "hq", label: "C&F HQ" },
   { role: "khq", label: "Kanpur HQ" },
   { role: "admin", label: "Admin" },
@@ -59,7 +60,7 @@ export default async function AdminUsersPage() {
   const reviewer = alias(users, "reviewer");
   const [
     allUsers,
-    allDepots,
+    allStockists,
     allCnfs,
     allAreas,
     allUserAreas,
@@ -68,11 +69,11 @@ export default async function AdminUsersPage() {
     resetRows,
   ] = await Promise.all([
     db.select().from(users).orderBy(asc(users.name)),
-    db.select().from(depots).orderBy(asc(depots.name)),
+    db.select().from(stockists).orderBy(asc(stockists.name)),
     db.select().from(cnfs).orderBy(asc(cnfs.name)),
     db.select().from(areas).orderBy(asc(areas.name)),
     db.select().from(userAreas),
-    db.select().from(userDepots),
+    db.select().from(userStockists),
     db
       .select({
         id: accessRequests.id,
@@ -107,23 +108,23 @@ export default async function AdminUsersPage() {
   const decidedRequests = requestRows.filter((r) => r.status !== "pending");
 
   // Depots grouped by their C&F. A user's depot(s) belong to exactly one C&F
-  // (a Sales Officer supervises depots under a single C&F), so the picker is a
-  // real two-step cascade — pick the C&F, then only that C&F's depots show —
-  // rather than one long flat list to hunt through as depots grow.
+  // (a Sales Officer supervises stockists under a single C&F), so the picker is a
+  // real two-step cascade — pick the C&F, then only that C&F's stockists show —
+  // rather than one long flat list to hunt through as stockists grow.
   const depotGroups = allCnfs
     .map((c) => ({
       cnfId: c.id,
       cnfName: c.name,
-      depots: allDepots.filter((d) => d.cnfId === c.id).map((d) => ({ id: d.id, name: d.name })),
+      stockists: allStockists.filter((d) => d.cnfId === c.id).map((d) => ({ id: d.id, name: d.name })),
     }))
-    .filter((g) => g.depots.length > 0);
+    .filter((g) => g.stockists.length > 0);
   const cnfOptions = allCnfs.map((c) => ({ id: c.id, name: c.name }));
   // A field rep reports to a Supervisor (SO) — only supervisors are options.
   const supervisorOptions = allUsers
     .filter((u) => u.accessRoles.includes("supervisor"))
     .map((u) => ({ id: u.id, name: u.name }));
   const areasByDepot = new Map<string, typeof allAreas>();
-  for (const a of allAreas) areasByDepot.set(a.depotId, [...(areasByDepot.get(a.depotId) ?? []), a]);
+  for (const a of allAreas) areasByDepot.set(a.stockistId, [...(areasByDepot.get(a.stockistId) ?? []), a]);
 
   const userAreaSet = new Map<string, Set<string>>();
   for (const ua of allUserAreas) {
@@ -133,27 +134,27 @@ export default async function AdminUsersPage() {
   const userDepotSet = new Map<string, Set<string>>();
   for (const ud of allUserDepots) {
     if (!userDepotSet.has(ud.userId)) userDepotSet.set(ud.userId, new Set());
-    userDepotSet.get(ud.userId)!.add(ud.depotId);
+    userDepotSet.get(ud.userId)!.add(ud.stockistId);
   }
 
   // The C&F(s) a user belongs to, for the client-side C&F filter. Derived here
   // rather than at render time because different roles reach a C&F differently:
   //   • hq            → users.cnfId directly
-  //   • field/dealer  → depots[users.depotId].cnfId
-  //   • supervisor    → depots[userDepots.depotId].cnfId  (can be multiple)
+  //   • field/dealer  → stockists[users.stockistId].cnfId
+  //   • supervisor    → stockists[userStockists.stockistId].cnfId  (can be multiple)
   // Admin/khq are cross-C&F, so no filter membership.
   const cnfByDepot = new Map<string, string>();
-  for (const d of allDepots) cnfByDepot.set(d.id, d.cnfId);
+  for (const d of allStockists) cnfByDepot.set(d.id, d.cnfId);
   const userCnfIds = new Map<string, Set<string>>();
   for (const u of allUsers) {
     const cnfs = new Set<string>();
     if (u.cnfId) cnfs.add(u.cnfId);
-    if (u.depotId) {
-      const c = cnfByDepot.get(u.depotId);
+    if (u.stockistId) {
+      const c = cnfByDepot.get(u.stockistId);
       if (c) cnfs.add(c);
     }
-    for (const depotId of userDepotSet.get(u.id) ?? []) {
-      const c = cnfByDepot.get(depotId);
+    for (const stockistId of userDepotSet.get(u.id) ?? []) {
+      const c = cnfByDepot.get(stockistId);
       if (c) cnfs.add(c);
     }
     userCnfIds.set(u.id, cnfs);
@@ -356,7 +357,7 @@ export default async function AdminUsersPage() {
             <tbody>
               {allUsers.map((u) => {
                 const roleSet = new Set(u.accessRoles);
-                const depotAreas = u.depotId ? (areasByDepot.get(u.depotId) ?? []) : [];
+                const depotAreas = u.stockistId ? (areasByDepot.get(u.stockistId) ?? []) : [];
                 return (
                   <tr
                     key={u.id}
@@ -402,15 +403,15 @@ export default async function AdminUsersPage() {
                     <td style={{ minWidth: 240 }}>
                       {roleSet.has("admin") ? (
                         <Mapping label={t("Admin")}>
-                          <Text>{t("Full access — every section. No depot / C&F / area needed.")}</Text>
+                          <Text>{t("Full access — every section. No stockist / C&F / area needed.")}</Text>
                         </Mapping>
                       ) : (
                       <>
                       {roleSet.has("field") && (
                         <>
-                          <Mapping label={t("Depot (Field ISR)")}>
-                            <DepotSelect userId={u.id} value={u.depotId} groups={depotGroups} />
-                            {u.depotId && depotAreas.length > 0 && (
+                          <Mapping label={t("Stockist (Field ISR)")}>
+                            <DepotSelect userId={u.id} value={u.stockistId} groups={depotGroups} />
+                            {u.stockistId && depotAreas.length > 0 && (
                               <div className="mt-1.5 flex flex-wrap gap-1.5">
                                 {depotAreas.map((a) => (
                                   <AreaCheckbox key={a.id} userId={u.id} areaId={a.id} name={a.name} checked={userAreaSet.get(u.id)?.has(a.id) ?? false} />
@@ -428,7 +429,7 @@ export default async function AdminUsersPage() {
                         </>
                       )}
                       {roleSet.has("supervisor") && (
-                        <Mapping label={t("Depots (Sales Officer)")}>
+                        <Mapping label={t("Stockists (Sales Officer)")}>
                           <SupervisorDepotPicker
                             userId={u.id}
                             groups={depotGroups}
@@ -436,9 +437,9 @@ export default async function AdminUsersPage() {
                           />
                         </Mapping>
                       )}
-                      {roleSet.has("dealer") && !roleSet.has("field") && (
-                        <Mapping label={t("Depot (Dealer)")}>
-                          <DepotSelect userId={u.id} value={u.depotId} groups={depotGroups} />
+                      {(roleSet.has("depot") || roleSet.has("dealer")) && !roleSet.has("field") && (
+                        <Mapping label={t("Stockist (Depot / Dealer)")}>
+                          <DepotSelect userId={u.id} value={u.stockistId} groups={depotGroups} />
                         </Mapping>
                       )}
                       {roleSet.has("hq") && (

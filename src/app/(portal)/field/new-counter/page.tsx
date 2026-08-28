@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, cnfs, depots } from "@/db/schema";
+import { areas, cnfs, stockists } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { hasStartedToday } from "@/lib/field/day-log";
@@ -28,9 +28,9 @@ export default async function NewCounterPage() {
 
   // Admin sees the whole hierarchy and can pick any C&F → depot → area.
   if (isAdmin) {
-    const [allCnfs, allDepots, allAreas] = await Promise.all([
+    const [allCnfs, allStockists, allAreas] = await Promise.all([
       db.select().from(cnfs).orderBy(asc(cnfs.name)),
-      db.select().from(depots).orderBy(asc(depots.name)),
+      db.select().from(stockists).orderBy(asc(stockists.name)),
       db.select().from(areas).orderBy(asc(areas.name)),
     ]);
 
@@ -38,11 +38,11 @@ export default async function NewCounterPage() {
       <NewCounterWizard
         mode="open"
         cnfs={allCnfs.map((c) => ({ id: c.id, name: c.name }))}
-        depots={allDepots.map((d) => ({
+        stockists={allStockists.map((d) => ({
           id: d.id,
           name: d.name,
           cnfId: d.cnfId,
-          areas: allAreas.filter((a) => a.depotId === d.id).map((a) => ({ id: a.id, name: a.name })),
+          areas: allAreas.filter((a) => a.stockistId === d.id).map((a) => ({ id: a.id, name: a.name })),
         }))}
       />
     );
@@ -53,14 +53,14 @@ export default async function NewCounterPage() {
     const t = await getT();
     return (
       <Notice title={t("New Counter")}>
-        {t("You aren't assigned to a depot yet — ask your Sales Officer to map you to one.")}
+        {t("You aren't assigned to a stockist yet — ask your Sales Officer to map you to one.")}
       </Notice>
     );
   }
 
   const [[depotRow], depotAreas] = await Promise.all([
-    db.select().from(depots).where(eq(depots.id, user.depot.id)).limit(1),
-    db.select().from(areas).where(eq(areas.depotId, user.depot.id)).orderBy(asc(areas.name)),
+    db.select().from(stockists).where(eq(stockists.id, user.depot.id)).limit(1),
+    db.select().from(areas).where(eq(areas.stockistId, user.depot.id)).orderBy(asc(areas.name)),
   ]);
   const [cnfRow] = depotRow ? await db.select().from(cnfs).where(eq(cnfs.id, depotRow.cnfId)).limit(1) : [];
 

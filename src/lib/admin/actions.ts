@@ -10,13 +10,14 @@ import {
   passwordResetRequests,
   cnfs,
   counters,
-  depots,
+  stockists,
   states,
   userAreas,
-  userDepots,
+  userStockists,
   users,
   visits,
   type AccessRole,
+  type StockistKind,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { hashPassword } from "@/lib/auth/password";
@@ -41,7 +42,7 @@ async function countWhere(table: PgTable, where: SQL): Promise<number> {
 // ── Cascade deletes ─────────────────────────────────────────────────────
 //
 // Deleting a node removes everything beneath it. Only the RESTRICT edges have
-// to be walked by hand (states←cnfs←depots←{areas,counters}, areas←counters);
+// to be walked by hand (states←cnfs←stockists←{areas,counters}, areas←counters);
 // everything under a counter — visits, beat assignments, scheme claims — is
 // already ON DELETE CASCADE in the schema and goes automatically.
 //
@@ -51,7 +52,7 @@ async function countWhere(table: PgTable, where: SQL): Promise<number> {
 /** What a cascade delete would destroy — shown in the dialog before confirming. */
 export type DeleteImpact = {
   cnfs: number;
-  depots: number;
+  stockists: number;
   areas: number;
   counters: number;
   /** Visit history attached to those counters — the part that can't be re-created. */
@@ -64,16 +65,16 @@ export type HierarchyKind = "state" | "cnf" | "depot" | "area";
 async function depotIdsFor(kind: HierarchyKind, id: string): Promise<string[]> {
   if (kind === "depot") return [id];
   if (kind === "cnf") {
-    const rows = await db.select({ id: depots.id }).from(depots).where(eq(depots.cnfId, id));
+    const rows = await db.select({ id: stockists.id }).from(stockists).where(eq(stockists.cnfId, id));
     return rows.map((r) => r.id);
   }
   if (kind === "state") {
     const cnfRows = await db.select({ id: cnfs.id }).from(cnfs).where(eq(cnfs.stateId, id));
     if (cnfRows.length === 0) return [];
     const rows = await db
-      .select({ id: depots.id })
-      .from(depots)
-      .where(inArray(depots.cnfId, cnfRows.map((r) => r.id)));
+      .select({ id: stockists.id })
+      .from(stockists)
+      .where(inArray(stockists.cnfId, cnfRows.map((r) => r.id)));
     return rows.map((r) => r.id);
   }
   return [];
@@ -81,14 +82,14 @@ async function depotIdsFor(kind: HierarchyKind, id: string): Promise<string[]> {
 
 /**
  * Counts everything a delete would remove, so the confirmation can be specific
- * ("3 depots, 12 areas, 47 counters and 210 visits") instead of a vague warning.
+ * ("3 stockists, 12 areas, 47 counters and 210 visits") instead of a vague warning.
  */
 export async function getDeleteImpact(kind: HierarchyKind, id: string): Promise<DeleteImpact> {
   // Not requireAdmin(): the C&F "Depots & Areas" screen shows this preview too,
   // and that page serves non-admin HQ users. They're scoped to their own C&F —
   // anything else reports zeros rather than leaking another C&F's structure.
   const user = await getCurrentUser();
-  const empty: DeleteImpact = { cnfs: 0, depots: 0, areas: 0, counters: 0, visits: 0 };
+  const empty: DeleteImpact = { cnfs: 0, stockists: 0, areas: 0, counters: 0, visits: 0 };
   if (!user) return empty;
 
   if (!user.accessRoles.includes("admin")) {
@@ -101,26 +102,26 @@ export async function getDeleteImpact(kind: HierarchyKind, id: string): Promise<
       countWhere(counters, eq(counters.areaId, id)),
       countVisitsWhere(eq(counters.areaId, id)),
     ]);
-    return { cnfs: 0, depots: 0, areas: 0, counters: counterCount, visits: visitCount };
+    return { cnfs: 0, stockists: 0, areas: 0, counters: counterCount, visits: visitCount };
   }
 
-  const depotIds = await depotIdsFor(kind, id);
+  const stockistIds = await depotIdsFor(kind, id);
   const cnfCount =
     kind === "state" ? await countWhere(cnfs, eq(cnfs.stateId, id)) : kind === "cnf" ? 1 : 0;
 
-  if (depotIds.length === 0) {
-    return { cnfs: cnfCount, depots: 0, areas: 0, counters: 0, visits: 0 };
+  if (stockistIds.length === 0) {
+    return { cnfs: cnfCount, stockists: 0, areas: 0, counters: 0, visits: 0 };
   }
 
   const [areaCount, counterCount, visitCount] = await Promise.all([
-    countWhere(areas, inArray(areas.depotId, depotIds)),
-    countWhere(counters, inArray(counters.depotId, depotIds)),
-    countVisitsWhere(inArray(counters.depotId, depotIds)),
+    countWhere(areas, inArray(areas.stockistId, stockistIds)),
+    countWhere(counters, inArray(counters.stockistId, stockistIds)),
+    countVisitsWhere(inArray(counters.stockistId, stockistIds)),
   ]);
 
   return {
     cnfs: cnfCount,
-    depots: kind === "depot" ? 1 : depotIds.length,
+    stockists: kind === "depot" ? 1 : stockistIds.length,
     areas: areaCount,
     counters: counterCount,
     visits: visitCount,
@@ -132,14 +133,14 @@ export async function getDeleteImpact(kind: HierarchyKind, id: string): Promise<
 async function isUnderCnf(kind: HierarchyKind, id: string, cnfId: string): Promise<boolean> {
   if (kind === "cnf") return id === cnfId;
   if (kind === "depot") {
-    const [d] = await db.select({ cnfId: depots.cnfId }).from(depots).where(eq(depots.id, id)).limit(1);
+    const [d] = await db.select({ cnfId: stockists.cnfId }).from(stockists).where(eq(stockists.id, id)).limit(1);
     return d?.cnfId === cnfId;
   }
   if (kind === "area") {
     const [row] = await db
-      .select({ cnfId: depots.cnfId })
+      .select({ cnfId: stockists.cnfId })
       .from(areas)
-      .innerJoin(depots, eq(depots.id, areas.depotId))
+      .innerJoin(stockists, eq(stockists.id, areas.stockistId))
       .where(eq(areas.id, id))
       .limit(1);
     return row?.cnfId === cnfId;
@@ -158,16 +159,33 @@ async function countVisitsWhere(where: SQL): Promise<number> {
   return row?.n ?? 0;
 }
 
-/** Removes every counter + area under the given depots, in FK-safe order. */
+/** Removes every counter + area under the given stockists, in FK-safe order. */
 async function purgeDepots(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  depotIds: string[],
+  stockistIds: string[],
 ) {
-  if (depotIds.length === 0) return;
-  // Counters first (areas RESTRICT on them), then areas, then the depots.
-  await tx.delete(counters).where(inArray(counters.depotId, depotIds));
-  await tx.delete(areas).where(inArray(areas.depotId, depotIds));
-  await tx.delete(depots).where(inArray(depots.id, depotIds));
+  if (stockistIds.length === 0) return;
+  // A dealer's sub-dealers go with it: parent_id RESTRICTs, so they would block
+  // the delete, and a sub-dealer with no parent is not a thing this model
+  // allows anyway.
+  const children = await tx
+    .select({ id: stockists.id })
+    .from(stockists)
+    .where(inArray(stockists.parentId, stockistIds));
+  const all = [...new Set([...stockistIds, ...children.map((c) => c.id)])];
+
+  // Counters first (areas RESTRICT on them), then areas.
+  await tx.delete(counters).where(inArray(counters.stockistId, all));
+  await tx.delete(areas).where(inArray(areas.stockistId, all));
+
+  // Sub-dealers must go in their OWN statement, before their parents. A single
+  // DELETE covering both can remove the dealer first — row order inside a
+  // statement is not defined — and `parent_id` RESTRICTs, so that fails.
+  const childIds = children.map((c) => c.id);
+  if (childIds.length > 0) {
+    await tx.delete(stockists).where(inArray(stockists.id, childIds));
+  }
+  await tx.delete(stockists).where(inArray(stockists.id, stockistIds));
 }
 
 export async function addState(formData: FormData): Promise<HierarchyResult> {
@@ -211,27 +229,75 @@ export async function addCnf(stateId: string, formData: FormData): Promise<Hiera
   return { ok: true };
 }
 
-export async function addDepot(cnfId: string, formData: FormData): Promise<HierarchyResult> {
+const STOCKIST_KINDS: StockistKind[] = ["depot", "dealer", "sub_dealer"];
+
+const KIND_NOUN: Record<StockistKind, string> = {
+  depot: "depot",
+  dealer: "dealer",
+  sub_dealer: "sub-dealer",
+};
+
+/**
+ * Add a depot, a dealer, or a sub-dealer under a C&F.
+ *
+ * One action for all three because they are one table — the differences are
+ * the `kind` label and, for a sub-dealer, the parent it must sit under. The
+ * parent is re-checked here rather than trusted from the form: it has to be a
+ * dealer (never a depot, never another sub-dealer — that is what keeps the
+ * tier exactly one level deep) and it has to belong to the same C&F.
+ */
+export async function addStockist(cnfId: string, formData: FormData): Promise<HierarchyResult> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) return { ok: false, error: "Enter a depot name." };
+  const kindRaw = String(formData.get("kind") ?? "depot");
+  const parentId = String(formData.get("parentId") ?? "").trim() || null;
+
+  if (!STOCKIST_KINDS.includes(kindRaw as StockistKind)) {
+    return { ok: false, error: "Unknown stockist type." };
+  }
+  const kind = kindRaw as StockistKind;
+  if (!name) return { ok: false, error: `Enter a ${KIND_NOUN[kind]} name.` };
   if (!cnfId) return { ok: false, error: "Missing C&F HQ." };
+
+  if (kind === "sub_dealer") {
+    if (!parentId) return { ok: false, error: "Pick the dealer this sub-dealer sits under." };
+    const [parent] = await db
+      .select({ id: stockists.id, kind: stockists.kind, cnfId: stockists.cnfId })
+      .from(stockists)
+      .where(eq(stockists.id, parentId))
+      .limit(1);
+    if (!parent) return { ok: false, error: "That dealer no longer exists." };
+    if (parent.kind !== "dealer") {
+      return { ok: false, error: "A sub-dealer can only sit under a dealer." };
+    }
+    if (parent.cnfId !== cnfId) {
+      return { ok: false, error: "That dealer belongs to a different C&F." };
+    }
+  } else if (parentId) {
+    return { ok: false, error: `A ${KIND_NOUN[kind]} has no parent.` };
+  }
+
   try {
-    await db.insert(depots).values({ name, cnfId });
+    await db.insert(stockists).values({
+      name,
+      cnfId,
+      kind,
+      parentId: kind === "sub_dealer" ? parentId : null,
+    });
   } catch (e) {
-    return insertFailure(e, "depot");
+    return insertFailure(e, KIND_NOUN[kind]);
   }
   revalidatePath("/admin/hierarchy");
   return { ok: true };
 }
 
-export async function addArea(depotId: string, formData: FormData): Promise<HierarchyResult> {
+export async function addArea(stockistId: string, formData: FormData): Promise<HierarchyResult> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Enter an area name." };
-  if (!depotId) return { ok: false, error: "Missing depot." };
+  if (!stockistId) return { ok: false, error: "Missing depot." };
   try {
-    await db.insert(areas).values({ name, depotId });
+    await db.insert(areas).values({ name, stockistId });
   } catch (e) {
     return insertFailure(e, "area");
   }
@@ -246,11 +312,11 @@ export async function deleteState(id: string): Promise<HierarchyResult> {
       const cnfRows = await tx.select({ id: cnfs.id }).from(cnfs).where(eq(cnfs.stateId, id));
       const cnfIds = cnfRows.map((r) => r.id);
       if (cnfIds.length > 0) {
-        const depotRows = await tx
-          .select({ id: depots.id })
-          .from(depots)
-          .where(inArray(depots.cnfId, cnfIds));
-        await purgeDepots(tx, depotRows.map((r) => r.id));
+        const stockistRows = await tx
+          .select({ id: stockists.id })
+          .from(stockists)
+          .where(inArray(stockists.cnfId, cnfIds));
+        await purgeDepots(tx, stockistRows.map((r) => r.id));
         await tx.delete(cnfs).where(inArray(cnfs.id, cnfIds));
       }
       await tx.delete(states).where(eq(states.id, id));
@@ -266,8 +332,8 @@ export async function deleteCnf(id: string): Promise<HierarchyResult> {
   await requireAdmin();
   try {
     await db.transaction(async (tx) => {
-      const depotRows = await tx.select({ id: depots.id }).from(depots).where(eq(depots.cnfId, id));
-      await purgeDepots(tx, depotRows.map((r) => r.id));
+      const stockistRows = await tx.select({ id: stockists.id }).from(stockists).where(eq(stockists.cnfId, id));
+      await purgeDepots(tx, stockistRows.map((r) => r.id));
       await tx.delete(cnfs).where(eq(cnfs.id, id));
     });
   } catch (e) {
@@ -277,14 +343,16 @@ export async function deleteCnf(id: string): Promise<HierarchyResult> {
   return { ok: true };
 }
 
-export async function deleteDepot(id: string): Promise<HierarchyResult> {
+/** Delete a depot, dealer or sub-dealer — and, for a dealer, its sub-dealers
+ * along with everything beneath them. */
+export async function deleteStockist(id: string): Promise<HierarchyResult> {
   await requireAdmin();
   try {
     await db.transaction(async (tx) => {
       await purgeDepots(tx, [id]);
     });
   } catch (e) {
-    return deleteFailure(e, "depot");
+    return deleteFailure(e, "stockist");
   }
   revalidatePath("/admin/hierarchy");
   return { ok: true };
@@ -459,29 +527,29 @@ export async function toggleAccessRole(userId: string, role: AccessRole) {
     if (role === "hq") {
       await db.update(users).set({ cnfId: null }).where(eq(users.id, userId));
     }
+    // field, depot and dealer all scope to the same single stockist, so the
+    // link is only cleared once NONE of them is left.
+    const stockistRoles: AccessRole[] = ["field", "depot", "dealer"];
     if (role === "field") {
       await db.delete(userAreas).where(eq(userAreas.userId, userId));
-      if (!nextRoles.includes("dealer")) {
-        await db.update(users).set({ depotId: null }).where(eq(users.id, userId));
-      }
     }
-    if (role === "dealer" && !nextRoles.includes("field")) {
-      await db.update(users).set({ depotId: null }).where(eq(users.id, userId));
+    if (stockistRoles.includes(role) && !stockistRoles.some((r) => nextRoles.includes(r))) {
+      await db.update(users).set({ stockistId: null }).where(eq(users.id, userId));
     }
     if (role === "supervisor") {
-      await db.delete(userDepots).where(eq(userDepots.userId, userId));
+      await db.delete(userStockists).where(eq(userStockists.userId, userId));
     }
   }
 
   revalidatePath("/admin/users");
 }
 
-/** Single-scope: dealer/field share one depot per user. */
+/** Single-scope: field, depot and dealer share one stockist per user. */
 export async function setUserDepot(userId: string, formData: FormData) {
   await requireAdmin();
-  const depotId = String(formData.get("depotId") ?? "");
-  if (!depotId) return;
-  await db.update(users).set({ depotId, updatedAt: new Date() }).where(eq(users.id, userId));
+  const stockistId = String(formData.get("depotId") ?? "");
+  if (!stockistId) return;
+  await db.update(users).set({ stockistId, updatedAt: new Date() }).where(eq(users.id, userId));
   // Depot changed — previously-picked areas belonged to the old depot.
   await db.delete(userAreas).where(eq(userAreas.userId, userId));
   revalidatePath("/admin/users");
@@ -571,20 +639,20 @@ export async function rejectAccessRequest(requestId: string) {
   revalidatePath("/admin/users");
 }
 
-/** Multi-scope: supervisor → which depots they oversee. */
-export async function toggleUserDepot(userId: string, depotId: string) {
+/** Multi-scope: supervisor → which stockists they oversee. */
+export async function toggleUserDepot(userId: string, stockistId: string) {
   await requireAdmin();
   const existing = await db
     .select()
-    .from(userDepots)
-    .where(and(eq(userDepots.userId, userId), eq(userDepots.depotId, depotId)))
+    .from(userStockists)
+    .where(and(eq(userStockists.userId, userId), eq(userStockists.stockistId, stockistId)))
     .limit(1);
   if (existing.length > 0) {
     await db
-      .delete(userDepots)
-      .where(and(eq(userDepots.userId, userId), eq(userDepots.depotId, depotId)));
+      .delete(userStockists)
+      .where(and(eq(userStockists.userId, userId), eq(userStockists.stockistId, stockistId)));
   } else {
-    await db.insert(userDepots).values({ userId, depotId });
+    await db.insert(userStockists).values({ userId, stockistId });
   }
   revalidatePath("/admin/users");
 }

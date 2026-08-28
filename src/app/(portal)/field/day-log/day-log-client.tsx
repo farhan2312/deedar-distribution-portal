@@ -151,7 +151,7 @@ export function DayLogClient({
           />
           {openPanel === "pickup" && !started && (
             <StockPanel
-              title={t("Stock picked up from depot")}
+              title={t("Stock picked up from your stockist")}
               hint={t("Packets you are carrying out today. Enter 0 for anything you did not take.")}
               qty={pickupDraft}
               onChange={setPickupDraft}

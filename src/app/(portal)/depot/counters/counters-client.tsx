@@ -1,6 +1,6 @@
 "use client";
 
-import type { DepotCountersData, DepotCounterRow, DepotOption } from "@/lib/depot/data";
+import type { DepotCountersData, DepotCounterRow, StockistOption } from "@/lib/depot/data";
 import { useT } from "@/lib/i18n/provider";
 import { DepotSelect } from "../_components/depot-select";
 
@@ -17,13 +17,13 @@ const STATUS_STYLE: Record<DepotCounterRow["status"], { label: string; bg: strin
  * whatever it's handed.
  */
 export function DepotCountersClient({
-  depotName,
+  stockistName,
   scope,
   selectedId,
   data,
 }: {
-  depotName: string;
-  scope: DepotOption[];
+  stockistName: string;
+  scope: StockistOption[];
   selectedId: string;
   data: DepotCountersData;
 }) {
@@ -35,10 +35,10 @@ export function DepotCountersClient({
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            {t("Wholesale counters")} — {depotName}
+            {t("Wholesale counters")} — {stockistName}
           </h4>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            {t("Wholesale outlets served by this depot.")}
+            {t("Wholesale outlets served by this stockist.")}
           </p>
         </div>
         {scope.length > 1 && <DepotSelect options={scope} value={selectedId} />}
@@ -46,7 +46,7 @@ export function DepotCountersClient({
 
       <div className="mb-6 max-w-sm">
         <StatCard
-          label={t("Depot counter / bulk sales (today)")}
+          label={t("Stockist counter / bulk sales (today)")}
           value={`${data.bulkSales} ${t("packets")}`}
           hint={t("Bora lifting by wholesale counters")}
         />

@@ -52,7 +52,7 @@ export async function TeamMapView({
   controls,
   emptyMessage,
 }: {
-  /** Human label for the current scope, e.g. "all depots" or a depot name. */
+  /** Human label for the current scope, e.g. "all stockists" or a depot name. */
   scopeLabel: string;
   repRows: TeamRepRow[];
   mapCounters: CounterPin[];

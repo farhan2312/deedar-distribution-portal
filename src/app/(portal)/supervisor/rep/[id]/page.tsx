@@ -212,7 +212,7 @@ export default async function SupervisorRepPage({
           </Link>
           <h1 className="page-title mt-1">{rep.name}</h1>
           <p className="page-subtitle">
-            {rep.depotName ?? t("No depot")}
+            {rep.stockistName ?? t("No stockist")}
             {rep.phone ? ` · ${rep.phone}` : ""}
           </p>
         </div>

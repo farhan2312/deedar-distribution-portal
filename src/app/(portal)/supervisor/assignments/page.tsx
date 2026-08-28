@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, beatAssignments, counters, depots, users } from "@/db/schema";
+import { areas, beatAssignments, counters, stockists, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
-import { getScopeDepots } from "@/lib/supervisor/team";
+import { getScopeStockists } from "@/lib/supervisor/team";
 import { formatISTDate, istDateRange, istDateString } from "@/lib/date";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
@@ -23,13 +23,13 @@ export default async function AssignmentSummaryPage() {
 
   // Same scope as Assign Beat — every rep this SO can schedule appears here,
   // including beats another SO or admin assigned to them.
-  const depotIds = (await getScopeDepots(user)).map((d) => d.id);
-  const repRows = depotIds.length
+  const stockistIds = (await getScopeStockists(user)).map((d) => d.id);
+  const repRows = stockistIds.length
     ? (
         await db
           .select({ id: users.id, accessRoles: users.accessRoles })
           .from(users)
-          .where(inArray(users.depotId, depotIds))
+          .where(inArray(users.stockistId, stockistIds))
       ).filter((u) => u.accessRoles.includes("field"))
     : [];
   const repIds = repRows.map((r) => r.id);
@@ -43,13 +43,13 @@ export default async function AssignmentSummaryPage() {
           repName: users.name,
           counterName: counters.name,
           areaName: areas.name,
-          depotName: depots.name,
+          stockistName: stockists.name,
         })
         .from(beatAssignments)
         .innerJoin(users, eq(users.id, beatAssignments.repUserId))
         .innerJoin(counters, eq(counters.id, beatAssignments.counterId))
         .innerJoin(areas, eq(areas.id, counters.areaId))
-        .innerJoin(depots, eq(depots.id, counters.depotId))
+        .innerJoin(stockists, eq(stockists.id, counters.stockistId))
         .where(and(inArray(beatAssignments.repUserId, repIds), gte(beatAssignments.beatDate, today)))
         .orderBy(asc(beatAssignments.beatDate), asc(users.name), asc(counters.name))
     : [];
@@ -59,7 +59,7 @@ export default async function AssignmentSummaryPage() {
     key: string;
     beatDate: string;
     repName: string;
-    depotName: string;
+    stockistName: string;
     areas: Set<string>;
     counterNames: string[];
   };
@@ -72,7 +72,7 @@ export default async function AssignmentSummaryPage() {
         key,
         beatDate: r.beatDate,
         repName: r.repName,
-        depotName: r.depotName,
+        stockistName: r.stockistName,
         areas: new Set(),
         counterNames: [],
       };
@@ -116,7 +116,7 @@ export default async function AssignmentSummaryPage() {
                 // area means the beat was scoped to that area.
                 const areaList = [...g.areas].sort((a, b) => a.localeCompare(b));
                 const scope =
-                  areaList.length === 1 ? `${t("Area:")} ${areaList[0]}` : `${t("Depot:")} ${g.depotName}`;
+                  areaList.length === 1 ? `${t("Area:")} ${areaList[0]}` : `${t("Stockist:")} ${g.stockistName}`;
                 return (
                   <tr key={g.key}>
                     <td className="whitespace-nowrap font-semibold">{formatISTDate(g.beatDate)}</td>

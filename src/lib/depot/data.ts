@@ -6,9 +6,9 @@ import type { AccessRole, ProductSegment, StockMovementType } from "@/db/schema"
 import {
   areas,
   counters,
-  depots,
-  depotStock,
-  depotStockDays,
+  stockists,
+  stockistStock,
+  stockistStockDays,
   schemeClaims,
   stockMovements,
   users,
@@ -22,20 +22,20 @@ export type ScopeUser = {
   depot: { id: string; name: string } | null;
 };
 
-export type DepotOption = { id: string; name: string };
+export type StockistOption = { id: string; name: string };
 
 /** Depots in scope for the Depot portal: a dealer sees their one depot; admin
  * sees every depot. */
-export async function depotScope(user: ScopeUser): Promise<DepotOption[]> {
+export async function stockistScope(user: ScopeUser): Promise<StockistOption[]> {
   if (user.accessRoles.includes("admin")) {
-    return db.select({ id: depots.id, name: depots.name }).from(depots).orderBy(asc(depots.name));
+    return db.select({ id: stockists.id, name: stockists.name }).from(stockists).orderBy(asc(stockists.name));
   }
   return user.depot ? [{ id: user.depot.id, name: user.depot.name }] : [];
 }
 
 /** Resolve the depot being viewed from ?depot= against the in-scope list;
  * falls back to the first in-scope depot. */
-export function pickDepot(scope: DepotOption[], requested: string | undefined): DepotOption | null {
+export function pickStockist(scope: StockistOption[], requested: string | undefined): StockistOption | null {
   if (requested) {
     const match = scope.find((d) => d.id === requested);
     if (match) return match;
@@ -63,7 +63,7 @@ export type DepotCountersData = {
   counters: DepotCounterRow[];
 };
 
-export async function getDepotCountersData(depotId: string): Promise<DepotCountersData> {
+export async function getDepotCountersData(stockistId: string): Promise<DepotCountersData> {
   const bounds = istDayBounds();
   const [counterRows, visitRows, outwardToday] = await Promise.all([
     // Scoped to Wholesale at the SQL layer so retail rows never even leave
@@ -80,7 +80,7 @@ export async function getDepotCountersData(depotId: string): Promise<DepotCounte
       })
       .from(counters)
       .innerJoin(areas, eq(areas.id, counters.areaId))
-      .where(and(eq(counters.depotId, depotId), eq(counters.type, "Wholesale")))
+      .where(and(eq(counters.stockistId, stockistId), eq(counters.type, "Wholesale")))
       .orderBy(asc(counters.name)),
     // Only used to hydrate the per-counter "last observed stock" on the
     // wholesale rows — scoped to wholesale counters so we don't pull retail
@@ -89,7 +89,7 @@ export async function getDepotCountersData(depotId: string): Promise<DepotCounte
       .select({ counterId: visits.counterId, stock: visits.stock })
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
-      .where(and(eq(counters.depotId, depotId), eq(counters.type, "Wholesale")))
+      .where(and(eq(counters.stockistId, stockistId), eq(counters.type, "Wholesale")))
       .orderBy(desc(visits.visitedAt)),
     // "Bulk sales" = bora lifting by wholesale counters. This is what the
     // depot actually cares about — retail sales are the reps' number, not
@@ -99,7 +99,7 @@ export async function getDepotCountersData(depotId: string): Promise<DepotCounte
       .from(stockMovements)
       .where(
         and(
-          eq(stockMovements.depotId, depotId),
+          eq(stockMovements.stockistId, stockistId),
           eq(stockMovements.type, "outward_wholesale"),
           gte(stockMovements.createdAt, bounds.start),
           lt(stockMovements.createdAt, bounds.end),
@@ -141,7 +141,7 @@ export type SchemeClaimRow = {
 
 export type DepotSchemesData = { payoutToday: number; claims: SchemeClaimRow[] };
 
-export async function getDepotSchemesData(depotId: string): Promise<DepotSchemesData> {
+export async function getDepotSchemesData(stockistId: string): Promise<DepotSchemesData> {
   const bounds = istDayBounds();
   const rows = await db
     .select({
@@ -154,7 +154,7 @@ export async function getDepotSchemesData(depotId: string): Promise<DepotSchemes
     })
     .from(schemeClaims)
     .innerJoin(counters, eq(counters.id, schemeClaims.counterId))
-    .where(eq(schemeClaims.depotId, depotId))
+    .where(eq(schemeClaims.stockistId, stockistId))
     .orderBy(desc(schemeClaims.createdAt));
 
   const payoutToday = rows
@@ -229,13 +229,13 @@ export type DepotStockData = {
   wholesaleCounters: { id: string; name: string }[];
 };
 
-export async function getDepotStockData(depotId: string): Promise<DepotStockData> {
+export async function getDepotStockData(stockistId: string): Promise<DepotStockData> {
   const today = istDateString();
   const rep = alias(users, "movement_rep");
   const closer = alias(users, "day_closer");
 
   const [stockRows, movementRows, dayRows, repRows, wholesaleRows] = await Promise.all([
-    db.select().from(depotStock).where(eq(depotStock.depotId, depotId)),
+    db.select().from(stockistStock).where(eq(stockistStock.stockistId, stockistId)),
     // Whole log, newest first — the page shows today plus recent history.
     db
       .select({
@@ -253,34 +253,34 @@ export async function getDepotStockData(depotId: string): Promise<DepotStockData
       .leftJoin(users, eq(users.id, stockMovements.createdByUserId))
       .leftJoin(rep, eq(rep.id, stockMovements.repUserId))
       .leftJoin(counters, eq(counters.id, stockMovements.wholesaleCounterId))
-      .where(eq(stockMovements.depotId, depotId))
+      .where(eq(stockMovements.stockistId, stockistId))
       .orderBy(desc(stockMovements.createdAt))
       .limit(25),
     db
       .select({
-        stockDate: depotStockDays.stockDate,
-        closing: depotStockDays.closing,
-        total: depotStockDays.total,
-        closed: depotStockDays.closed,
-        closedAt: depotStockDays.closedAt,
+        stockDate: stockistStockDays.stockDate,
+        closing: stockistStockDays.closing,
+        total: stockistStockDays.total,
+        closed: stockistStockDays.closed,
+        closedAt: stockistStockDays.closedAt,
         closedBy: closer.name,
       })
-      .from(depotStockDays)
-      .leftJoin(closer, eq(closer.id, depotStockDays.closedByUserId))
-      .where(eq(depotStockDays.depotId, depotId))
-      .orderBy(desc(depotStockDays.stockDate))
+      .from(stockistStockDays)
+      .leftJoin(closer, eq(closer.id, stockistStockDays.closedByUserId))
+      .where(eq(stockistStockDays.stockistId, stockistId))
+      .orderBy(desc(stockistStockDays.stockDate))
       .limit(14),
     db
       .select({ id: users.id, name: users.name })
       .from(users)
       .where(
-        and(eq(users.depotId, depotId), sql`'field' = ANY(${users.accessRoles}::text[])`),
+        and(eq(users.stockistId, stockistId), sql`'field' = ANY(${users.accessRoles}::text[])`),
       )
       .orderBy(asc(users.name)),
     db
       .select({ id: counters.id, name: counters.name })
       .from(counters)
-      .where(and(eq(counters.depotId, depotId), eq(counters.type, "Wholesale")))
+      .where(and(eq(counters.stockistId, stockistId), eq(counters.type, "Wholesale")))
       .orderBy(asc(counters.name)),
   ]);
 

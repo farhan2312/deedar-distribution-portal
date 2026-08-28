@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, counters, depots, users } from "@/db/schema";
+import { areas, counters, stockists, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { resolveMapScope } from "@/lib/portal/map-scope";
@@ -41,19 +41,19 @@ export default async function HqLiveMapPage({
       <Notice title={t("Live map")}>{t("You aren't mapped to a C&F yet — ask Central Admin.")}</Notice>
     );
   }
-  const depotIds = scope.depotIds;
+  const stockistIds = scope.stockistIds;
 
   // HQ sees every field rep in scope — not a reports-to team like an SO. A
   // null scope is admin-wide, so the depot filter drops away entirely.
   const isFieldRep = sql`'field' = ANY(${users.accessRoles}::text[])`;
   const repRowsRaw =
-    depotIds && depotIds.length === 0
+    stockistIds && stockistIds.length === 0
       ? []
       : await db
-          .select({ id: users.id, name: users.name, depotName: depots.name })
+          .select({ id: users.id, name: users.name, stockistName: stockists.name })
           .from(users)
-          .innerJoin(depots, eq(depots.id, users.depotId))
-          .where(depotIds ? and(inArray(users.depotId, depotIds), isFieldRep) : isFieldRep)
+          .innerJoin(stockists, eq(stockists.id, users.stockistId))
+          .where(stockistIds ? and(inArray(users.stockistId, stockistIds), isFieldRep) : isFieldRep)
           .orderBy(asc(users.name));
   const repIds = repRowsRaw.map((r) => r.id);
 
@@ -109,7 +109,7 @@ export default async function HqLiveMapPage({
       id: r.id,
       name: r.name,
       status: repStatus(log?.startAt ?? null, log?.endAt ?? null, (v?.count ?? 0) > 0),
-      area: last?.area ?? r.depotName ?? "—",
+      area: last?.area ?? r.stockistName ?? "—",
       visits: v?.count ?? 0,
       counters: v?.counters ?? 0,
       lastLabel: last ? `${last.counterName} · ${formatISTTime(last.visitedAt)}` : "—",

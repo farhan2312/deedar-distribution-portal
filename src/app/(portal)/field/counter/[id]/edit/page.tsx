@@ -29,7 +29,7 @@ export default async function EditCounterPage({
       type: counters.type,
       typeOther: counters.typeOther,
       areaId: counters.areaId,
-      depotId: counters.depotId,
+      stockistId: counters.stockistId,
       lat: counters.lat,
       lng: counters.lng,
     })
@@ -39,12 +39,12 @@ export default async function EditCounterPage({
   if (!counter) notFound();
 
   const isAdmin = user.accessRoles.includes("admin");
-  const canEdit = isAdmin || counter.depotId === user.depot?.id;
+  const canEdit = isAdmin || counter.stockistId === user.depot?.id;
   if (!canEdit) {
     const t = await getT();
     return (
       <Notice title={t("Edit counter")}>
-        {t("This counter isn't in your depot, so you can't edit it.")}
+        {t("This counter isn't at your stockist, so you can't edit it.")}
       </Notice>
     );
   }
@@ -52,7 +52,7 @@ export default async function EditCounterPage({
   const depotAreas = await db
     .select({ id: areas.id, name: areas.name })
     .from(areas)
-    .where(eq(areas.depotId, counter.depotId))
+    .where(eq(areas.stockistId, counter.stockistId))
     .orderBy(asc(areas.name));
 
   return (

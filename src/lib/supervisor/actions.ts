@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, beatAssignments, counters, dayLogs, depots, users } from "@/db/schema";
+import { areas, beatAssignments, counters, dayLogs, stockists, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import type { DuplicateMatch } from "@/lib/field/actions";
 import { counterTypeLabel } from "@/lib/field/counter-types";
@@ -11,8 +11,8 @@ import { GPS_REQUIRED, parseCoords } from "@/lib/field/gps";
 
 type Result = { ok: true } | { ok: false; error: string };
 
-function supervisedDepotIds(user: { depot: { id: string } | null; supervisedDepots: { id: string }[] }) {
-  const ids = new Set(user.supervisedDepots.map((d) => d.id));
+function supervisedDepotIds(user: { depot: { id: string } | null; supervisedStockists: { id: string }[] }) {
+  const ids = new Set(user.supervisedStockists.map((d) => d.id));
   if (user.depot) ids.add(user.depot.id);
   return ids;
 }
@@ -38,11 +38,11 @@ export async function assignBeat(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(beatDate)) return { ok: false, error: "Invalid date." };
 
   const [rep] = await db
-    .select({ id: users.id, depotId: users.depotId, accessRoles: users.accessRoles })
+    .select({ id: users.id, stockistId: users.stockistId, accessRoles: users.accessRoles })
     .from(users)
     .where(eq(users.id, repUserId))
     .limit(1);
-  if (!rep?.depotId) return { ok: false, error: "Rep not found or has no depot." };
+  if (!rep?.stockistId) return { ok: false, error: "Rep not found or has no depot." };
   // A beat can only be handed to a field rep — never a depot manager/SO who
   // happens to share the depot.
   if (!rep.accessRoles.includes("field")) {
@@ -51,19 +51,19 @@ export async function assignBeat(
 
   if (!isAdmin) {
     const supervised = supervisedDepotIds(user);
-    if (!supervised.has(rep.depotId)) {
+    if (!supervised.has(rep.stockistId)) {
       return { ok: false, error: "You don't supervise this rep's depot." };
     }
   }
 
   const counterRows = await db
-    .select({ id: counters.id, depotId: counters.depotId })
+    .select({ id: counters.id, stockistId: counters.stockistId })
     .from(counters)
     .where(inArray(counters.id, counterIds));
   if (counterRows.length !== counterIds.length) {
     return { ok: false, error: "Some counters were not found." };
   }
-  if (counterRows.some((c) => c.depotId !== rep.depotId)) {
+  if (counterRows.some((c) => c.stockistId !== rep.stockistId)) {
     return { ok: false, error: "All counters must be in the rep's own depot." };
   }
 
@@ -139,7 +139,7 @@ export type SupervisorCounterInput = {
   name: string;
   phone: string;
   address: string;
-  depotId: string;
+  stockistId: string;
   areaId: string;
   type: "Kirana" | "Paan" | "Tea Stall" | "Wholesale" | "Vegetable Shop" | "Others";
   /** Free-text label, required when `type` is "Others". */
@@ -183,16 +183,16 @@ export async function createCounterBySupervisor(input: SupervisorCounterInput): 
 
   if (!isAdmin) {
     const supervised = supervisedDepotIds(user);
-    if (!supervised.has(input.depotId)) {
+    if (!supervised.has(input.stockistId)) {
       return { ok: false, error: "You can only add counters in a depot you supervise." };
     }
   }
 
-  const [depot] = await db.select().from(depots).where(eq(depots.id, input.depotId)).limit(1);
+  const [depot] = await db.select().from(stockists).where(eq(stockists.id, input.stockistId)).limit(1);
   if (!depot) return { ok: false, error: "Unknown depot." };
 
   const [area] = await db.select().from(areas).where(eq(areas.id, input.areaId)).limit(1);
-  if (!area || area.depotId !== depot.id) {
+  if (!area || area.stockistId !== depot.id) {
     return { ok: false, error: "Area does not belong to the selected depot." };
   }
 
@@ -210,7 +210,7 @@ export async function createCounterBySupervisor(input: SupervisorCounterInput): 
     name: input.name.trim(),
     phone: input.phone,
     address: input.address.trim() || null,
-    depotId: depot.id,
+    stockistId: depot.id,
     areaId: area.id,
     type: input.type,
     typeOther: typeOther || null,

@@ -15,12 +15,12 @@ export type AssignCounter = {
    * "Others" and one was entered, else same as `type`). */
   typeLabel: string;
   area: string;
-  depotId: string;
+  stockistId: string;
   /** Total stock observed at this counter's most recent visit (0 if none). */
   stock: number;
   trend: "Increasing" | "Flat" | "Declining";
 };
-export type RepOption = { id: string; name: string; depotId: string | null };
+export type RepOption = { id: string; name: string; stockistId: string | null };
 export type AssignmentSummary = { repUserId: string; repName: string; beatDate: string; count: number };
 
 const TREND_STYLE: Record<AssignCounter["trend"], { bg: string; color: string }> = {
@@ -71,14 +71,14 @@ export function AssignBeat({
   const [error, setError] = useState<string | null>(null);
   const [pending, startAssign] = useTransition();
 
-  const repDepotId = reps.find((r) => r.id === repId)?.depotId ?? null;
+  const repDepotId = reps.find((r) => r.id === repId)?.stockistId ?? null;
 
   // Everything below is scoped to the selected rep's depot: a beat can only
   // contain counters from the rep's own depot (assignBeat enforces the same
   // rule server-side), so the Area list is derived from those counters rather
   // than spanning every supervised depot.
   const depotCounters = useMemo(
-    () => (repDepotId ? counters.filter((c) => c.depotId === repDepotId) : []),
+    () => (repDepotId ? counters.filter((c) => c.stockistId === repDepotId) : []),
     [counters, repDepotId],
   );
   const areaOptions = useMemo(
@@ -137,7 +137,7 @@ export function AssignBeat({
   if (reps.length === 0) {
     return (
       <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
-        {t("No field reps in your supervised depots yet.")}
+        {t("No field reps in your supervised stockists yet.")}
       </p>
     );
   }
@@ -184,7 +184,7 @@ export function AssignBeat({
             <div className="flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
               {(["depot", "area"] as const).map((s) => (
                 <button key={s} onClick={() => setScope(s)} className="seg" style={segStyle(scope === s)}>
-                  {s === "depot" ? t("Depot") : t("Area")}
+                  {s === "depot" ? t("Stockist") : t("Area")}
                 </button>
               ))}
             </div>

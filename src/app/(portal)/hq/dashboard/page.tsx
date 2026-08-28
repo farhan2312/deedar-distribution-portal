@@ -6,7 +6,7 @@ import {
   cnfs,
   counters,
   dayLogs,
-  depots,
+  stockists,
   schemeClaims,
   users,
   visits,
@@ -39,7 +39,7 @@ import { RefreshButton } from "../../supervisor/_components/refresh-button";
 import { VisitTrend, type TrendPoint } from "../../supervisor/_components/visit-trend";
 
 // ── Palettes ───────────────────────────────────────────────────────────────
-const DEPOT_COLORS = ["#7B2FA0", "#4C8C2B", "#B9812E", "#128A82", "#C7263B", "#2E5FA3"];
+const STOCKIST_COLORS = ["#7B2FA0", "#4C8C2B", "#B9812E", "#128A82", "#C7263B", "#2E5FA3"];
 
 /** Fixed per-SKU colours, shared with the KHQ + SO dashboards so a segment
  * reads as the same colour everywhere in the app. */
@@ -165,9 +165,9 @@ export default async function HqDashboardPage({
     return <Notice title={t("C&F HQ")}>{t("No C&F HQ set up yet.")}</Notice>;
   }
 
-  const cnfDepots = await db.select().from(depots).where(eq(depots.cnfId, selectedCnf.id));
-  const depotIds = cnfDepots.map((d) => d.id);
-  const hasDepots = depotIds.length > 0;
+  const cnfStockists = await db.select().from(stockists).where(eq(stockists.cnfId, selectedCnf.id));
+  const stockistIds = cnfStockists.map((d) => d.id);
+  const hasDepots = stockistIds.length > 0;
 
   const now = nowInstant();
   const today = istDateString(now);
@@ -177,7 +177,7 @@ export default async function HqDashboardPage({
   const trendStart = new Date(day.end.getTime() - TREND_DAYS * 24 * 60 * 60 * 1000);
 
   /** Scope predicate reused by every visit-based query below. */
-  const inScope = inArray(counters.depotId, depotIds);
+  const inScope = inArray(counters.stockistId, stockistIds);
 
   // Everything runs in parallel — a dashboard is exactly where sequential
   // awaits multiply the DB round-trip cost.
@@ -191,7 +191,7 @@ export default async function HqDashboardPage({
     schemeMtdRow,
     mtdItemsRows,
     trendRows,
-    perDepotMtd,
+    perStockistMtd,
     perAreaMtd,
     perRepMtd,
     competitorRows,
@@ -203,7 +203,7 @@ export default async function HqDashboardPage({
             id: counters.id,
             status: counters.status,
             type: counters.type,
-            depotId: counters.depotId,
+            stockistId: counters.stockistId,
             name: counters.name,
             area: areas.name,
             lat: counters.lat,
@@ -215,7 +215,7 @@ export default async function HqDashboardPage({
           .innerJoin(areas, eq(areas.id, counters.areaId))
           .where(inScope)
       : Promise.resolve([] as Array<{
-          id: string; status: "active" | "dormant" | "declining"; type: string; depotId: string;
+          id: string; status: "active" | "dormant" | "declining"; type: string; stockistId: string;
           name: string; area: string; lat: string | null; lng: string | null;
           phone: string | null; lastVisit: Date | null;
         }>),
@@ -266,7 +266,7 @@ export default async function HqDashboardPage({
           .where(
             and(
               eq(dayLogs.logDate, today),
-              inArray(users.depotId, depotIds),
+              inArray(users.stockistId, stockistIds),
               sql`'field' = ANY(${users.accessRoles}::text[])`,
             ),
           )
@@ -277,7 +277,7 @@ export default async function HqDashboardPage({
           .from(schemeClaims)
           .where(
             and(
-              inArray(schemeClaims.depotId, depotIds),
+              inArray(schemeClaims.stockistId, stockistIds),
               eq(schemeClaims.status, "paid"),
               gte(schemeClaims.createdAt, day.start),
               lt(schemeClaims.createdAt, day.end),
@@ -290,7 +290,7 @@ export default async function HqDashboardPage({
           .from(schemeClaims)
           .where(
             and(
-              inArray(schemeClaims.depotId, depotIds),
+              inArray(schemeClaims.stockistId, stockistIds),
               eq(schemeClaims.status, "paid"),
               gte(schemeClaims.createdAt, mtd.start),
               lt(schemeClaims.createdAt, mtd.end),
@@ -323,15 +323,15 @@ export default async function HqDashboardPage({
     hasDepots
       ? db
           .select({
-            depotId: counters.depotId,
+            stockistId: counters.stockistId,
             packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
             n: sql<number>`count(*)::int`,
           })
           .from(visits)
           .innerJoin(counters, eq(counters.id, visits.counterId))
           .where(and(inScope, gte(visits.visitedAt, mtd.start), lt(visits.visitedAt, mtd.end)))
-          .groupBy(counters.depotId)
-      : Promise.resolve([] as Array<{ depotId: string; packets: number; n: number }>),
+          .groupBy(counters.stockistId)
+      : Promise.resolve([] as Array<{ stockistId: string; packets: number; n: number }>),
     // Area leaderboard, MTD.
     hasDepots
       ? db
@@ -431,28 +431,28 @@ export default async function HqDashboardPage({
   const visitsMtdDelta = computeDelta(visitsMtd, prevMtdTotals[0]?.visits ?? 0);
 
   // ── Depot split (counters) + depot leaderboard (packets MTD) ────────────
-  const depotColor = new Map(cnfDepots.map((d, i) => [d.id, DEPOT_COLORS[i % DEPOT_COLORS.length]]));
-  const depotName = new Map(cnfDepots.map((d) => [d.id, d.name]));
-  const depotSplit: DonutSegment[] = cnfDepots
+  const stockistColor = new Map(cnfStockists.map((d, i) => [d.id, STOCKIST_COLORS[i % STOCKIST_COLORS.length]]));
+  const stockistName = new Map(cnfStockists.map((d) => [d.id, d.name]));
+  const stockistSplit: DonutSegment[] = cnfStockists
     .map((d) => ({
       label: d.name,
-      value: counterRows.filter((c) => c.depotId === d.id).length,
-      color: depotColor.get(d.id) ?? "#6B7280",
+      value: counterRows.filter((c) => c.stockistId === d.id).length,
+      color: stockistColor.get(d.id) ?? "#6B7280",
     }))
     .filter((s) => s.value > 0);
-  const depotSplitTotal = depotSplit.reduce((s, d) => s + d.value, 0);
+  const stockistSplitTotal = stockistSplit.reduce((s, d) => s + d.value, 0);
 
-  const mtdByDepot = new Map(perDepotMtd.map((r) => [r.depotId, r]));
-  const depotBoard = cnfDepots
+  const mtdByStockist = new Map(perStockistMtd.map((r) => [r.stockistId, r]));
+  const stockistBoard = cnfStockists
     .map((d) => ({
       name: d.name,
-      packets: Number(mtdByDepot.get(d.id)?.packets ?? 0),
-      visits: Number(mtdByDepot.get(d.id)?.n ?? 0),
-      counters: counterRows.filter((c) => c.depotId === d.id).length,
-      declining: counterRows.filter((c) => c.depotId === d.id && c.status === "declining").length,
+      packets: Number(mtdByStockist.get(d.id)?.packets ?? 0),
+      visits: Number(mtdByStockist.get(d.id)?.n ?? 0),
+      counters: counterRows.filter((c) => c.stockistId === d.id).length,
+      declining: counterRows.filter((c) => c.stockistId === d.id && c.status === "declining").length,
     }))
     .sort((a, b) => b.packets - a.packets);
-  const depotBoardMax = Math.max(1, ...depotBoard.map((d) => d.packets));
+  const depotBoardMax = Math.max(1, ...stockistBoard.map((d) => d.packets));
 
   // ── Area + rep leaderboards (MTD) ───────────────────────────────────────
   const areaBoard = perAreaMtd
@@ -550,7 +550,7 @@ export default async function HqDashboardPage({
       id: c.id,
       name: c.name,
       area: c.area,
-      depot: depotName.get(c.depotId) ?? "—",
+      depot: stockistName.get(c.stockistId) ?? "—",
       status: c.status,
       days: daysSince(c.lastVisit, now),
       lastVisit: c.lastVisit,
@@ -593,7 +593,7 @@ export default async function HqDashboardPage({
     { icon: "users", tint: "var(--accent)", label: t("Reps active today"), value: `${startedReps.length}`, sub: `${completedReps} ${t("done")} · ${runningReps} ${t("running")}` },
     { icon: "clock", tint: "#8A6FBF", label: t("Avg on-job today"), value: avgOnJobHours > 0 ? `${avgOnJobHours.toFixed(1)}h` : "—", sub: avgVisitSeconds > 0 ? `${Math.round(avgVisitSeconds / 60)}m ${t("per visit")}` : t("no visits yet") },
     { icon: "alert", tint: "#C7263B", label: t("Declining counters"), value: String(decliningCount), sub: t("flagged for revisit"), tone: "bad" },
-    { icon: "grid", tint: "#6B7280", label: t("Network"), value: String(totalCounters), sub: `${cnfDepots.length} ${t("depots")}` },
+    { icon: "grid", tint: "#6B7280", label: t("Network"), value: String(totalCounters), sub: `${cnfStockists.length} ${t("stockists")}` },
   ];
 
   return (
@@ -603,7 +603,7 @@ export default async function HqDashboardPage({
         <div className="min-w-0">
           <h1 className="page-title">{selectedCnf.name}</h1>
           <p className="page-subtitle max-w-2xl">
-            {t("Performance across every depot, area and rep in this C&F.")}
+            {t("Performance across every stockist, area and rep in this C&F.")}
           </p>
         </div>
         <div className="flex flex-none flex-wrap items-center gap-2">
@@ -618,7 +618,7 @@ export default async function HqDashboardPage({
           {formatISTDate(today)}
         </span>
         <span>·</span>
-        <span>{cnfDepots.length} {t("depots")}</span>
+        <span>{cnfStockists.length} {t("stockists")}</span>
         <span>·</span>
         <span>{totalCounters} {t("counters")}</span>
         <span>·</span>
@@ -626,7 +626,7 @@ export default async function HqDashboardPage({
       </div>
 
       {!hasDepots ? (
-        <Notice title={selectedCnf.name}>{t("No depots under this C&F yet.")}</Notice>
+        <Notice title={selectedCnf.name}>{t("No stockists under this C&F yet.")}</Notice>
       ) : (
         <>
           {/* KPI grid */}
@@ -705,18 +705,18 @@ export default async function HqDashboardPage({
               <div className="mb-3.5 flex items-center gap-3">
                 <IconTile name="building" tint="#7B2FA0" />
                 <div>
-                  <h6 style={cardTitle}>{t("Counters by depot")}</h6>
+                  <h6 style={cardTitle}>{t("Counters by stockist")}</h6>
                   <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Coverage split")}</p>
                 </div>
               </div>
-              {depotSplitTotal === 0 ? (
+              {stockistSplitTotal === 0 ? (
                 <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No counters mapped yet.")}</p>
               ) : (
                 <div className="flex flex-1 items-center justify-center gap-5">
-                  <Donut segments={depotSplit} size={124} centerValue={depotSplitTotal} centerLabel={t("counters")} />
+                  <Donut segments={stockistSplit} size={124} centerValue={stockistSplitTotal} centerLabel={t("counters")} />
                   <div className="flex max-h-[132px] flex-col gap-2 overflow-y-auto pr-1">
-                    {depotSplit.map((d) => (
-                      <StatusRow key={d.label} color={d.color} label={d.label} n={d.value} total={depotSplitTotal} />
+                    {stockistSplit.map((d) => (
+                      <StatusRow key={d.label} color={d.color} label={d.label} n={d.value} total={stockistSplitTotal} />
                     ))}
                   </div>
                 </div>
@@ -772,15 +772,15 @@ export default async function HqDashboardPage({
               <div className="mb-3.5 flex items-center gap-3">
                 <IconTile name="trophy" tint="#B9812E" />
                 <div>
-                  <h6 style={cardTitle}>{t("Depot leaderboard")}</h6>
+                  <h6 style={cardTitle}>{t("Stockist leaderboard")}</h6>
                   <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Packets sold MTD")}</p>
                 </div>
               </div>
-              {depotBoard.length === 0 ? (
-                <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No depots under this C&F yet.")}</p>
+              {stockistBoard.length === 0 ? (
+                <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No stockists under this C&F yet.")}</p>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {depotBoard.map((d, i) => (
+                  {stockistBoard.map((d, i) => (
                     <div key={d.name} className="flex items-center gap-3">
                       <MedalBadge rank={i + 1} />
                       <div className="min-w-0 flex-1">

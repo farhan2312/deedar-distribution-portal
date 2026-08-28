@@ -12,7 +12,7 @@ export function CnfPicker({ options, value }: { options: CnfOption[]; value: str
     const q = new URLSearchParams(params.toString());
     q.set("cnf", next);
     // A depot from the previous C&F is meaningless here — drop it so the view
-    // falls back to "all depots" in the newly selected C&F.
+    // falls back to "all stockists" in the newly selected C&F.
     q.delete("depot");
     router.push(`${pathname}?${q.toString()}`);
   }

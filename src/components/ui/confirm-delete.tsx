@@ -9,7 +9,7 @@ import type { WriteResult } from "@/lib/db-errors";
  * The app's single delete affordance: click → confirmation dialog naming the
  * thing → run the action → report what happened (deleted, or why not).
  *
- * Deletes here are destructive and often blocked (a depot still holding areas,
+ * Deletes here are destructive and often blocked (a stockist still holding areas,
  * a state still holding a C&F), so both halves matter: nothing is removed on a
  * stray click, and the outcome is always stated rather than silently reloading.
  *
@@ -27,7 +27,7 @@ export function ConfirmDelete({
 }: {
   /** Runs on confirm. Returning a WriteResult lets us show the refusal reason. */
   action: () => Promise<WriteResult | void>;
-  /** What kind of thing this is, e.g. "depot" — used in the prompt. */
+  /** What kind of thing this is, e.g. "stockist" — used in the prompt. */
   itemLabel: string;
   /** The specific row's name, quoted back so the admin sees what they're deleting. */
   itemName?: string;
@@ -236,7 +236,7 @@ function ImpactWarning({ impact, itemLabel }: { impact: DeleteImpact; itemLabel:
     if (n > 0) rows.push(`${n} ${n === 1 ? one : many}`);
   };
   add(impact.cnfs, "C&F HQ", "C&F HQs");
-  add(impact.depots, "depot", "depots");
+  add(impact.stockists, "stockist", "stockists");
   add(impact.areas, "area", "areas");
   add(impact.counters, "counter", "counters");
 

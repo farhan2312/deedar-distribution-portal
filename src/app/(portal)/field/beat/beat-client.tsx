@@ -23,7 +23,7 @@ export type BeatCounter = {
 
 export function BeatClient({
   firstName,
-  depotName,
+  stockistName,
   reportsTo,
   visitsToday,
   newCountersToday,
@@ -31,7 +31,7 @@ export function BeatClient({
   isAdmin = false,
 }: {
   firstName: string;
-  depotName: string;
+  stockistName: string;
   reportsTo: string | null;
   visitsToday: number;
   newCountersToday: number;
@@ -68,7 +68,7 @@ export function BeatClient({
           {t("Namaste")}, {firstName}
         </h2>
         <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-          {depotName}
+          {stockistName}
           {reportsTo && ` · reports to ${reportsTo}`}
         </p>
       </header>*/}
@@ -116,7 +116,7 @@ export function BeatClient({
                     {result.name}
                   </div>
                   <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-                    {result.type} · {result.area} · {result.depotName}
+                    {result.type} · {result.area} · {result.stockistName}
                   </div>
                 </div>
                 <button className="btn btn-primary btn-sm" onClick={() => openCounter(result.id)}>
@@ -125,7 +125,7 @@ export function BeatClient({
               </div>
             ) : (
               <div className="rounded-xl p-3 text-[13px]" style={{ background: "rgba(178,94,0,.1)", color: "var(--warning)" }}>
-                {t("This mobile is registered to a counter in another depot — you can't access it from here.")}
+                {t("This mobile is registered to a counter at another stockist — you can't access it from here.")}
               </div>
             )}
           </div>
@@ -133,7 +133,7 @@ export function BeatClient({
 
         {!result && (
           <p className="mt-2 text-[11px]" style={{ color: "var(--ink-3)" }}>
-            {t("Found in your depot: check in. In another depot: not accessible. Not found: add it as a new counter.")}
+            {t("Found at your stockist: check in. At another stockist: not accessible. Not found: add it as a new counter.")}
           </p>
         )}
       </div>

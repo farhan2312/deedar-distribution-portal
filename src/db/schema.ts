@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   boolean,
   date,
+  index,
   integer,
   jsonb,
   numeric,
@@ -16,7 +17,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-// ── Org hierarchy: State → C&F HQ → Depot → Area ────────────────────────
+// ── Org hierarchy: State → C&F HQ → Stockist → Area ─────────────────────
 
 export const states = pgTable("states", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -36,26 +37,60 @@ export const cnfs = pgTable("cnfs", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const depots = pgTable("depots", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: varchar("name", { length: 160 }).notNull().unique(),
-  cnfId: uuid("cnf_id")
-    .notNull()
-    .references(() => cnfs.id, { onDelete: "restrict" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+/**
+ * A stockist: whoever holds stock and owns areas beneath a C&F.
+ *
+ * Depot, Dealer and Sub-Dealer are one table because they behave
+ * identically — each holds tracked stock, owns areas, and has ISRs drawing
+ * their daily pickup from it. Only the label differs, plus a parent for the
+ * one optional tier. Three tables would have forced every area, stock row,
+ * user and dashboard query into a three-way branch for no behavioural gain.
+ */
+export const stockistKindEnum = pgEnum("stockist_kind", [
+  // Stock the C&F manages itself.
+  "depot",
+  // Third-party stockist holding their own stock.
+  "dealer",
+  // Optional tier under a dealer. Exactly one level — a sub-dealer is never
+  // itself a parent.
+  "sub_dealer",
+]);
+
+export type StockistKind = (typeof stockistKindEnum.enumValues)[number];
+
+export const stockists = pgTable(
+  "stockists",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 160 }).notNull().unique(),
+    cnfId: uuid("cnf_id")
+      .notNull()
+      .references(() => cnfs.id, { onDelete: "restrict" }),
+    kind: stockistKindEnum("kind").notNull().default("depot"),
+    // Set only on a sub-dealer, and always pointing at a dealer. A DB CHECK
+    // enforces the shape; `restrict` stops a dealer being deleted out from
+    // under its sub-dealers.
+    parentId: uuid("parent_id").references((): AnyPgColumn => stockists.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("stockists_cnf_kind_idx").on(t.cnfId, t.kind)],
+);
+
+export type Stockist = typeof stockists.$inferSelect;
 
 export const areas = pgTable(
   "areas",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: varchar("name", { length: 160 }).notNull(),
-    depotId: uuid("depot_id")
+    stockistId: uuid("stockist_id")
       .notNull()
-      .references(() => depots.id, { onDelete: "restrict" }),
+      .references(() => stockists.id, { onDelete: "restrict" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("areas_depot_name_unique").on(t.depotId, t.name)],
+  (t) => [uniqueIndex("areas_stockist_name_unique").on(t.stockistId, t.name)],
 );
 
 // ── Users ─────────────────────────────────────────────────────────────
@@ -63,10 +98,14 @@ export const areas = pgTable(
 export const accessRoleEnum = pgEnum("access_role", [
   "field",
   "supervisor",
-  "dealer",
+  // The C&F-managed stockist. Renamed from "dealer", which is what this role
+  // always meant; that name now belongs to the third-party stockist below.
+  "depot",
   "hq",
   "khq",
   "admin",
+  // Third-party stockist, and sub-dealers under one.
+  "dealer",
 ]);
 
 export type AccessRole = (typeof accessRoleEnum.enumValues)[number];
@@ -80,9 +119,9 @@ export const users = pgTable("users", {
     .array()
     .notNull()
     .default(sql`ARRAY[]::access_role[]`),
-  // Single-scope roles: hq → cnfId, dealer/field → depotId.
+  // Single-scope roles: hq → cnfId, dealer/field → stockistId.
   cnfId: uuid("cnf_id").references(() => cnfs.id, { onDelete: "set null" }),
-  depotId: uuid("depot_id").references(() => depots.id, { onDelete: "set null" }),
+  stockistId: uuid("stockist_id").references(() => stockists.id, { onDelete: "set null" }),
   // A field salesman reports to one Supervisor (SO).
   reportsToUserId: uuid("reports_to_user_id").references((): AnyPgColumn => users.id, {
     onDelete: "set null",
@@ -100,18 +139,18 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Multi-scope roles: supervisor → many depots.
-export const userDepots = pgTable(
-  "user_depots",
+// Multi-scope roles: supervisor → many stockists.
+export const userStockists = pgTable(
+  "user_stockists",
   {
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    depotId: uuid("depot_id")
+    stockistId: uuid("stockist_id")
       .notNull()
-      .references(() => depots.id, { onDelete: "cascade" }),
+      .references(() => stockists.id, { onDelete: "cascade" }),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.depotId] })],
+  (t) => [primaryKey({ columns: [t.userId, t.stockistId] })],
 );
 
 // Multi-scope roles: field → many areas (within their one depot).
@@ -211,9 +250,9 @@ export const counters = pgTable("counters", {
   // Free-text label when `type` is "Others" (e.g. "Medical Store"). Null for
   // every other type. Display uses this in place of "Others" when present.
   typeOther: varchar("type_other", { length: 60 }),
-  depotId: uuid("depot_id")
+  stockistId: uuid("stockist_id")
     .notNull()
-    .references(() => depots.id, { onDelete: "restrict" }),
+    .references(() => stockists.id, { onDelete: "restrict" }),
   areaId: uuid("area_id")
     .notNull()
     .references(() => areas.id, { onDelete: "restrict" }),
@@ -425,19 +464,19 @@ export type RepLocation = typeof repLocations.$inferSelect;
 // retailer scheme payouts.
 
 // Current on-hand quantity per depot per SKU segment. Unique on (depot, segment).
-export const depotStock = pgTable(
-  "depot_stock",
+export const stockistStock = pgTable(
+  "stockist_stock",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    depotId: uuid("depot_id")
+    stockistId: uuid("stockist_id")
       .notNull()
-      .references(() => depots.id, { onDelete: "cascade" }),
+      .references(() => stockists.id, { onDelete: "cascade" }),
     segment: productSegmentEnum("segment").notNull(),
     onHand: integer("on_hand").notNull().default(0),
     lowThreshold: integer("low_threshold").notNull().default(50),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("depot_stock_depot_segment_unique").on(t.depotId, t.segment)],
+  (t) => [uniqueIndex("stockist_stock_segment_unique").on(t.stockistId, t.segment)],
 );
 
 /** How stock left or entered the depot. Drives both the sign of `qty` and
@@ -455,9 +494,9 @@ export const stockMovementTypeEnum = pgEnum("stock_movement_type", [
 // depot_stock.on_hand and re-stamps that day's closing balance.
 export const stockMovements = pgTable("stock_movements", {
   id: uuid("id").primaryKey().defaultRandom(),
-  depotId: uuid("depot_id")
+  stockistId: uuid("stockist_id")
     .notNull()
-    .references(() => depots.id, { onDelete: "cascade" }),
+    .references(() => stockists.id, { onDelete: "cascade" }),
   segment: productSegmentEnum("segment").notNull(),
   type: stockMovementTypeEnum("type").notNull(),
   qty: integer("qty").notNull(),
@@ -478,13 +517,13 @@ export const stockMovements = pgTable("stock_movements", {
 // Daily closing balance per depot — written on every movement, then frozen
 // when the depot closes the day ("no further edits today"). Kept for trend
 // analysis, so this one IS a history table (unlike rep_locations).
-export const depotStockDays = pgTable(
-  "depot_stock_days",
+export const stockistStockDays = pgTable(
+  "stockist_stock_days",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    depotId: uuid("depot_id")
+    stockistId: uuid("stockist_id")
       .notNull()
-      .references(() => depots.id, { onDelete: "cascade" }),
+      .references(() => stockists.id, { onDelete: "cascade" }),
     stockDate: date("stock_date").notNull(), // IST calendar day
     /** Per-SKU closing balance, e.g. { DG10: 420, DG20: 214, ... }. */
     closing: jsonb("closing").$type<Partial<Record<ProductSegment, number>>>().notNull().default({}),
@@ -496,10 +535,10 @@ export const depotStockDays = pgTable(
     closedAt: timestamp("closed_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("depot_stock_days_depot_date_unique").on(t.depotId, t.stockDate)],
+  (t) => [uniqueIndex("stockist_stock_days_date_unique").on(t.stockistId, t.stockDate)],
 );
 
-export type DepotStockDay = typeof depotStockDays.$inferSelect;
+export type DepotStockDay = typeof stockistStockDays.$inferSelect;
 export type StockMovementType = (typeof stockMovementTypeEnum.enumValues)[number];
 
 export const schemeClaimStatusEnum = pgEnum("scheme_claim_status", [
@@ -514,9 +553,9 @@ export const schemeClaims = pgTable("scheme_claims", {
   counterId: uuid("counter_id")
     .notNull()
     .references(() => counters.id, { onDelete: "cascade" }),
-  depotId: uuid("depot_id")
+  stockistId: uuid("stockist_id")
     .notNull()
-    .references(() => depots.id, { onDelete: "cascade" }),
+    .references(() => stockists.id, { onDelete: "cascade" }),
   code: varchar("code", { length: 40 }).notNull(),
   value: integer("value").notNull(), // rupees
   status: schemeClaimStatusEnum("status").notNull().default("processing"),
@@ -541,13 +580,13 @@ export const rateLimits = pgTable(
   (t) => [primaryKey({ columns: [t.key, t.windowStart] })],
 );
 
-export type DepotStock = typeof depotStock.$inferSelect;
+export type DepotStock = typeof stockistStock.$inferSelect;
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type SchemeClaim = typeof schemeClaims.$inferSelect;
 
 export type State = typeof states.$inferSelect;
 export type Cnf = typeof cnfs.$inferSelect;
-export type Depot = typeof depots.$inferSelect;
+export type Depot = typeof stockists.$inferSelect;
 export type Area = typeof areas.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

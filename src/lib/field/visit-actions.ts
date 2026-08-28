@@ -92,14 +92,14 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
   if (err) return { ok: false, error: err };
 
   const [counter] = await db
-    .select({ id: counters.id, depotId: counters.depotId })
+    .select({ id: counters.id, stockistId: counters.stockistId })
     .from(counters)
     .where(eq(counters.id, counterId))
     .limit(1);
   if (!counter) return { ok: false, error: "Counter not found." };
 
   const isAdmin = user.accessRoles.includes("admin");
-  if (!isAdmin && counter.depotId !== user.depot?.id) {
+  if (!isAdmin && counter.stockistId !== user.depot?.id) {
     return { ok: false, error: "You can only add visits to counters in your own depot." };
   }
   // Admin isn't on a beat and keeps no day log, so the clock-in gate is for

@@ -16,11 +16,11 @@ const STOCK: { segment: ProductSegment; onHand: number; low: number }[] = [
 
 async function main() {
   const { db } = await import("../src/db");
-  const { depots, counters, depotStock, stockMovements, schemeClaims } = await import("../src/db/schema");
+  const { stockists, counters, stockistStock, stockMovements, schemeClaims } = await import("../src/db/schema");
   const { eq } = await import("drizzle-orm");
 
-  const allDepots = await db.select().from(depots);
-  if (allDepots.length === 0) {
+  const allStockists = await db.select().from(stockists);
+  if (allStockists.length === 0) {
     console.log("No depots — seed the org hierarchy first.");
     process.exit(0);
   }
@@ -29,11 +29,11 @@ async function main() {
   let movementRows = 0;
   let claimRows = 0;
 
-  for (const depot of allDepots) {
+  for (const depot of allStockists) {
     // Stock — one row per SKU (skip if already present).
     await db
-      .insert(depotStock)
-      .values(STOCK.map((s) => ({ depotId: depot.id, segment: s.segment, onHand: s.onHand, lowThreshold: s.low })))
+      .insert(stockistStock)
+      .values(STOCK.map((s) => ({ stockistId: depot.id, segment: s.segment, onHand: s.onHand, lowThreshold: s.low })))
       .onConflictDoNothing();
     stockRows += STOCK.length;
 
@@ -41,14 +41,14 @@ async function main() {
     const existingMoves = await db
       .select({ id: stockMovements.id })
       .from(stockMovements)
-      .where(eq(stockMovements.depotId, depot.id))
+      .where(eq(stockMovements.stockistId, depot.id))
       .limit(1);
     if (existingMoves.length === 0) {
       const moves = [
         // qty is signed — outward movements are negative.
-        { depotId: depot.id, segment: "DG10" as ProductSegment, type: "inward" as const, qty: 200, note: "Factory dispatch received" },
-        { depotId: depot.id, segment: "DB20" as ProductSegment, type: "outward_wholesale" as const, qty: -60, note: "Bora lifting — wholesale" },
-        { depotId: depot.id, segment: "DG20" as ProductSegment, type: "outward_retail" as const, qty: -18, note: "Field beat lifting" },
+        { stockistId: depot.id, segment: "DG10" as ProductSegment, type: "inward" as const, qty: 200, note: "Factory dispatch received" },
+        { stockistId: depot.id, segment: "DB20" as ProductSegment, type: "outward_wholesale" as const, qty: -60, note: "Bora lifting — wholesale" },
+        { stockistId: depot.id, segment: "DG20" as ProductSegment, type: "outward_retail" as const, qty: -18, note: "Field beat lifting" },
       ];
       await db.insert(stockMovements).values(moves);
       movementRows += moves.length;
@@ -58,13 +58,13 @@ async function main() {
     const existingClaims = await db
       .select({ id: schemeClaims.id })
       .from(schemeClaims)
-      .where(eq(schemeClaims.depotId, depot.id))
+      .where(eq(schemeClaims.stockistId, depot.id))
       .limit(1);
     if (existingClaims.length === 0) {
       const depotCounters = await db
         .select({ id: counters.id })
         .from(counters)
-        .where(eq(counters.depotId, depot.id))
+        .where(eq(counters.stockistId, depot.id))
         .limit(3);
       if (depotCounters.length > 0) {
         const statuses = ["paid", "processing", "paid"] as const;
@@ -72,7 +72,7 @@ async function main() {
         const values = [250, 120, 400];
         const claims = depotCounters.map((c, i) => ({
           counterId: c.id,
-          depotId: depot.id,
+          stockistId: depot.id,
           code: codes[i % codes.length],
           value: values[i % values.length],
           status: statuses[i % statuses.length],
@@ -83,7 +83,7 @@ async function main() {
     }
   }
 
-  console.log(`Seeded across ${allDepots.length} depot(s): ~${stockRows} stock rows (existing skipped), ${movementRows} movements, ${claimRows} claims.`);
+  console.log(`Seeded across ${allStockists.length} depot(s): ~${stockRows} stock rows (existing skipped), ${movementRows} movements, ${claimRows} claims.`);
   process.exit(0);
 }
 

@@ -23,7 +23,7 @@ export default async function FieldBeatPage() {
     const t = await getT();
     return (
       <Notice title={t("Beat")}>
-        {t("You aren't assigned to a depot yet — ask your Sales Officer to map you to one.")}
+        {t("You aren't assigned to a stockist yet — ask your Sales Officer to map you to one.")}
       </Notice>
     );
   }
@@ -57,7 +57,7 @@ export default async function FieldBeatPage() {
           type: counters.type,
           typeOther: counters.typeOther,
           areaName: areas.name,
-          depotId: counters.depotId,
+          stockistId: counters.stockistId,
         })
         .from(counters)
         .innerJoin(areas, eq(areas.id, counters.areaId))
@@ -113,7 +113,7 @@ export default async function FieldBeatPage() {
       name: c.name,
       type: counterTypeLabel(c.type, c.typeOther),
       areaName: c.areaName,
-      canVisit: isAdmin || c.depotId === user.depot?.id,
+      canVisit: isAdmin || c.stockistId === user.depot?.id,
       visitedToday: visitedPairs.has(`${a.repUserId}__${a.counterId}`),
       // Set only when SOMEONE ELSE got there first — the assigned rep's own
       // visit is `visitedToday`, which reads as done rather than blocked.
@@ -130,7 +130,7 @@ export default async function FieldBeatPage() {
   return (
     <BeatClient
       firstName={user.name.split(/\s+/)[0]}
-      depotName={user.depot?.name ?? "—"}
+      stockistName={user.depot?.name ?? "—"}
       reportsTo={user.reportsTo?.name ?? null}
       visitsToday={visitCountRows[0]?.n ?? 0}
       newCountersToday={newCounterCountRows[0]?.n ?? 0}

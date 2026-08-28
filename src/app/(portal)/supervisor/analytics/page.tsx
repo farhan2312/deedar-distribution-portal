@@ -6,11 +6,11 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { durationLabel, formatISTDate, istDayBounds, istDateString } from "@/lib/date";
 import {
   getCountersVisitedToday,
-  getScopeDepots,
+  getScopeStockists,
   getTeamDayLogs,
   getTeamReps,
   getVisitsToday,
-  pickDepot,
+  pickStockist,
 } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
 import { getT } from "@/lib/i18n/server";
@@ -76,9 +76,9 @@ export default async function SupervisorAnalyticsPage({
   }
 
   const { depot: requestedDepot, date: requestedDate } = await searchParams;
-  const depots = await getScopeDepots(user);
-  const depot = pickDepot(depots, requestedDepot);
-  const depotIds = depot ? [depot.id] : depots.map((d) => d.id);
+  const stockists = await getScopeStockists(user);
+  const depot = pickStockist(stockists, requestedDepot);
+  const stockistIds = depot ? [depot.id] : stockists.map((d) => d.id);
 
   const reps = await getTeamReps(user, depot?.id);
   const repIds = reps.map((r) => r.id);
@@ -121,17 +121,17 @@ export default async function SupervisorAnalyticsPage({
     getTeamDayLogs(repIds, dayStr),
     getVisitsToday(repIds, bounds),
     getCountersVisitedToday(repIds, bounds),
-    depotIds.length
+    stockistIds.length
       ? db
           .select({ area: areas.name, status: counters.status })
           .from(counters)
           .innerJoin(areas, eq(areas.id, counters.areaId))
-          .where(inArray(counters.depotId, depotIds))
+          .where(inArray(counters.stockistId, stockistIds))
       : Promise.resolve([] as Array<{ area: string; status: "active" | "dormant" | "declining" }>),
     getVisitsToday(repIds, prevBounds),
     getCountersVisitedToday(repIds, prevBounds),
     getTeamDayLogs(repIds, prevStr),
-    repIds.length && depotIds.length
+    repIds.length && stockistIds.length
       ? db
           .select({ area: areas.name, n: sql<number>`count(*)::int` })
           .from(visits)
@@ -241,13 +241,13 @@ export default async function SupervisorAnalyticsPage({
     highlights.push({ tone: "good", icon: "check", text: t("All good — nothing needs attention right now.") });
   }
 
-  const scopeLabel = depot?.name ?? (depots.length > 1 ? t("All depots") : depots[0]?.name ?? t("Your depot"));
+  const scopeLabel = depot?.name ?? (stockists.length > 1 ? t("All stockists") : stockists[0]?.name ?? t("Your stockist"));
 
   const kpis: KpiProps[] = [
     { icon: "users", tint: "var(--accent)", label: t("Active reps"), value: `${activeReps}/${reps.length}`, sub: t("clocked in"), delta: activeDelta },
     { icon: "route", tint: "#2E9E5A", label: isToday ? t("Visits today") : t("Visits"), value: String(totalVisits), sub: t("Team total"), delta: visitsDelta },
     { icon: "store", tint: "#7B2FA0", label: t("Counters covered"), value: String(covered.size), sub: t("Distinct"), delta: coveredDelta },
-    { icon: "grid", tint: "#128A82", label: t("Counters in scope"), value: String(areaRows.length), sub: t("in your depots") },
+    { icon: "grid", tint: "#128A82", label: t("Counters in scope"), value: String(areaRows.length), sub: t("in your stockists") },
     { icon: "clock", tint: "#B9812E", label: t("Open days"), value: String(runningReps), sub: runningReps ? t("not clocked out") : t("all closed"), tone: runningReps ? "warn" : undefined },
     { icon: "alert", tint: "#C7263B", label: t("Declining"), value: String(declining), sub: t("needs attention"), tone: "bad" },
   ];
@@ -259,13 +259,13 @@ export default async function SupervisorAnalyticsPage({
         <div className="min-w-0">
           <h1 className="page-title">{t("Analytics Overview")}</h1>
           <p className="page-subtitle max-w-2xl">
-            {t("Track your team's performance and visits across your depots.")}
+            {t("Track your team's performance and visits across your stockists.")}
           </p>
         </div>
         <div className="flex flex-none flex-wrap items-center gap-2">
           <DayPicker value={dayStr} options={dayOptions} />
           <RefreshButton />
-          {depots.length > 1 && <DepotPicker options={depots} value={depot?.id ?? "all"} />}
+          {stockists.length > 1 && <DepotPicker options={stockists} value={depot?.id ?? "all"} />}
         </div>
       </div>
 

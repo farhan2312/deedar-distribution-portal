@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, counters, depots } from "@/db/schema";
+import { areas, counters, stockists, type StockistKind } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { deleteFailure, insertFailure, type WriteResult } from "@/lib/db-errors";
 
@@ -23,26 +23,62 @@ async function requireHqScope(cnfId: string) {
   }
 }
 
-export async function addDepot(cnfId: string, formData: FormData): Promise<WriteResult> {
+const KIND_NOUN: Record<StockistKind, string> = {
+  depot: "depot",
+  dealer: "dealer",
+  sub_dealer: "sub-dealer",
+};
+
+/**
+ * Add a depot, dealer or sub-dealer to this C&F.
+ *
+ * Same shape as the admin version, scoped to the caller's own C&F. The parent
+ * is re-checked here rather than trusted from the form: it must be a dealer,
+ * and it must belong to this C&F — otherwise a hand-posted form could hang a
+ * sub-dealer under someone else's structure.
+ */
+export async function addStockist(cnfId: string, formData: FormData): Promise<WriteResult> {
   await requireHqScope(cnfId);
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) return { ok: false, error: "Enter a depot name." };
+  const kindRaw = String(formData.get("kind") ?? "depot");
+  const parentId = String(formData.get("parentId") ?? "").trim() || null;
+
+  const KINDS: StockistKind[] = ["depot", "dealer", "sub_dealer"];
+  if (!KINDS.includes(kindRaw as StockistKind)) {
+    return { ok: false, error: "Unknown stockist type." };
+  }
+  const kind = kindRaw as StockistKind;
+  if (!name) return { ok: false, error: `Enter a ${KIND_NOUN[kind]} name.` };
+
+  if (kind === "sub_dealer") {
+    if (!parentId) return { ok: false, error: "Pick the dealer this sub-dealer sits under." };
+    const [parent] = await db
+      .select({ kind: stockists.kind, cnfId: stockists.cnfId })
+      .from(stockists)
+      .where(eq(stockists.id, parentId))
+      .limit(1);
+    if (!parent) return { ok: false, error: "That dealer no longer exists." };
+    if (parent.kind !== "dealer") return { ok: false, error: "A sub-dealer can only sit under a dealer." };
+    if (parent.cnfId !== cnfId) return { ok: false, error: "That dealer belongs to a different C&F." };
+  } else if (parentId) {
+    return { ok: false, error: `A ${KIND_NOUN[kind]} has no parent.` };
+  }
 
   // `onConflictDoNothing().returning()` gives back an empty array when the name
-  // was already taken — previously that silently no-opped, so the admin clicked
+  // was already taken — previously that silently no-opped, so the user clicked
   // Add and nothing happened with no explanation.
   let inserted: { id: string }[];
   try {
     inserted = await db
-      .insert(depots)
-      .values({ name, cnfId })
+      .insert(stockists)
+      .values({ name, cnfId, kind, parentId: kind === "sub_dealer" ? parentId : null })
       .onConflictDoNothing()
-      .returning({ id: depots.id });
+      .returning({ id: stockists.id });
   } catch (e) {
-    return insertFailure(e, "depot");
+    return insertFailure(e, KIND_NOUN[kind]);
   }
   if (inserted.length === 0) {
-    return { ok: false, error: `A depot named "${name}" already exists.` };
+    return { ok: false, error: `A stockist named "${name}" already exists.` };
   }
 
   revalidatePath("/hq/depots");
@@ -52,12 +88,12 @@ export async function addDepot(cnfId: string, formData: FormData): Promise<Write
 export async function addArea(cnfId: string, formData: FormData): Promise<WriteResult> {
   await requireHqScope(cnfId);
   const name = String(formData.get("name") ?? "").trim();
-  const depotId = String(formData.get("depotId") ?? "");
+  const stockistId = String(formData.get("depotId") ?? "");
   if (!name) return { ok: false, error: "Enter an area name." };
-  if (!depotId) return { ok: false, error: "Pick a depot." };
+  if (!stockistId) return { ok: false, error: "Pick a stockist." };
 
   // Ensure the depot belongs to this C&F before adding an area under it.
-  const [depot] = await db.select().from(depots).where(eq(depots.id, depotId)).limit(1);
+  const [depot] = await db.select().from(stockists).where(eq(stockists.id, stockistId)).limit(1);
   if (!depot || depot.cnfId !== cnfId) {
     return { ok: false, error: "That depot isn't in this C&F." };
   }
@@ -66,7 +102,7 @@ export async function addArea(cnfId: string, formData: FormData): Promise<WriteR
   try {
     inserted = await db
       .insert(areas)
-      .values({ name, depotId })
+      .values({ name, stockistId })
       .onConflictDoNothing()
       .returning({ id: areas.id });
   } catch (e) {
@@ -84,7 +120,7 @@ export async function addArea(cnfId: string, formData: FormData): Promise<WriteR
 export async function deleteArea(areaId: string): Promise<WriteResult> {
   const [area] = await db.select().from(areas).where(eq(areas.id, areaId)).limit(1);
   if (!area) return { ok: false, error: "Area not found." };
-  const [depot] = await db.select().from(depots).where(eq(depots.id, area.depotId)).limit(1);
+  const [depot] = await db.select().from(stockists).where(eq(stockists.id, area.stockistId)).limit(1);
   if (!depot) return { ok: false, error: "Depot not found." };
   await requireHqScope(depot.cnfId);
 
@@ -102,16 +138,16 @@ export async function deleteArea(areaId: string): Promise<WriteResult> {
   return { ok: true };
 }
 
-export async function deleteDepot(depotId: string): Promise<WriteResult> {
-  const [depot] = await db.select().from(depots).where(eq(depots.id, depotId)).limit(1);
+export async function deleteDepot(stockistId: string): Promise<WriteResult> {
+  const [depot] = await db.select().from(stockists).where(eq(stockists.id, stockistId)).limit(1);
   if (!depot) return { ok: false, error: "Depot not found." };
   await requireHqScope(depot.cnfId);
 
   try {
     await db.transaction(async (tx) => {
-      await tx.delete(counters).where(eq(counters.depotId, depotId));
-      await tx.delete(areas).where(eq(areas.depotId, depotId));
-      await tx.delete(depots).where(eq(depots.id, depotId));
+      await tx.delete(counters).where(eq(counters.stockistId, stockistId));
+      await tx.delete(areas).where(eq(areas.stockistId, stockistId));
+      await tx.delete(stockists).where(eq(stockists.id, stockistId));
     });
   } catch (e) {
     return deleteFailure(e, "depot");

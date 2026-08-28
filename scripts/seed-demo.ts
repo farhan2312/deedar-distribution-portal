@@ -14,16 +14,16 @@ config({ path: ".env.local" });
 const DEMO_PASSWORD = "deedar123";
 
 // ── Hierarchy blueprint ─────────────────────────────────────────────────
-// Two states, one C&F each, four depots per C&F, 5–6 areas per depot.
+// Two states, one C&F each, four stockists per C&F, 5–6 areas per depot.
 // Depot coordinates are real so the Leaflet map lands somewhere sensible.
 type DepotSpec = { name: string; lat: number; lng: number; areas: string[] };
-type StateSpec = { state: string; cnf: string; depots: DepotSpec[] };
+type StateSpec = { state: string; cnf: string; stockists: DepotSpec[] };
 
 const BLUEPRINT: StateSpec[] = [
   {
     state: "Rajasthan",
     cnf: "Jhalawar C&F HQ",
-    depots: [
+    stockists: [
       {
         name: "Indergarh Depot",
         lat: 25.732,
@@ -53,7 +53,7 @@ const BLUEPRINT: StateSpec[] = [
   {
     state: "Bihar",
     cnf: "Patna C&F HQ",
-    depots: [
+    stockists: [
       {
         name: "Patna Depot",
         lat: 25.5941,
@@ -142,9 +142,9 @@ async function main() {
 
   const { db } = await import("../src/db");
   const {
-    states, cnfs, depots, areas, users, userAreas, userDepots,
+    states, cnfs, stockists, areas, users, userAreas, userStockists,
     counters, visits, dayLogs, beatAssignments, repLocations,
-    depotStock, stockMovements, schemeClaims,
+    stockistStock, stockMovements, schemeClaims,
   } = await import("../src/db/schema");
   const { hashPassword } = await import("../src/lib/auth/password");
   const { and, eq } = await import("drizzle-orm");
@@ -152,7 +152,7 @@ async function main() {
   const passwordHash = await hashPassword(DEMO_PASSWORD); // one hash, reused
   const credentials: { role: string; name: string; phone: string; scope: string }[] = [];
 
-  // ── 1. States → C&F → depots → areas ──────────────────────────────────
+  // ── 1. States → C&F → stockists → areas ──────────────────────────────────
   const depotIndex: { id: string; name: string; spec: DepotSpec; areaIds: { id: string; name: string }[] }[] = [];
 
   for (const s of BLUEPRINT) {
@@ -162,15 +162,15 @@ async function main() {
     await db.insert(cnfs).values({ name: s.cnf, stateId: stateRow.id }).onConflictDoNothing();
     const [cnfRow] = await db.select().from(cnfs).where(eq(cnfs.name, s.cnf)).limit(1);
 
-    for (const d of s.depots) {
-      await db.insert(depots).values({ name: d.name, cnfId: cnfRow.id }).onConflictDoNothing();
-      const [depotRow] = await db.select().from(depots).where(eq(depots.name, d.name)).limit(1);
+    for (const d of s.stockists) {
+      await db.insert(stockists).values({ name: d.name, cnfId: cnfRow.id }).onConflictDoNothing();
+      const [depotRow] = await db.select().from(stockists).where(eq(stockists.name, d.name)).limit(1);
 
       await db
         .insert(areas)
-        .values(d.areas.map((name) => ({ name, depotId: depotRow.id })))
+        .values(d.areas.map((name) => ({ name, stockistId: depotRow.id })))
         .onConflictDoNothing();
-      const areaRows = await db.select().from(areas).where(eq(areas.depotId, depotRow.id));
+      const areaRows = await db.select().from(areas).where(eq(areas.stockistId, depotRow.id));
 
       depotIndex.push({
         id: depotRow.id,
@@ -183,11 +183,11 @@ async function main() {
   console.log(`Hierarchy: ${BLUEPRINT.length} states · ${BLUEPRINT.length} C&F · ${depotIndex.length} depots · ${depotIndex.reduce((n, d) => n + d.areaIds.length, 0)} areas`);
 
   // ── 2. Users ──────────────────────────────────────────────────────────
-  // Per C&F: 2 Sales Officers, each supervising 2 depots.
+  // Per C&F: 2 Sales Officers, each supervising 2 stockists.
   // Per depot: 2 field ISRs (reporting to that depot's SO) + 1 depot user.
   async function ensureUser(v: {
     name: string; phone: string; roles: ("field" | "supervisor" | "dealer" | "hq" | "khq" | "admin")[];
-    depotId?: string | null; cnfId?: string | null; reportsToUserId?: string | null;
+    stockistId?: string | null; cnfId?: string | null; reportsToUserId?: string | null;
   }) {
     const [existing] = await db.select().from(users).where(eq(users.phone, v.phone)).limit(1);
     if (existing) return existing;
@@ -195,14 +195,14 @@ async function main() {
       .insert(users)
       .values({
         name: v.name, phone: v.phone, passwordHash, accessRoles: v.roles,
-        depotId: v.depotId ?? null, cnfId: v.cnfId ?? null, reportsToUserId: v.reportsToUserId ?? null,
+        stockistId: v.stockistId ?? null, cnfId: v.cnfId ?? null, reportsToUserId: v.reportsToUserId ?? null,
       })
       .returning();
     return row;
   }
 
   const soByDepot = new Map<string, string>();
-  const fieldReps: { id: string; name: string; depotId: string; depotIdx: number }[] = [];
+  const fieldReps: { id: string; name: string; stockistId: string; depotIdx: number }[] = [];
 
   let nameSeq = 0;
   const nextName = () => `${FIRST_NAMES[nameSeq++ % FIRST_NAMES.length]} ${pick(LAST_NAMES)}`;
@@ -220,7 +220,7 @@ async function main() {
 
       for (const d of covered) {
         soByDepot.set(d.id, so.id);
-        await db.insert(userDepots).values({ userId: so.id, depotId: d.id }).onConflictDoNothing();
+        await db.insert(userStockists).values({ userId: so.id, stockistId: d.id }).onConflictDoNothing();
       }
     }
 
@@ -229,10 +229,10 @@ async function main() {
       for (let r = 0; r < 2; r++) {
         const rep = await ensureUser({
           name: nextName(), phone: nextPhone(), roles: ["field"],
-          depotId: d.id, reportsToUserId: soByDepot.get(d.id),
+          stockistId: d.id, reportsToUserId: soByDepot.get(d.id),
         });
         credentials.push({ role: "Field ISR", name: rep.name, phone: rep.phone, scope: d.name });
-        fieldReps.push({ id: rep.id, name: rep.name, depotId: d.id, depotIdx });
+        fieldReps.push({ id: rep.id, name: rep.name, stockistId: d.id, depotIdx });
         // Cover roughly half the depot's areas each.
         for (const a of d.areaIds.filter((_, i) => i % 2 === r)) {
           await db.insert(userAreas).values({ userId: rep.id, areaId: a.id }).onConflictDoNothing();
@@ -240,7 +240,7 @@ async function main() {
       }
       const depotUser = await ensureUser({
         name: `${d.name.replace(" Depot", "")} Depot Manager`, phone: nextPhone(),
-        roles: ["dealer"], depotId: d.id,
+        roles: ["dealer"], stockistId: d.id,
       });
       credentials.push({ role: "Depot", name: depotUser.name, phone: depotUser.phone, scope: d.name });
     }
@@ -250,10 +250,10 @@ async function main() {
   // ── 3. Counters ───────────────────────────────────────────────────────
   const countersByDepot = new Map<string, { id: string; areaId: string }[]>();
   for (const d of depotIndex) {
-    const existing = await db.select({ id: counters.id, areaId: counters.areaId }).from(counters).where(eq(counters.depotId, d.id));
+    const existing = await db.select({ id: counters.id, areaId: counters.areaId }).from(counters).where(eq(counters.stockistId, d.id));
     const target = 10;
     const toAdd = Math.max(0, target - existing.length);
-    const creator = fieldReps.find((r) => r.depotId === d.id)?.id ?? null;
+    const creator = fieldReps.find((r) => r.stockistId === d.id)?.id ?? null;
 
     if (toAdd > 0) {
       const rows = Array.from({ length: toAdd }, () => {
@@ -263,7 +263,7 @@ async function main() {
           name: `${pick(SHOP_PREFIX)} ${pick(SHOP_SUFFIX)}`,
           phone: nextPhone(),
           type: pick(COUNTER_TYPES),
-          depotId: d.id,
+          stockistId: d.id,
           areaId: area.id,
           address: `${area.name}, ${d.name.replace(" Depot", "")}`,
           lat: gps.lat,
@@ -276,7 +276,7 @@ async function main() {
     }
     countersByDepot.set(
       d.id,
-      await db.select({ id: counters.id, areaId: counters.areaId }).from(counters).where(eq(counters.depotId, d.id)),
+      await db.select({ id: counters.id, areaId: counters.areaId }).from(counters).where(eq(counters.stockistId, d.id)),
     );
   }
   console.log(`Counters: ${[...countersByDepot.values()].reduce((n, c) => n + c.length, 0)} total across ${depotIndex.length} depots`);
@@ -320,7 +320,7 @@ async function main() {
   const lastVisitByCounter = new Map<string, Date>();
 
   for (const rep of fieldReps) {
-    const pool = countersByDepot.get(rep.depotId) ?? [];
+    const pool = countersByDepot.get(rep.stockistId) ?? [];
     if (pool.length === 0) continue;
 
     // Skip reps that already have visits, so re-runs don't pile more on.
@@ -380,8 +380,8 @@ async function main() {
   // ── 6. Beat assignments — today + tomorrow ────────────────────────────
   let beatCount = 0;
   for (const rep of fieldReps) {
-    const pool = countersByDepot.get(rep.depotId) ?? [];
-    const so = soByDepot.get(rep.depotId) ?? null;
+    const pool = countersByDepot.get(rep.stockistId) ?? [];
+    const so = soByDepot.get(rep.stockistId) ?? null;
     for (const offset of [0, 1]) {
       const beatDate = istDate(new Date(Date.now() + offset * 86_400_000));
       const chosen = [...pool].sort(() => rng() - 0.5).slice(0, int(4, 6));
@@ -419,11 +419,11 @@ async function main() {
   // ── 8. Depot stock, movements, scheme claims ──────────────────────────
   let stockRows = 0, movementRows = 0, claimRows = 0;
   for (const d of depotIndex) {
-    const existing = await db.select({ id: depotStock.id }).from(depotStock).where(eq(depotStock.depotId, d.id));
+    const existing = await db.select({ id: stockistStock.id }).from(stockistStock).where(eq(stockistStock.stockistId, d.id));
     if (existing.length === 0) {
-      await db.insert(depotStock).values(
+      await db.insert(stockistStock).values(
         SEGMENTS.map((segment) => ({
-          depotId: d.id,
+          stockistId: d.id,
           segment,
           onHand: rng() < 0.25 ? int(0, 40) : int(90, 400),
           lowThreshold: 50,
@@ -432,25 +432,25 @@ async function main() {
       stockRows += SEGMENTS.length;
     }
 
-    const moves = await db.select({ id: stockMovements.id }).from(stockMovements).where(eq(stockMovements.depotId, d.id)).limit(1);
+    const moves = await db.select({ id: stockMovements.id }).from(stockMovements).where(eq(stockMovements.stockistId, d.id)).limit(1);
     if (moves.length === 0) {
       // qty is signed — outward movements are negative.
       await db.insert(stockMovements).values([
-        { depotId: d.id, segment: "DG10" as const, type: "inward" as const, qty: int(150, 400), note: "Factory dispatch received" },
-        { depotId: d.id, segment: "DB20" as const, type: "outward_wholesale" as const, qty: -int(30, 90), note: "Bora lifting — wholesale" },
-        { depotId: d.id, segment: "DG20" as const, type: "outward_retail" as const, qty: -int(10, 40), note: "Field beat lifting" },
+        { stockistId: d.id, segment: "DG10" as const, type: "inward" as const, qty: int(150, 400), note: "Factory dispatch received" },
+        { stockistId: d.id, segment: "DB20" as const, type: "outward_wholesale" as const, qty: -int(30, 90), note: "Bora lifting — wholesale" },
+        { stockistId: d.id, segment: "DG20" as const, type: "outward_retail" as const, qty: -int(10, 40), note: "Field beat lifting" },
       ]);
       movementRows += 3;
     }
 
-    const claims = await db.select({ id: schemeClaims.id }).from(schemeClaims).where(eq(schemeClaims.depotId, d.id)).limit(1);
+    const claims = await db.select({ id: schemeClaims.id }).from(schemeClaims).where(eq(schemeClaims.stockistId, d.id)).limit(1);
     if (claims.length === 0) {
       const pool = (countersByDepot.get(d.id) ?? []).slice(0, 3);
       if (pool.length > 0) {
         await db.insert(schemeClaims).values(
           pool.map((c, i) => ({
             counterId: c.id,
-            depotId: d.id,
+            stockistId: d.id,
             code: pick(["DEE-2026-A", "MONSOON-50", "DEE-2026-B", "FESTIVE-100"]),
             value: [250, 120, 400][i % 3],
             status: (["paid", "processing", "paid"] as const)[i % 3],

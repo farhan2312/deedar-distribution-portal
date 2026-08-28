@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ProductSegment, StockMovementType } from "@/db/schema";
 import { PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
 import { closeStockDay, recordMovement } from "@/lib/depot/actions";
-import type { DepotOption, DepotStockData, StockRow } from "@/lib/depot/data";
+import type { StockistOption, DepotStockData, StockRow } from "@/lib/depot/data";
 import { useT } from "@/lib/i18n/provider";
 import { DepotSelect } from "../_components/depot-select";
 
@@ -41,8 +41,8 @@ export function DepotStockClient({
   scope,
   data,
 }: {
-  depot: DepotOption;
-  scope: DepotOption[];
+  depot: StockistOption;
+  scope: StockistOption[];
   data: DepotStockData;
 }) {
   const router = useRouter();
@@ -70,7 +70,7 @@ export function DepotStockClient({
     }
     start(async () => {
       const res = await recordMovement({
-        depotId: depot.id,
+        stockistId: depot.id,
         segment,
         type,
         qty: n,
@@ -107,7 +107,7 @@ export function DepotStockClient({
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h4 className="text-[20px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            {t("Depot Stock")}
+            {t("Stock")}
           </h4>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
             {t("Daily inward / outward movement, tracked per SKU.")}
@@ -117,7 +117,7 @@ export function DepotStockClient({
       </div>
 
       <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label={t("Total stock at depot")} value={`${data.total.toLocaleString("en-IN")} ${t("pkts")}`} />
+        <StatCard label={t("Total stock")} value={`${data.total.toLocaleString("en-IN")} ${t("pkts")}`} />
         <StatCard label={t("Low-stock SKUs")} value={String(data.lowCount)} accent={data.lowCount > 0 ? "var(--warning)" : undefined} />
         <StatCard label={t("Movements today")} value={String(data.movementsToday)} />
       </div>
@@ -138,7 +138,7 @@ export function DepotStockClient({
           <tbody>
             {data.rows.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ color: "var(--ink-3)" }}>{t("No stock recorded for this depot yet.")}</td>
+                <td colSpan={5} style={{ color: "var(--ink-3)" }}>{t("No stock recorded for this stockist yet.")}</td>
               </tr>
             ) : (
               data.rows.map((r) => {

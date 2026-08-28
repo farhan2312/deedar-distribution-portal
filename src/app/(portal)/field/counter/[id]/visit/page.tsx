@@ -33,7 +33,7 @@ export default async function NewVisitPage({
       type: counters.type,
       typeOther: counters.typeOther,
       areaName: areas.name,
-      depotId: counters.depotId,
+      stockistId: counters.stockistId,
     })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
@@ -42,12 +42,12 @@ export default async function NewVisitPage({
   if (!counter) notFound();
 
   const isAdmin = user.accessRoles.includes("admin");
-  const canVisit = isAdmin || counter.depotId === user.depot?.id;
+  const canVisit = isAdmin || counter.stockistId === user.depot?.id;
   if (!canVisit) {
     const t = await getT();
     return (
       <Notice title={t("Add visit")}>
-        {t("This counter isn't in your depot, so you can't add a visit to it.")}
+        {t("This counter isn't at your stockist, so you can't add a visit to it.")}
       </Notice>
     );
   }

@@ -141,12 +141,12 @@ export function AreaCheckbox({
 
 export function DepotCheckbox({
   userId,
-  depotId,
+  stockistId,
   name,
   checked,
 }: {
   userId: string;
-  depotId: string;
+  stockistId: string;
   name: string;
   checked: boolean;
 }) {
@@ -161,22 +161,22 @@ export function DepotCheckbox({
         checked={checked}
         disabled={pending}
         style={{ accentColor: "var(--accent)" }}
-        onChange={() => start(() => toggleUserDepot(userId, depotId))}
+        onChange={() => start(() => toggleUserDepot(userId, stockistId))}
       />
       {name}
     </label>
   );
 }
 
-export type DepotGroup = { cnfId: string; cnfName: string; depots: { id: string; name: string }[] };
+export type DepotGroup = { cnfId: string; cnfName: string; stockists: { id: string; name: string }[] };
 
 /**
  * Sales Officer's depot assignment: pick the C&F, then check depot(s) from just
- * that C&F's list. An SO supervises depots under a single C&F, so — like
+ * that C&F's list. An SO supervises stockists under a single C&F, so — like
  * `DepotSelect` — this narrows rather than just groups.
  *
  * Defaults to the C&F of whichever depot is already checked, if any. If a row
- * has checked depots in more than one C&F (stale data from before this rule),
+ * has checked stockists in more than one C&F (stale data from before this rule),
  * only one C&F's checkboxes show at a time; the note below surfaces the rest
  * rather than hiding them silently.
  */
@@ -192,13 +192,13 @@ export function SupervisorDepotPicker({
   const t = useT();
   const [cnfId, setCnfId] = useState(() => {
     for (const g of groups) {
-      if (g.depots.some((d) => checkedDepotIds.has(d.id))) return g.cnfId;
+      if (g.stockists.some((d) => checkedDepotIds.has(d.id))) return g.cnfId;
     }
     return "";
   });
   const activeGroup = groups.find((g) => g.cnfId === cnfId);
   const otherCheckedCount = [...checkedDepotIds].filter(
-    (id) => !activeGroup?.depots.some((d) => d.id === id),
+    (id) => !activeGroup?.stockists.some((d) => d.id === id),
   ).length;
 
   return (
@@ -216,8 +216,8 @@ export function SupervisorDepotPicker({
       </select>
       {activeGroup && (
         <div className="flex flex-wrap gap-1.5">
-          {activeGroup.depots.map((d) => (
-            <DepotCheckbox key={d.id} userId={userId} depotId={d.id} name={d.name} checked={checkedDepotIds.has(d.id)} />
+          {activeGroup.stockists.map((d) => (
+            <DepotCheckbox key={d.id} userId={userId} stockistId={d.id} name={d.name} checked={checkedDepotIds.has(d.id)} />
           ))}
         </div>
       )}
@@ -230,18 +230,18 @@ export function SupervisorDepotPicker({
   );
 }
 
-/** Which group (if any) currently contains `depotId`. */
-function groupFor(groups: DepotGroup[], depotId: string | null): DepotGroup | undefined {
-  return depotId ? groups.find((g) => g.depots.some((d) => d.id === depotId)) : undefined;
+/** Which group (if any) currently contains `stockistId`. */
+function groupFor(groups: DepotGroup[], stockistId: string | null): DepotGroup | undefined {
+  return stockistId ? groups.find((g) => g.stockists.some((d) => d.id === stockistId)) : undefined;
 }
 
 /**
  * Two-step cascade: pick the C&F, then pick a depot from just that C&F's list.
  * A user's depot always belongs to exactly one C&F, so this is a genuine
- * narrowing (not just grouping) — with many depots, a flat list is a hunt.
+ * narrowing (not just grouping) — with many stockists, a flat list is a hunt.
  *
  * The C&F select is local UI state only (no server write) — it just decides
- * which depots the second dropdown offers. The actual assignment commits only
+ * which stockists the second dropdown offers. The actual assignment commits only
  * when a depot is chosen, via the existing `setUserDepot` action.
  */
 export function DepotSelect({
@@ -256,7 +256,7 @@ export function DepotSelect({
   const t = useT();
   const [pending, start] = useTransition();
   const [cnfId, setCnfId] = useState(() => groupFor(groups, value)?.cnfId ?? "");
-  const depotOptions = groups.find((g) => g.cnfId === cnfId)?.depots ?? [];
+  const depotOptions = groups.find((g) => g.cnfId === cnfId)?.stockists ?? [];
   // The depot select only shows a pre-selected value when it's actually in the
   // currently chosen C&F's list — otherwise it reads as "Select depot" until a
   // real choice is made for that C&F.
@@ -289,7 +289,7 @@ export function DepotSelect({
           start(() => setUserDepot(userId, fd));
         }}
       >
-        <option value="">{cnfId ? t("Select depot") : t("Pick a C&F first")}</option>
+        <option value="">{cnfId ? t("Select stockist") : t("Pick a C&F first")}</option>
         {depotOptions.map((d) => (
           <option key={d.id} value={d.id}>{d.name}</option>
         ))}
@@ -583,7 +583,7 @@ export function EditUserButton({
     return (
       <button
         type="button"
-        className="link"
+        className="link inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
         onClick={() => {
           setMessage(null);
           setOpen(true);

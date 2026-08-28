@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MapScopePickers } from "@/app/(portal)/_components/map-scope-pickers";
 import { formatISTDate, formatISTTime } from "@/lib/date";
 import { useT } from "@/lib/i18n/provider";
+import type { StockistKind } from "@/db/schema";
 import { PRODUCT_SEGMENTS } from "@/lib/field/products";
 import { exportCountersCsv, exportVisitsCsv } from "@/lib/khq/report-actions";
 // Types only — `reports.ts` is `server-only` and pulls in the DB driver, so a
@@ -38,6 +39,13 @@ function downloadCsv(filename: string, data: string) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+/** Same wording as the hierarchy screens, so a kind reads the same everywhere. */
+const KIND_LABEL: Record<StockistKind, string> = {
+  depot: "Depot",
+  dealer: "Dealer",
+  sub_dealer: "Sub-Dealer",
+};
 
 export function ReportsClient({
   scope,
@@ -253,7 +261,7 @@ function CountersTable({ rows, t }: { rows: CounterReportRow[]; t: (k: string) =
       <table className="table" style={{ minWidth: 1100 }}>
         <thead>
           <tr>
-            {["Name", "Mobile", "Type", "Status", "Area", "Depot", "C&F", "Created by", "Last visit", "Total visits"].map((h) => (
+            {["Name", "Mobile", "Type", "Status", "Area", "Stockist", "C&F", "Created by", "Last visit", "Total visits"].map((h) => (
               <th key={h}>{t(h)}</th>
             ))}
           </tr>
@@ -274,7 +282,13 @@ function CountersTable({ rows, t }: { rows: CounterReportRow[]; t: (k: string) =
                   </span>
                 </td>
                 <td>{r.areaName}</td>
-                <td>{r.depotName}</td>
+                <td>
+                  {r.stockistName}
+                  <div className="text-[11px]" style={{ color: "var(--ink-3)" }}>
+                    {t(KIND_LABEL[r.stockistKind])}
+                    {r.parentName ? ` · ${r.parentName}` : ""}
+                  </div>
+                </td>
                 <td>{r.cnfName}</td>
                 <td className="whitespace-nowrap">{r.createdByName ?? "—"}</td>
                 <td className="whitespace-nowrap">
@@ -298,7 +312,7 @@ function VisitsTable({ rows, t }: { rows: VisitReportRow[]; t: (k: string) => st
         <thead>
           <tr>
             {[
-              "Date", "Rep", "Counter", "Counter Mobile", "Depot", "Area", "C&F",
+              "Date", "Rep", "Counter", "Counter Mobile", "Stockist", "Area", "C&F",
               "Products", "Total Stock", "Total Sold", "Rank",
               "Competitor", "Competitor Brand", "Remarks",
             ].map((h) => (
@@ -315,7 +329,13 @@ function VisitsTable({ rows, t }: { rows: VisitReportRow[]; t: (k: string) => st
               <td className="whitespace-nowrap">{r.repName}</td>
               <td className="font-semibold">{r.counterName}</td>
               <td className="whitespace-nowrap tabular-nums">{r.counterPhone ?? "—"}</td>
-              <td>{r.depotName}</td>
+              <td>
+                {r.stockistName}
+                <div className="text-[11px]" style={{ color: "var(--ink-3)" }}>
+                  {t(KIND_LABEL[r.stockistKind])}
+                  {r.parentName ? ` · ${r.parentName}` : ""}
+                </div>
+              </td>
               <td>{r.areaName}</td>
               <td>{r.cnfName}</td>
               <td style={{ minWidth: 190 }}>

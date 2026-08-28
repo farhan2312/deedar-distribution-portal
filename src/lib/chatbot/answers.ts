@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { accessRequests, beatAssignments, counters, dayLogs, depots, visits } from "@/db/schema";
+import { accessRequests, beatAssignments, counters, dayLogs, stockists, visits } from "@/db/schema";
 import { durationLabel, formatISTTime, istDateString, istDayBounds } from "@/lib/date";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { getBugInbox } from "@/lib/bugs/notifications";
@@ -40,7 +40,7 @@ const MAX_ITEMS = 6;
  * Depot ids a "company" question is limited to.
  *
  * `null` means unrestricted (Kanpur HQ and admin genuinely see everything).
- * A C&F HQ user is scoped to the depots under their own C&F — the same rule
+ * A C&F HQ user is scoped to the stockists under their own C&F — the same rule
  * their dashboard and map already apply, so the chatbot can't become a side
  * channel to another C&F's numbers.
  */
@@ -48,9 +48,9 @@ async function companyDepotIds(user: AnswerUser): Promise<string[] | null> {
   if (user.accessRoles.includes("admin") || user.accessRoles.includes("khq")) return null;
   if (!user.cnf) return []; // hq user with no C&F mapped — sees nothing
   const rows = await db
-    .select({ id: depots.id })
-    .from(depots)
-    .where(eq(depots.cnfId, user.cnf.id));
+    .select({ id: stockists.id })
+    .from(stockists)
+    .where(eq(stockists.cnfId, user.cnf.id));
   return rows.map((r) => r.id);
 }
 
@@ -190,7 +190,7 @@ async function teamNotClockedIn(user: AnswerUser, t: T): Promise<IntentAnswer> {
   }
   return {
     text: `${missing.length} ${t(missing.length === 1 ? "rep hasn't clocked in yet." : "reps haven't clocked in yet.")}`,
-    items: capItems(missing.map((r) => ({ label: r.name, value: r.depotName ?? undefined })), t),
+    items: capItems(missing.map((r) => ({ label: r.name, value: r.stockistName ?? undefined })), t),
     link: { href: "/supervisor/day-log", label: t("Open Day Log") },
   };
 }
@@ -274,21 +274,21 @@ async function teamTopRep(user: AnswerUser, t: T): Promise<IntentAnswer> {
 // ── C&F HQ / Kanpur HQ / Admin ───────────────────────────────────────────
 
 /** Visit-scope predicate for company questions, honouring the C&F limit. */
-function visitScope(depotIds: string[] | null, start: Date, end: Date) {
+function visitScope(stockistIds: string[] | null, start: Date, end: Date) {
   const window = and(gte(visits.visitedAt, start), lt(visits.visitedAt, end));
-  return depotIds ? and(window, inArray(counters.depotId, depotIds)) : window;
+  return stockistIds ? and(window, inArray(counters.stockistId, stockistIds)) : window;
 }
 
 async function packetsSoldToday(user: AnswerUser, t: T): Promise<IntentAnswer> {
-  const depotIds = await companyDepotIds(user);
-  if (depotIds?.length === 0) return { text: t("You aren't mapped to a C&F yet — ask Central Admin.") };
+  const stockistIds = await companyDepotIds(user);
+  if (stockistIds?.length === 0) return { text: t("You aren't mapped to a C&F yet — ask Central Admin.") };
   const { start, end } = istDayBounds();
 
   const [row] = await db
     .select({ packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int` })
     .from(visits)
     .innerJoin(counters, eq(counters.id, visits.counterId))
-    .where(visitScope(depotIds, start, end));
+    .where(visitScope(stockistIds, start, end));
 
   const n = row?.packets ?? 0;
   return {
@@ -298,15 +298,15 @@ async function packetsSoldToday(user: AnswerUser, t: T): Promise<IntentAnswer> {
 }
 
 async function visitsCompanyToday(user: AnswerUser, t: T): Promise<IntentAnswer> {
-  const depotIds = await companyDepotIds(user);
-  if (depotIds?.length === 0) return { text: t("You aren't mapped to a C&F yet — ask Central Admin.") };
+  const stockistIds = await companyDepotIds(user);
+  if (stockistIds?.length === 0) return { text: t("You aren't mapped to a C&F yet — ask Central Admin.") };
   const { start, end } = istDayBounds();
 
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(visits)
     .innerJoin(counters, eq(counters.id, visits.counterId))
-    .where(visitScope(depotIds, start, end));
+    .where(visitScope(stockistIds, start, end));
 
   const n = row?.n ?? 0;
   return {
@@ -316,11 +316,11 @@ async function visitsCompanyToday(user: AnswerUser, t: T): Promise<IntentAnswer>
 }
 
 async function decliningCounters(user: AnswerUser, t: T): Promise<IntentAnswer> {
-  const depotIds = await companyDepotIds(user);
-  if (depotIds?.length === 0) return { text: t("You aren't mapped to a C&F yet — ask Central Admin.") };
+  const stockistIds = await companyDepotIds(user);
+  if (stockistIds?.length === 0) return { text: t("You aren't mapped to a C&F yet — ask Central Admin.") };
 
-  const scope = depotIds
-    ? and(eq(counters.status, "declining"), inArray(counters.depotId, depotIds))
+  const scope = stockistIds
+    ? and(eq(counters.status, "declining"), inArray(counters.stockistId, stockistIds))
     : eq(counters.status, "declining");
   const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(counters).where(scope);
 
@@ -332,17 +332,17 @@ async function decliningCounters(user: AnswerUser, t: T): Promise<IntentAnswer> 
 }
 
 async function topDepotToday(user: AnswerUser, t: T): Promise<IntentAnswer> {
-  const depotIds = await companyDepotIds(user);
-  if (depotIds?.length === 0) return { text: t("You aren't mapped to a C&F yet — ask Central Admin.") };
+  const stockistIds = await companyDepotIds(user);
+  if (stockistIds?.length === 0) return { text: t("You aren't mapped to a C&F yet — ask Central Admin.") };
   const { start, end } = istDayBounds();
 
   const rows = await db
-    .select({ name: depots.name, n: sql<number>`count(*)::int` })
+    .select({ name: stockists.name, n: sql<number>`count(*)::int` })
     .from(visits)
     .innerJoin(counters, eq(counters.id, visits.counterId))
-    .innerJoin(depots, eq(depots.id, counters.depotId))
-    .where(visitScope(depotIds, start, end))
-    .groupBy(depots.name)
+    .innerJoin(stockists, eq(stockists.id, counters.stockistId))
+    .where(visitScope(stockistIds, start, end))
+    .groupBy(stockists.name)
     .orderBy(desc(sql`count(*)`))
     .limit(4);
 

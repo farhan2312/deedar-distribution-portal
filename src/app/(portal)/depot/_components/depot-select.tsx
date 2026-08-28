@@ -1,10 +1,10 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import type { DepotOption } from "@/lib/depot/data";
+import type { StockistOption } from "@/lib/depot/data";
 
 /** Admin depot picker for the Depot portal (no "all" — data is per-depot). */
-export function DepotSelect({ options, value }: { options: DepotOption[]; value: string }) {
+export function DepotSelect({ options, value }: { options: StockistOption[]; value: string }) {
   const router = useRouter();
   const pathname = usePathname();
   return (

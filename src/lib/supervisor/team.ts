@@ -2,24 +2,24 @@ import "server-only";
 import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { AccessRole, DayLog } from "@/db/schema";
-import { areas, beatAssignments, counters, dayLogs, depots, users, visits } from "@/db/schema";
+import { areas, beatAssignments, counters, dayLogs, stockists, users, visits } from "@/db/schema";
 
 /** The subset of the current user needed to scope a supervisor's team. */
 export type ScopeUser = {
   id: string;
   accessRoles: AccessRole[];
   depot: { id: string; name: string } | null;
-  supervisedDepots: { id: string; name: string }[];
+  supervisedStockists: { id: string; name: string }[];
 };
 
-export type DepotOption = { id: string; name: string };
+export type StockistOption = { id: string; name: string };
 
 export type TeamRep = {
   id: string;
   name: string;
   phone: string;
-  depotId: string | null;
-  depotName: string | null;
+  stockistId: string | null;
+  stockistName: string | null;
 };
 
 export type VisitsToday = {
@@ -36,43 +36,43 @@ export type VisitsToday = {
 };
 
 /** Depots a supervisor can look at (their own + supervised), deduped by id. */
-export function scopeDepots(user: ScopeUser): DepotOption[] {
-  const byId = new Map<string, DepotOption>();
-  for (const d of user.supervisedDepots) byId.set(d.id, d);
+export function scopeStockists(user: ScopeUser): StockistOption[] {
+  const byId = new Map<string, StockistOption>();
+  for (const d of user.supervisedStockists) byId.set(d.id, d);
   if (user.depot) byId.set(user.depot.id, user.depot);
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
- * The depots in scope for a screen's depot selector. Admin is unrestricted, so
- * it gets every depot; a supervisor gets their own + supervised depots.
+ * The stockists in scope for a screen's depot selector. Admin is unrestricted, so
+ * it gets every depot; a supervisor gets their own + supervised stockists.
  */
-export async function getScopeDepots(user: ScopeUser): Promise<DepotOption[]> {
+export async function getScopeStockists(user: ScopeUser): Promise<StockistOption[]> {
   if (user.accessRoles.includes("admin")) {
-    return db.select({ id: depots.id, name: depots.name }).from(depots).orderBy(asc(depots.name));
+    return db.select({ id: stockists.id, name: stockists.name }).from(stockists).orderBy(asc(stockists.name));
   }
-  return scopeDepots(user);
+  return scopeStockists(user);
 }
 
 /**
  * Resolve which depot is being viewed from the `?depot=` param against the
- * in-scope list. Returns `null` for "all depots" or an unknown/out-of-scope id.
+ * in-scope list. Returns `null` for "all stockists" or an unknown/out-of-scope id.
  */
-export function pickDepot(depots: DepotOption[], requested: string | undefined): DepotOption | null {
+export function pickStockist(stockists: StockistOption[], requested: string | undefined): StockistOption | null {
   if (!requested || requested === "all") return null;
-  return depots.find((d) => d.id === requested) ?? null;
+  return stockists.find((d) => d.id === requested) ?? null;
 }
 
 /**
  * Field reps under this supervisor: those whose `reportsToUserId` is the SO.
  * Admins see every field rep. Optionally narrowed to one depot.
  */
-export async function getTeamReps(user: ScopeUser, depotId?: string | null): Promise<TeamRep[]> {
+export async function getTeamReps(user: ScopeUser, stockistId?: string | null): Promise<TeamRep[]> {
   const isAdmin = user.accessRoles.includes("admin");
   const base = isAdmin
     ? sql`'field' = ANY(${users.accessRoles}::text[])`
     : eq(users.reportsToUserId, user.id);
-  const where = depotId ? and(base, eq(users.depotId, depotId)) : base;
+  const where = stockistId ? and(base, eq(users.stockistId, stockistId)) : base;
 
   const rows = await db
     .select({
@@ -80,16 +80,16 @@ export async function getTeamReps(user: ScopeUser, depotId?: string | null): Pro
       name: users.name,
       phone: users.phone,
       accessRoles: users.accessRoles,
-      depotId: users.depotId,
-      depotName: depots.name,
+      stockistId: users.stockistId,
+      stockistName: stockists.name,
     })
     .from(users)
-    .leftJoin(depots, eq(depots.id, users.depotId))
+    .leftJoin(stockists, eq(stockists.id, users.stockistId))
     .where(where);
 
   return rows
     .filter((r) => r.accessRoles.includes("field"))
-    .map((r) => ({ id: r.id, name: r.name, phone: r.phone, depotId: r.depotId, depotName: r.depotName }))
+    .map((r) => ({ id: r.id, name: r.name, phone: r.phone, stockistId: r.stockistId, stockistName: r.stockistName }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 

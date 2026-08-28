@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { dayLogs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { durationLabel, formatISTDate, formatISTTime, istDateString } from "@/lib/date";
-import { getScopeDepots, getTeamReps, pickDepot } from "@/lib/supervisor/team";
+import { getScopeStockists, getTeamReps, pickStockist } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
@@ -25,8 +25,8 @@ export default async function SupervisorExceptionsPage({
   const t = await getT();
 
   const { depot: requestedDepot } = await searchParams;
-  const depots = await getScopeDepots(user);
-  const depot = pickDepot(depots, requestedDepot);
+  const stockists = await getScopeStockists(user);
+  const depot = pickStockist(stockists, requestedDepot);
 
   const reps = await getTeamReps(user, depot?.id);
   const repIds = reps.map((r) => r.id);
@@ -64,7 +64,7 @@ export default async function SupervisorExceptionsPage({
             {t("Reps who clocked in but never clocked out. Force-close the day with the correct end time on their behalf.")}
           </p>
         </div>
-        {depots.length > 1 && <DepotPicker options={depots} value={depot?.id ?? "all"} />}
+        {stockists.length > 1 && <DepotPicker options={stockists} value={depot?.id ?? "all"} />}
       </div>
 
       <ExceptionsClient rows={rows} />

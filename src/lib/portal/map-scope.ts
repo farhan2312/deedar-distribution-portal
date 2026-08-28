@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import type { AccessRole } from "@/db/schema";
-import { areas, cnfs, counters, depots, visits } from "@/db/schema";
+import { areas, cnfs, counters, stockists, visits } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 
 export type ScopeOption = { id: string; name: string };
@@ -15,7 +15,7 @@ export type MapScopeUser = {
   accessRoles: AccessRole[];
   cnf: ScopeOption | null;
   depot: ScopeOption | null;
-  supervisedDepots: ScopeOption[];
+  supervisedStockists: ScopeOption[];
   areas: ScopeOption[];
 };
 
@@ -40,7 +40,7 @@ export type ScopeLevel = {
  * much data happens to exist:
  *   • Central Admin — all three, on every map. Nothing chosen means everything.
  *   • C&F HQ        — Depot → Area, pinned to their own C&F.
- *   • Sales Officer — Depot (their assigned depots) → Area.
+ *   • Sales Officer — Depot (their assigned stockists) → Area.
  *   • Field ISR     — Area only, within their assigned areas.
  *
  * A level is offered even when it currently has one option or none — the set
@@ -65,7 +65,7 @@ export type MapScope = {
    * note the Area level deliberately does NOT narrow reps, only counters,
    * since a rep belongs to a depot rather than to one area.
    */
-  depotIds: string[] | null;
+  stockistIds: string[] | null;
   /** Predicate on `counters` for the chosen scope; `undefined` = everything. */
   where: SQL | undefined;
   /** Heading label — the narrowest chosen level. */
@@ -88,7 +88,7 @@ function pick(options: ScopeOption[], requested: string | undefined): ScopeOptio
 /** Depots a Sales Officer may look at — their own plus supervised, deduped. */
 function supervisorDepots(user: MapScopeUser): ScopeOption[] {
   const byId = new Map<string, ScopeOption>();
-  for (const d of user.supervisedDepots) byId.set(d.id, d);
+  for (const d of user.supervisedStockists) byId.set(d.id, d);
   if (user.depot) byId.set(user.depot.id, user.depot);
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -123,26 +123,26 @@ export async function resolveMapScope(
   }
 
   // ── Depot level ────────────────────────────────────────────────────────
-  // Admin and HQ read depots from the C&F; an SO is limited to their own.
+  // Admin and HQ read stockists from the C&F; an SO is limited to their own.
   let depotOptions: ScopeOption[] = [];
   if (hasDepotLevel) {
     if (section === "supervisor" && !isAdmin) {
       depotOptions = supervisorDepots(user);
     } else if (cnf) {
       depotOptions = await db
-        .select({ id: depots.id, name: depots.name })
-        .from(depots)
-        .where(eq(depots.cnfId, cnf.id))
-        .orderBy(asc(depots.name));
+        .select({ id: stockists.id, name: stockists.name })
+        .from(stockists)
+        .where(eq(stockists.cnfId, cnf.id))
+        .orderBy(asc(stockists.name));
     } else if (isAdmin) {
       depotOptions = await db
-        .select({ id: depots.id, name: depots.name })
-        .from(depots)
-        .orderBy(asc(depots.name));
+        .select({ id: stockists.id, name: stockists.name })
+        .from(stockists)
+        .orderBy(asc(stockists.name));
     }
   }
   const depot = pick(depotOptions, params.depot);
-  const scopedDepotIds = depot ? [depot.id] : depotOptions.map((d) => d.id);
+  const scopedStockistIds = depot ? [depot.id] : depotOptions.map((d) => d.id);
 
   // ── Area level ─────────────────────────────────────────────────────────
   // An ISR picks from their own areas. Everyone else picks from the selected
@@ -151,41 +151,41 @@ export async function resolveMapScope(
   let areaOptions: ScopeOption[] = [];
   if (section === "field" && !isAdmin) {
     areaOptions = [...user.areas].sort((a, b) => a.name.localeCompare(b.name));
-  } else if (scopedDepotIds.length) {
+  } else if (scopedStockistIds.length) {
     areaOptions = await db
       .select({ id: areas.id, name: areas.name })
       .from(areas)
-      .where(inArray(areas.depotId, scopedDepotIds))
+      .where(inArray(areas.stockistId, scopedStockistIds))
       .orderBy(asc(areas.name));
   }
   const area = pick(areaOptions, params.area);
 
   // ── Derive the counter predicate, narrowest level first ────────────────
-  let depotIds: string[] | null;
+  let stockistIds: string[] | null;
   let where: SQL | undefined;
 
   if (area) {
     where = eq(counters.areaId, area.id);
-    depotIds = scopedDepotIds.length ? scopedDepotIds : null;
+    stockistIds = scopedStockistIds.length ? scopedStockistIds : null;
   } else if (depot) {
-    where = eq(counters.depotId, depot.id);
-    depotIds = [depot.id];
+    where = eq(counters.stockistId, depot.id);
+    stockistIds = [depot.id];
   } else if (section === "field" && !isAdmin) {
     // An ISR with no area picked sees all of their own areas.
     const ids = areaOptions.map((a) => a.id);
     where = ids.length ? inArray(counters.areaId, ids) : sql`false`;
-    depotIds = user.depot ? [user.depot.id] : null;
+    stockistIds = user.depot ? [user.depot.id] : null;
   } else if (isAdmin && !cnf) {
     where = undefined; // everything
-    depotIds = null;
-  } else if (scopedDepotIds.length) {
-    where = inArray(counters.depotId, scopedDepotIds);
-    depotIds = scopedDepotIds;
+    stockistIds = null;
+  } else if (scopedStockistIds.length) {
+    where = inArray(counters.stockistId, scopedStockistIds);
+    stockistIds = scopedStockistIds;
   } else {
-    // Nothing in scope: a C&F with no depots, an SO with none assigned, an
+    // Nothing in scope: a C&F with no stockists, an SO with none assigned, an
     // HQ user not mapped to a C&F. Match nothing rather than falling open.
     where = sql`false`;
-    depotIds = [];
+    stockistIds = [];
   }
 
   // With a single option there's nothing to choose, so name it outright
@@ -202,15 +202,15 @@ export async function resolveMapScope(
   if (hasDepotLevel) {
     levels.push({
       key: "depot",
-      label: t("Depot"),
-      allLabel: t("All depots"),
+      label: t("Stockist"),
+      allLabel: t("All stockists"),
       options: depotOptions,
       value: depot?.id ?? "all",
     });
   }
   levels.push({ key: "area", label: t("Area"), allLabel: t("All areas"), options: areaOptions, value: area?.id ?? "all" });
 
-  return { levels, cnf, depot, area, depotIds, where, label };
+  return { levels, cnf, depot, area, stockistIds, where, label };
 }
 
 /**

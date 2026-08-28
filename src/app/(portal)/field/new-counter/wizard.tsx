@@ -17,7 +17,7 @@ import { useT } from "@/lib/i18n/provider";
 import { GpsCapture } from "../_components/gps-capture";
 
 export type AreaOption = { id: string; name: string };
-export type DepotOption = { id: string; name: string; cnfId: string; areas: AreaOption[] };
+export type StockistOption = { id: string; name: string; cnfId: string; areas: AreaOption[] };
 export type CnfOption = { id: string; name: string };
 
 /** "field" (default) uses field actions and returns to the beat; "supervisor"
@@ -27,7 +27,7 @@ export type WizardVariant = "field" | "supervisor";
 
 type WizardMode =
   | { mode: "locked"; depot: { id: string; name: string }; cnf: { name: string }; areas: AreaOption[] }
-  | { mode: "open"; cnfs: CnfOption[]; depots: DepotOption[] };
+  | { mode: "open"; cnfs: CnfOption[]; stockists: StockistOption[] };
 
 type WizardProps = WizardMode & { variant?: WizardVariant };
 
@@ -51,7 +51,7 @@ export function NewCounterWizard(props: WizardProps) {
     phone: "",
     address: "",
     cnfId: "",
-    depotId: props.mode === "locked" ? props.depot.id : "",
+    stockistId: props.mode === "locked" ? props.depot.id : "",
     areaId: "",
     type: "" as NewCounterInput["type"] | "",
     /** Manual label, only meaningful (and required) when type is "Others". */
@@ -62,7 +62,7 @@ export function NewCounterWizard(props: WizardProps) {
   // exists — a field rep is then routed to add a visit (id + canVisit set),
   // while a supervisor just sees it's taken.
   const [dup, setDup] = useState<
-    { name: string; type: string; area: string; id?: string; depotName?: string; canVisit?: boolean } | null
+    { name: string; type: string; area: string; id?: string; stockistName?: string; canVisit?: boolean } | null
   >(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
@@ -99,12 +99,12 @@ export function NewCounterWizard(props: WizardProps) {
 
   // Resolve display + option lists depending on locked vs open mode.
   const cnfName = props.mode === "locked" ? props.cnf.name : props.cnfs.find((c) => c.id === draft.cnfId)?.name ?? "";
-  const depotName = props.mode === "locked" ? props.depot.name : props.depots.find((d) => d.id === draft.depotId)?.name ?? "";
-  const depotOptionsForCnf = props.mode === "open" ? props.depots.filter((d) => d.cnfId === draft.cnfId) : [];
+  const stockistName = props.mode === "locked" ? props.depot.name : props.stockists.find((d) => d.id === draft.stockistId)?.name ?? "";
+  const stockistOptionsForCnf = props.mode === "open" ? props.stockists.filter((d) => d.cnfId === draft.cnfId) : [];
   const areaOptions =
     props.mode === "locked"
       ? props.areas
-      : props.depots.find((d) => d.id === draft.depotId)?.areas ?? [];
+      : props.stockists.find((d) => d.id === draft.stockistId)?.areas ?? [];
   const areaName = areaOptions.find((a) => a.id === draft.areaId)?.name ?? "";
 
   function goDetails() {
@@ -120,8 +120,8 @@ export function NewCounterWizard(props: WizardProps) {
 
   function goReview() {
     setError("");
-    if (!draft.name.trim() || !draft.depotId || !draft.areaId || !draft.type) {
-      setError(t("Fill name, depot, area and type."));
+    if (!draft.name.trim() || !draft.stockistId || !draft.areaId || !draft.type) {
+      setError(t("Fill name, stockist, area and type."));
       return;
     }
     if (draft.type === "Others" && !draft.typeOther.trim()) {
@@ -142,7 +142,7 @@ export function NewCounterWizard(props: WizardProps) {
       name: draft.name,
       phone: draft.phone,
       address: draft.address,
-      depotId: draft.depotId,
+      stockistId: draft.stockistId,
       areaId: draft.areaId,
       type: draft.type as NewCounterInput["type"],
       typeOther: draft.type === "Others" ? draft.typeOther.trim() : undefined,
@@ -251,7 +251,7 @@ export function NewCounterWizard(props: WizardProps) {
                 </div>
                 <div className="text-[13px]" style={{ color: "var(--ink-1)" }}>
                   {dup.name} · {dup.type} · {dup.area}
-                  {dup.depotName && ` · ${dup.depotName}`}
+                  {dup.stockistName && ` · ${dup.stockistName}`}
                 </div>
                 {dup.id && dup.canVisit && (
                   <button
@@ -267,7 +267,7 @@ export function NewCounterWizard(props: WizardProps) {
                 )}
                 {dup.id && dup.canVisit === false && (
                   <p className="mt-2 text-[12px]" style={{ color: "var(--ink-2)" }}>
-                    {t("It's in another depot, so you can't add a visit to it from here.")}
+                    {t("It's at another stockist, so you can't add a visit to it from here.")}
                   </p>
                 )}
               </div>
@@ -310,8 +310,8 @@ export function NewCounterWizard(props: WizardProps) {
                 <Field label={t("C&F")}>
                   <input className="inp" type="text" value={cnfName} disabled />
                 </Field>
-                <Field label={t("Depot")}>
-                  <input className="inp" type="text" value={depotName} disabled />
+                <Field label={t("Stockist")}>
+                  <input className="inp" type="text" value={stockistName} disabled />
                 </Field>
               </div>
             ) : (
@@ -321,7 +321,7 @@ export function NewCounterWizard(props: WizardProps) {
                   <select
                     className="inp"
                     value={draft.cnfId}
-                    onChange={(e) => setDraft({ ...draft, cnfId: e.target.value, depotId: "", areaId: "" })}
+                    onChange={(e) => setDraft({ ...draft, cnfId: e.target.value, stockistId: "", areaId: "" })}
                   >
                     <option value="">{t("Select")}</option>
                     {props.cnfs.map((c) => (
@@ -330,15 +330,15 @@ export function NewCounterWizard(props: WizardProps) {
                   </select>
                 </div>
                 <div className="field">
-                  <label>{t("Depot *")}</label>
+                  <label>{t("Stockist *")}</label>
                   <select
                     className="inp"
-                    value={draft.depotId}
+                    value={draft.stockistId}
                     disabled={!draft.cnfId}
-                    onChange={(e) => setDraft({ ...draft, depotId: e.target.value, areaId: "" })}
+                    onChange={(e) => setDraft({ ...draft, stockistId: e.target.value, areaId: "" })}
                   >
                     <option value="">{draft.cnfId ? t("Select") : t("Pick a C&F first")}</option>
-                    {depotOptionsForCnf.map((d) => (
+                    {stockistOptionsForCnf.map((d) => (
                       <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
                   </select>
@@ -351,7 +351,7 @@ export function NewCounterWizard(props: WizardProps) {
               <select
                 className="inp"
                 value={draft.areaId}
-                disabled={props.mode === "open" && !draft.depotId}
+                disabled={props.mode === "open" && !draft.stockistId}
                 onChange={(e) => setDraft({ ...draft, areaId: e.target.value })}
               >
                 <option value="">{t("Select")}</option>
@@ -425,7 +425,7 @@ export function NewCounterWizard(props: WizardProps) {
                 <Review k={t("Type")} v={draft.type === "Others" ? draft.typeOther.trim() : t(draft.type)} />
                 <Review k={t("Address")} v={draft.address || "—"} />
                 <Review k={t("C&F")} v={cnfName} />
-                <Review k={t("Depot")} v={depotName} />
+                <Review k={t("Stockist")} v={stockistName} />
                 <Review k={t("Area")} v={areaName} />
                 <Review k={t("GPS")} v={draft.gps || "—"} />
               </div>

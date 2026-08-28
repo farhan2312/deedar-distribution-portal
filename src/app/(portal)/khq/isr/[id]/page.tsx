@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, counters, dayLogs, depots, users, visits, type ProductSegment, type VisitItem } from "@/db/schema";
+import { areas, counters, dayLogs, stockists, users, visits, type ProductSegment, type VisitItem } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { durationLabel, formatISTDate, formatISTTime, istDateString } from "@/lib/date";
@@ -50,10 +50,10 @@ export default async function KhqIsrPage({
       name: users.name,
       phone: users.phone,
       roles: users.accessRoles,
-      depot: depots.name,
+      depot: stockists.name,
     })
     .from(users)
-    .leftJoin(depots, eq(depots.id, users.depotId))
+    .leftJoin(stockists, eq(stockists.id, users.stockistId))
     .where(eq(users.id, isrId))
     .limit(1);
 
@@ -196,7 +196,7 @@ export default async function KhqIsrPage({
           </Link>
           <h1 className="page-title mt-1">{isr.name}</h1>
           <p className="page-subtitle">
-            {isr.depot ?? t("No depot")}
+            {isr.depot ?? t("No stockist")}
             {isr.phone ? ` · ${isr.phone}` : ""}
             {" · "}
             {formatISTDate(date)}

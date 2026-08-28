@@ -9,7 +9,7 @@ const ADMIN_AREA_NAME = "Karvar";
 async function main() {
   const { eq } = await import("drizzle-orm");
   const { db } = await import("../src/db");
-  const { users, depots, areas, userAreas, userDepots } = await import(
+  const { users, stockists, areas, userAreas, userStockists } = await import(
     "../src/db/schema"
   );
   const { hashPassword } = await import("../src/lib/auth/password");
@@ -29,8 +29,8 @@ async function main() {
 
   const [homeDepot] = await db
     .select()
-    .from(depots)
-    .where(eq(depots.name, ADMIN_DEPOT_NAME))
+    .from(stockists)
+    .where(eq(stockists.name, ADMIN_DEPOT_NAME))
     .limit(1);
   const [homeArea] = homeDepot
     ? await db
@@ -39,7 +39,7 @@ async function main() {
         .where(eq(areas.name, ADMIN_AREA_NAME))
         .limit(1)
     : [];
-  const allDepots = await db.select().from(depots);
+  const allStockists = await db.select().from(stockists);
 
   const [existing] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
 
@@ -51,7 +51,7 @@ async function main() {
         name,
         passwordHash,
         accessRoles: allRoles,
-        depotId: homeDepot?.id ?? null,
+        stockistId: homeDepot?.id ?? null,
         cnfId: homeDepot?.cnfId ?? null,
         updatedAt: new Date(),
       })
@@ -66,7 +66,7 @@ async function main() {
         phone,
         passwordHash,
         accessRoles: allRoles,
-        depotId: homeDepot?.id ?? null,
+        stockistId: homeDepot?.id ?? null,
         cnfId: homeDepot?.cnfId ?? null,
       })
       .returning({ id: users.id });
@@ -74,14 +74,14 @@ async function main() {
     console.log(`Created admin "${name}" (${phone}) with all access roles.`);
   }
 
-  // Field preview needs an assigned area; supervisor preview needs assigned depots.
+  // Field preview needs an assigned area; supervisor preview needs assigned stockists.
   await db.delete(userAreas).where(eq(userAreas.userId, userId));
   if (homeArea) {
     await db.insert(userAreas).values({ userId, areaId: homeArea.id });
   }
-  await db.delete(userDepots).where(eq(userDepots.userId, userId));
-  if (allDepots.length > 0) {
-    await db.insert(userDepots).values(allDepots.map((d) => ({ userId, depotId: d.id })));
+  await db.delete(userStockists).where(eq(userStockists.userId, userId));
+  if (allStockists.length > 0) {
+    await db.insert(userStockists).values(allStockists.map((d) => ({ userId, stockistId: d.id })));
   }
 
   process.exit(0);

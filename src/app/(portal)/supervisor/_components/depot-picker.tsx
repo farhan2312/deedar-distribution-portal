@@ -1,11 +1,11 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { DepotOption } from "@/lib/supervisor/team";
+import type { StockistOption } from "@/lib/supervisor/team";
 
 /** Filters a screen to one depot (or all) via ?depot=. Other query params are
  * preserved, so this composes with the C&F picker on the HQ map. */
-export function DepotPicker({ options, value }: { options: DepotOption[]; value: string }) {
+export function DepotPicker({ options, value }: { options: StockistOption[]; value: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -24,7 +24,7 @@ export function DepotPicker({ options, value }: { options: DepotOption[]; value:
       onChange={(e) => select(e.target.value)}
       aria-label="Depot"
     >
-      <option value="all">All depots</option>
+      <option value="all">All stockists</option>
       {options.map((o) => (
         <option key={o.id} value={o.id}>
           {o.name}

@@ -36,14 +36,14 @@ export default async function SupervisorMapPage({
 
   // Depot → Area for a Sales Officer; Central Admin also gets the C&F level.
   const scope = await resolveMapScope(user, "supervisor", await searchParams);
-  const depotIds = scope.depotIds;
+  const stockistIds = scope.stockistIds;
 
   // The roster follows the depot level only — an area narrows counters, not
   // people, since a rep belongs to a depot rather than to one area.
   const allReps = await getTeamReps(user, scope.depot?.id);
   const reps =
-    !scope.depot && depotIds
-      ? allReps.filter((r) => r.depotId != null && depotIds.includes(r.depotId))
+    !scope.depot && stockistIds
+      ? allReps.filter((r) => r.stockistId != null && stockistIds.includes(r.stockistId))
       : allReps;
   const repIds = reps.map((r) => r.id);
   const today = istDateString();
@@ -100,7 +100,7 @@ export default async function SupervisorMapPage({
       id: r.id,
       name: r.name,
       status: repStatus(log?.startAt ?? null, log?.endAt ?? null, (v?.count ?? 0) > 0),
-      area: last?.area ?? r.depotName ?? "—",
+      area: last?.area ?? r.stockistName ?? "—",
       visits: v?.count ?? 0,
       counters: v?.counters ?? 0,
       lastLabel: last ? `${last.counterName} · ${formatISTTime(last.visitedAt)}` : "—",
@@ -118,7 +118,7 @@ export default async function SupervisorMapPage({
       controls={<MapScopePickers levels={scope.levels} />}
       emptyMessage={
         scope.depot
-          ? t("No field reps report to you in this depot yet.")
+          ? t("No field reps report to you in this stockist yet.")
           : t("No field reps report to you yet.")
       }
     />

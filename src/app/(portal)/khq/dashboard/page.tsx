@@ -6,7 +6,7 @@ import {
   cnfs,
   counters,
   dayLogs,
-  depots,
+  stockists,
   schemeClaims,
   states,
   users,
@@ -129,51 +129,51 @@ export default async function KhqDashboardPage({
   const range = resolveRange(params, earliest?.d ?? null);
 
   // State scope. Resolved before the aggregates so every query below can be
-  // filtered by the same depot list: state → C&Fs → depots → counters.
+  // filtered by the same depot list: state → C&Fs → stockists → counters.
   const stateRows = await db.select().from(states);
   const selectedState = stateRows.find((s) => s.id === params.state) ?? null;
   const scopedCnfs = selectedState
     ? await db.select({ id: cnfs.id }).from(cnfs).where(eq(cnfs.stateId, selectedState.id))
     : null;
-  const scopedDepots = scopedCnfs
+  const scopedStockists = scopedCnfs
     ? await db
-        .select({ id: depots.id })
-        .from(depots)
-        .where(scopedCnfs.length ? inArray(depots.cnfId, scopedCnfs.map((c) => c.id)) : sql`false`)
+        .select({ id: stockists.id })
+        .from(stockists)
+        .where(scopedCnfs.length ? inArray(stockists.cnfId, scopedCnfs.map((c) => c.id)) : sql`false`)
     : null;
-  const scopedDepotIds = scopedDepots?.map((d) => d.id) ?? null;
+  const scopedStockistIds = scopedStockists?.map((d) => d.id) ?? null;
 
   /** Counter-side scope predicate, or undefined company-wide. Every visit
    * query that uses it joins `counters`, since the state lives up that chain
    * rather than on the visit itself. */
-  const depotScope = scopedDepotIds
-    ? scopedDepotIds.length
-      ? inArray(counters.depotId, scopedDepotIds)
+  const stockistScope = scopedStockistIds
+    ? scopedStockistIds.length
+      ? inArray(counters.stockistId, scopedStockistIds)
       : sql`false`
     : undefined;
 
   const now = nowInstant();
   const day = istDayBounds(now);
   const today = istDateString(now);
-  const inRange = and(gte(visits.visitedAt, range.start), lt(visits.visitedAt, range.end), depotScope);
-  const inPrev = and(gte(visits.visitedAt, range.prevStart), lt(visits.visitedAt, range.prevEnd), depotScope);
-  const inToday = and(gte(visits.visitedAt, day.start), lt(visits.visitedAt, day.end), depotScope);
+  const inRange = and(gte(visits.visitedAt, range.start), lt(visits.visitedAt, range.end), stockistScope);
+  const inPrev = and(gte(visits.visitedAt, range.prevStart), lt(visits.visitedAt, range.prevEnd), stockistScope);
+  const inToday = and(gte(visits.visitedAt, day.start), lt(visits.visitedAt, day.end), stockistScope);
 
   // All aggregates run in parallel — sequential awaits on a dashboard multiply
   // the DB round-trip cost.
   const [
     allStates,
     allCnfs,
-    allDepots,
+    allStockists,
     allCounters,
     allReps,
-    perDepotToday,
+    perStockistToday,
     todayTotals,
     activeRepsRows,
     periodMix,
     periodCore,
     prevCore,
-    periodByDepot,
+    periodByStockist,
     periodByCnf,
     todayByIsr,
     periodByArea,
@@ -187,12 +187,12 @@ export default async function KhqDashboardPage({
   ] = await Promise.all([
     db.select().from(states),
     db.select().from(cnfs),
-    db.select().from(depots),
+    db.select().from(stockists),
     db
       .select({
         id: counters.id,
         status: counters.status,
-        depotId: counters.depotId,
+        stockistId: counters.stockistId,
         type: counters.type,
         name: counters.name,
         area: areas.name,
@@ -200,16 +200,16 @@ export default async function KhqDashboardPage({
       })
       .from(counters)
       .innerJoin(areas, eq(areas.id, counters.areaId))
-      .where(depotScope),
+      .where(stockistScope),
     db
-      .select({ id: users.id, name: users.name, depotId: users.depotId, roles: users.accessRoles })
+      .select({ id: users.id, name: users.name, stockistId: users.stockistId, roles: users.accessRoles })
       .from(users)
-      .where(scopedDepotIds ? inArray(users.depotId, scopedDepotIds) : undefined),
+      .where(scopedStockistIds ? inArray(users.stockistId, scopedStockistIds) : undefined),
     // Per-depot activity TODAY — the bottom table stays a live "today" view
     // regardless of the selected period, which is what an ops table is for.
     db
       .select({
-        depotId: counters.depotId,
+        stockistId: counters.stockistId,
         visits: sql<number>`count(*)::int`,
         packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
         avgSeconds: sql<number>`coalesce(avg(${visits.durationSeconds}), 0)::int`,
@@ -217,7 +217,7 @@ export default async function KhqDashboardPage({
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
       .where(inToday)
-      .groupBy(counters.depotId),
+      .groupBy(counters.stockistId),
     db
       .select({ visits: sql<number>`count(*)::int` })
       .from(visits)
@@ -252,20 +252,20 @@ export default async function KhqDashboardPage({
       .innerJoin(counters, eq(counters.id, visits.counterId))
       .where(inPrev),
     db
-      .select({ depotId: counters.depotId, packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int` })
+      .select({ stockistId: counters.stockistId, packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int` })
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
       .where(inRange)
-      .groupBy(counters.depotId),
+      .groupBy(counters.stockistId),
     // Per-C&F packets — the company-level cut a KHQ viewer actually wants,
     // and the one thing this dashboard can show that the C&F one can't.
     db
-      .select({ cnfId: depots.cnfId, packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`, n: sql<number>`count(*)::int` })
+      .select({ cnfId: stockists.cnfId, packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`, n: sql<number>`count(*)::int` })
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
-      .innerJoin(depots, eq(depots.id, counters.depotId))
+      .innerJoin(stockists, eq(stockists.id, counters.stockistId))
       .where(inRange)
-      .groupBy(depots.cnfId),
+      .groupBy(stockists.cnfId),
     db
       .select({
         id: users.id,
@@ -306,7 +306,7 @@ export default async function KhqDashboardPage({
           eq(schemeClaims.status, "paid"),
           gte(schemeClaims.createdAt, range.start),
           lt(schemeClaims.createdAt, range.end),
-          scopedDepotIds ? inArray(schemeClaims.depotId, scopedDepotIds) : undefined,
+          scopedStockistIds ? inArray(schemeClaims.stockistId, scopedStockistIds) : undefined,
         ),
       ),
     db
@@ -346,7 +346,7 @@ export default async function KhqDashboardPage({
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(counters)
-      .where(and(gte(counters.createdAt, day.start), lt(counters.createdAt, day.end), depotScope)),
+      .where(and(gte(counters.createdAt, day.start), lt(counters.createdAt, day.end), stockistScope)),
     // Today's day logs — the pickup each ISR drew from the depot, which is the
     // target their sales are measured against on the board below.
     db
@@ -411,13 +411,13 @@ export default async function KhqDashboardPage({
   }));
 
   // ── Counters by state ───────────────────────────────────────────────────
-  const depotToCnf = new Map(allDepots.map((d) => [d.id, d.cnfId]));
+  const stockistToCnf = new Map(allStockists.map((d) => [d.id, d.cnfId]));
   const cnfToState = new Map(allCnfs.map((c) => [c.id, c.stateId]));
   const stateName = new Map(allStates.map((s) => [s.id, s.name]));
   const cnfName = new Map(allCnfs.map((c) => [c.id, c.name]));
   const stateCounts = new Map<string, number>();
   for (const c of allCounters) {
-    const sid = cnfToState.get(depotToCnf.get(c.depotId) ?? "") ?? "";
+    const sid = cnfToState.get(stockistToCnf.get(c.stockistId) ?? "") ?? "";
     if (sid) stateCounts.set(sid, (stateCounts.get(sid) ?? 0) + 1);
   }
   const maxState = Math.max(1, ...stateCounts.values());
@@ -428,11 +428,11 @@ export default async function KhqDashboardPage({
   }));
 
   // ── Depot table (today) + leaderboards (period) ────────────────────────
-  const perDepot = new Map(perDepotToday.map((r) => [r.depotId, r]));
-  const depotName = new Map(allDepots.map((d) => [d.id, d.name]));
-  const depotRows = allDepots.map((d) => {
-    const dc = allCounters.filter((c) => c.depotId === d.id);
-    const dr = fieldReps.filter((r) => r.depotId === d.id);
+  const perDepot = new Map(perStockistToday.map((r) => [r.stockistId, r]));
+  const stockistName = new Map(allStockists.map((d) => [d.id, d.name]));
+  const stockistRows = allStockists.map((d) => {
+    const dc = allCounters.filter((c) => c.stockistId === d.id);
+    const dr = fieldReps.filter((r) => r.stockistId === d.id);
     const a = perDepot.get(d.id);
     return {
       name: d.name,
@@ -446,11 +446,11 @@ export default async function KhqDashboardPage({
     };
   });
 
-  const depotBoard = periodByDepot
-    .map((r) => ({ name: depotName.get(r.depotId) ?? "—", packets: Number(r.packets) || 0 }))
+  const stockistBoard = periodByStockist
+    .map((r) => ({ name: stockistName.get(r.stockistId) ?? "—", packets: Number(r.packets) || 0 }))
     .filter((r) => r.packets > 0)
     .sort((a, b) => b.packets - a.packets);
-  const depotMax = Math.max(1, ...depotBoard.map((r) => r.packets));
+  const stockistMax = Math.max(1, ...stockistBoard.map((r) => r.packets));
 
   const cnfBoard = periodByCnf
     .map((r) => ({
@@ -596,7 +596,7 @@ export default async function KhqDashboardPage({
       id: c.id,
       name: c.name,
       area: c.area,
-      depot: depotName.get(c.depotId) ?? "—",
+      depot: stockistName.get(c.stockistId) ?? "—",
       status: c.status,
       days: daysSince(c.lastVisit, now),
       lastVisit: c.lastVisit,
@@ -616,7 +616,7 @@ export default async function KhqDashboardPage({
     { icon: "star", tint: "#B9812E", label: t("Avg Deedar rank"), value: avgRank > 0 ? avgRank.toFixed(1) : "—", sub: t("shelf position") },
     { icon: "clock", tint: "#8A6FBF", label: t("Avg visit time"), value: mmss(avgVisitSeconds), sub: t("time on counter") },
     { icon: "rupee", tint: "#4C8C2B", label: t("Scheme payouts"), value: `₹${schemePayout.toLocaleString("en-IN")}`, sub: t("settled via UPI") },
-    { icon: "globe", tint: "#2E5FA3", label: t("Network"), value: totalCounters.toLocaleString("en-IN"), sub: `${allCnfs.length} ${t("C&F")} · ${allDepots.length} ${t("depots")}` },
+    { icon: "globe", tint: "#2E5FA3", label: t("Network"), value: totalCounters.toLocaleString("en-IN"), sub: `${allCnfs.length} ${t("C&F")} · ${allStockists.length} ${t("stockists")}` },
     { icon: "trendUp", tint: "#128A82", label: t("Visits today"), value: visitsToday, sub: `${activeRepsToday}/${fieldReps.length} ${t("reps active")}` },
     { icon: "alert", tint: "#C7263B", label: t("Declining counters"), value: decliningCount, sub: t("flagged for revisit"), tone: "bad" },
   ];
@@ -657,7 +657,7 @@ export default async function KhqDashboardPage({
         <span>·</span>
         <span>{allCnfs.length} {t("C&F")}</span>
         <span>·</span>
-        <span>{allDepots.length} {t("depots")}</span>
+        <span>{allStockists.length} {t("stockists")}</span>
         <span>·</span>
         <span>{totalCounters} {t("counters")}</span>
       </div>
@@ -807,14 +807,14 @@ export default async function KhqDashboardPage({
         <ScrollBoard
           icon="trophy"
           tint="#B9812E"
-          title={t("Depot leaderboard")}
+          title={t("Stockist leaderboard")}
           sub={t("Packets sold this period")}
           empty={t("No sales in this period.")}
-          rows={depotBoard.map<BoardRow>((d) => ({
+          rows={stockistBoard.map<BoardRow>((d) => ({
             key: d.name,
             name: d.name,
             value: d.packets.toLocaleString("en-IN"),
-            pct: Math.round((d.packets / depotMax) * 100),
+            pct: Math.round((d.packets / stockistMax) * 100),
           }))}
         />
         <section className="card flex flex-col overflow-hidden p-0">
@@ -990,7 +990,7 @@ export default async function KhqDashboardPage({
 
       {/* Depot performance table — deliberately TODAY, not the selected period:
           this is the live ops table; the leaderboards above cover the period. */}
-      <h6 className="mb-3" style={cardTitle}>{t("Depot performance comparison")} · {t("today")}</h6>
+      <h6 className="mb-3" style={cardTitle}>{t("Stockist performance comparison")} · {t("today")}</h6>
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -1001,12 +1001,12 @@ export default async function KhqDashboardPage({
             </tr>
           </thead>
           <tbody>
-            {depotRows.length === 0 ? (
+            {stockistRows.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ color: "var(--ink-3)" }}>{t("No depots yet.")}</td>
+                <td colSpan={8} style={{ color: "var(--ink-3)" }}>{t("No stockists yet.")}</td>
               </tr>
             ) : (
-              depotRows.map((d) => (
+              stockistRows.map((d) => (
                 <tr key={d.name}>
                   <td className="font-semibold">{d.name}</td>
                   <td style={{ color: "var(--ink-3)" }}>{d.cnf}</td>

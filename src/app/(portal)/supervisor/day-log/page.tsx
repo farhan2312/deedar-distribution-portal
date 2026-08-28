@@ -5,10 +5,10 @@ import { dayLogs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { durationLabel, formatISTDate, formatISTTime, istDateString } from "@/lib/date";
 import {
-  getScopeDepots,
+  getScopeStockists,
   getTeamDayLogs,
   getTeamReps,
-  pickDepot,
+  pickStockist,
 } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
 import { getT } from "@/lib/i18n/server";
@@ -31,8 +31,8 @@ export default async function SupervisorDayLogPage({
   const isAdmin = user.accessRoles.includes("admin");
 
   const { depot: requestedDepot } = await searchParams;
-  const depots = await getScopeDepots(user);
-  const depot = pickDepot(depots, requestedDepot);
+  const stockists = await getScopeStockists(user);
+  const depot = pickStockist(stockists, requestedDepot);
 
   const reps = await getTeamReps(user, depot?.id);
   const repIds = reps.map((r) => r.id);
@@ -74,7 +74,7 @@ export default async function SupervisorDayLogPage({
     forced: !!h.endForced,
   }));
 
-  const scopeLabel = depot?.name ?? (depots.length > 1 ? t("All Depots") : depots[0]?.name ?? t("Your Depot"));
+  const scopeLabel = depot?.name ?? (stockists.length > 1 ? t("All stockists") : stockists[0]?.name ?? t("Your stockist"));
 
   return (
     <div>
@@ -90,7 +90,7 @@ export default async function SupervisorDayLogPage({
               : t("Clock-in / clock-out for every salesman who reports to you.")}
           </p>
         </div>
-        {depots.length > 1 && <DepotPicker options={depots} value={depot?.id ?? "all"} />}
+        {stockists.length > 1 && <DepotPicker options={stockists} value={depot?.id ?? "all"} />}
       </div>
 
       {reps.length === 0 ? (
@@ -98,7 +98,7 @@ export default async function SupervisorDayLogPage({
           {isAdmin
             ? t("No field reps yet.")
             : depot
-              ? t("No field reps report to you in this depot yet.")
+              ? t("No field reps report to you in this stockist yet.")
               : t("No field reps report to you yet.")}
         </p>
       ) : (

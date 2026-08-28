@@ -14,8 +14,8 @@ export type CounterListRow = {
   type: string;
   areaId: string;
   areaName: string;
-  depotId: string;
-  depotName: string;
+  stockistId: string;
+  stockistName: string;
   status: CounterStatus;
   /** Depot rule: only same-depot counters can be visited. Ignored entirely
    * when the viewer doesn't get a Check-in button (Sales Officer view). */
@@ -36,13 +36,13 @@ const STATUS_STYLE: Record<CounterStatus, { label: string; bg: string; color: st
  * filter, and an optional per-row Check-in button.
  *
  * Same component powers `/field/counters` (ISR — showCheckIn=true, one depot)
- * and `/supervisor/counters` (SO — showCheckIn=false, many depots). Filters
+ * and `/supervisor/counters` (SO — showCheckIn=false, many stockists). Filters
  * run client-side against the initial fetch so results are instant.
  */
 export function CountersListClient({
   rows,
   areas,
-  depots,
+  stockists,
   title,
   subtitle,
   truncated,
@@ -53,7 +53,7 @@ export function CountersListClient({
   /** Areas the filter dropdown offers. Filter is hidden when there's ≤ 1. */
   areas: { id: string; name: string }[];
   /** Depots the filter dropdown offers. Filter is hidden when there's ≤ 1. */
-  depots: { id: string; name: string }[];
+  stockists: { id: string; name: string }[];
   title: string;
   subtitle: string;
   truncated: boolean;
@@ -69,7 +69,7 @@ export function CountersListClient({
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return rows.filter((r) => {
-      if (depot !== "all" && r.depotId !== depot) return false;
+      if (depot !== "all" && r.stockistId !== depot) return false;
       if (area !== "all" && r.areaId !== area) return false;
       if (needle) {
         const hay = `${r.name} ${r.phone ?? ""}`.toLowerCase();
@@ -82,16 +82,16 @@ export function CountersListClient({
   // Areas shown in the dropdown depend on the depot filter — picking a depot
   // narrows the area list to that depot's areas. Otherwise the dropdown lists
   // every area across every depot the viewer can see, which for an SO
-  // supervising 4 depots would be a long unrelated list.
+  // supervising 4 stockists would be a long unrelated list.
   const areaOptions = useMemo(() => {
     if (depot === "all") return areas;
-    const idsInDepot = new Set(rows.filter((r) => r.depotId === depot).map((r) => r.areaId));
+    const idsInDepot = new Set(rows.filter((r) => r.stockistId === depot).map((r) => r.areaId));
     return areas.filter((a) => idsInDepot.has(a.id));
   }, [areas, depot, rows]);
 
   // Whether at least one visible row is in more than one depot — decides
   // whether the row subtitle should call out the depot name.
-  const showDepotInRow = depots.length > 1;
+  const showDepotInRow = stockists.length > 1;
 
   return (
     <div style={{ animation: "fadeUp .3s ease" }}>
@@ -116,7 +116,7 @@ export function CountersListClient({
           onChange={(e) => setQ(e.target.value)}
           placeholder={t("Search by name or mobile…")}
         />
-        {depots.length > 1 && (
+        {stockists.length > 1 && (
           <select
             className="inp"
             style={{ width: "auto", padding: "6px 10px", fontSize: 12 }}
@@ -127,10 +127,10 @@ export function CountersListClient({
               // belonged to the previous depot — reset it.
               setArea("all");
             }}
-            aria-label={t("Depot")}
+            aria-label={t("Stockist")}
           >
-            <option value="all">{t("All depots")}</option>
-            {depots.map((d) => (
+            <option value="all">{t("All stockists")}</option>
+            {stockists.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </select>
@@ -163,7 +163,7 @@ export function CountersListClient({
       {visible.length === 0 ? (
         <p className="text-[14px]" style={{ color: "var(--ink-3)" }}>
           {rows.length === 0
-            ? t("No counters mapped to your depot yet.")
+            ? t("No counters mapped to your stockist yet.")
             : t("No counters match — try clearing the filter.")}
         </p>
       ) : (
@@ -194,7 +194,7 @@ export function CountersListClient({
                   </div>
                   <div className="mt-0.5 truncate text-[12px]" style={{ color: "var(--ink-3)" }}>
                     {t(c.type)} · {c.areaName}
-                    {showDepotInRow && <> · {c.depotName}</>}
+                    {showDepotInRow && <> · {c.stockistName}</>}
                     {c.phone && <> · <span className="tabular-nums">{c.phone}</span></>}
                   </div>
                 </div>
@@ -204,7 +204,7 @@ export function CountersListClient({
                     className="btn btn-primary btn-sm"
                     onClick={() => router.push(`/field/counter/${c.id}`)}
                     disabled={!c.canVisit}
-                    title={c.canVisit ? undefined : t("This counter is in another depot.")}
+                    title={c.canVisit ? undefined : t("This counter is at another stockist.")}
                   >
                     {c.visitedToday ? t("Open") : t("Check in")}
                   </button>

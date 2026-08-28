@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, cnfs, counters, depots, users, visits } from "@/db/schema";
+import { areas, cnfs, counters, stockists, users, visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { formatISTDate, formatISTTime } from "@/lib/date";
@@ -43,21 +43,21 @@ export default async function CounterDetailPage({
       typeOther: counters.typeOther,
       areaName: areas.name,
       cnfName: cnfs.name,
-      depotId: counters.depotId,
-      depotName: depots.name,
+      stockistId: counters.stockistId,
+      stockistName: stockists.name,
       lat: counters.lat,
       lng: counters.lng,
     })
     .from(counters)
     .innerJoin(areas, eq(areas.id, counters.areaId))
-    .innerJoin(depots, eq(depots.id, counters.depotId))
-    .innerJoin(cnfs, eq(cnfs.id, depots.cnfId))
+    .innerJoin(stockists, eq(stockists.id, counters.stockistId))
+    .innerJoin(cnfs, eq(cnfs.id, stockists.cnfId))
     .where(eq(counters.id, id))
     .limit(1);
   if (!counter) notFound();
 
   const isAdmin = user.accessRoles.includes("admin");
-  const canVisit = isAdmin || counter.depotId === user.depot?.id;
+  const canVisit = isAdmin || counter.stockistId === user.depot?.id;
 
   // The history list is "editable visits" only, for everyone — visits from
   // before today's midnight cutoff never appear here, not even for admin. A
@@ -138,7 +138,7 @@ export default async function CounterDetailPage({
 
         <div className="relative mt-5 flex flex-col gap-3 md:max-w-[62%]">
           <DetailRow icon={<PhoneIcon className="h-4 w-4" />} k={t("Mobile")} v={counter.phone ?? "—"} accent />
-          <DetailRow icon={<StoreIcon className="h-4 w-4" />} k={t("Depot")} v={counter.depotName} />
+          <DetailRow icon={<StoreIcon className="h-4 w-4" />} k={t("Stockist")} v={counter.stockistName} />
           <DetailRow icon={<PinIcon className="h-4 w-4" />} k={t("Area/C&F")} v={`${counter.areaName}, ${counter.cnfName}`} />
           <DetailRow icon={<TargetIcon className="h-4 w-4" />} k={t("GPS")} v={gps} />
         </div>
@@ -172,8 +172,8 @@ export default async function CounterDetailPage({
           </Link>
         ) : (
           <p className="card p-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            {t("This counter is in")} {counter.depotName}
-            {t(", not your depot — you can view it but can't add a visit.")}
+            {t("This counter is in")} {counter.stockistName}
+            {t(", not your stockist — you can view it but can't add a visit.")}
           </p>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { areas, cnfs, depots, userAreas, userDepots, users, type AccessRole } from "@/db/schema";
+import { areas, cnfs, stockists, userAreas, userStockists, users, type AccessRole } from "@/db/schema";
 import {
   addUser,
   removeUser,
@@ -13,7 +13,7 @@ import { requireAdmin } from "@/lib/admin/guard";
 import { NAV_SECTIONS } from "@/lib/portal/nav";
 import { DeleteButton, SaveSelectForm, ToggleChip } from "../_components/controls";
 
-const ROLE_ORDER: AccessRole[] = ["field", "supervisor", "dealer", "hq", "khq", "admin"];
+const ROLE_ORDER: AccessRole[] = ["field", "supervisor", "depot", "hq", "khq", "admin"];
 const ROLE_LABEL: Record<AccessRole, string> = {
   field: "Field",
   supervisor: "Supervisor",
@@ -30,19 +30,19 @@ const ROLE_THEME = Object.fromEntries(NAV_SECTIONS.map((s) => [s.role, s.theme])
 export default async function AdminUsersPage() {
   const admin = await requireAdmin();
 
-  const [allUsers, allDepots, allCnfs, allAreas, allUserAreas, allUserDepots] =
+  const [allUsers, allStockists, allCnfs, allAreas, allUserAreas, allUserDepots] =
     await Promise.all([
       db.select().from(users),
-      db.select().from(depots),
+      db.select().from(stockists),
       db.select().from(cnfs),
       db.select().from(areas),
       db.select().from(userAreas),
-      db.select().from(userDepots),
+      db.select().from(userStockists),
     ]);
 
   const areasByDepot = new Map<string, typeof allAreas>();
   for (const a of allAreas) {
-    areasByDepot.set(a.depotId, [...(areasByDepot.get(a.depotId) ?? []), a]);
+    areasByDepot.set(a.stockistId, [...(areasByDepot.get(a.stockistId) ?? []), a]);
   }
 
   const userAreaIds = new Map<string, Set<string>>();
@@ -54,7 +54,7 @@ export default async function AdminUsersPage() {
   const userDepotIds = new Map<string, Set<string>>();
   for (const ud of allUserDepots) {
     if (!userDepotIds.has(ud.userId)) userDepotIds.set(ud.userId, new Set());
-    userDepotIds.get(ud.userId)!.add(ud.depotId);
+    userDepotIds.get(ud.userId)!.add(ud.stockistId);
   }
 
   return (
@@ -68,12 +68,12 @@ export default async function AdminUsersPage() {
         {allUsers.map((u) => {
           const hasField = u.accessRoles.includes("field");
           const hasSupervisor = u.accessRoles.includes("supervisor");
-          const hasDealer = u.accessRoles.includes("dealer");
+          const hasDealer = u.accessRoles.includes("depot");
           const hasHq = u.accessRoles.includes("hq");
           const hasKhq = u.accessRoles.includes("khq");
           const hasAdmin = u.accessRoles.includes("admin");
           const needsDepot = hasField || hasDealer;
-          const depotAreas = u.depotId ? (areasByDepot.get(u.depotId) ?? []) : [];
+          const depotAreas = u.stockistId ? (areasByDepot.get(u.stockistId) ?? []) : [];
 
           return (
             <div key={u.id} className="rounded-2xl bg-white p-4 shadow-sm">
@@ -107,8 +107,8 @@ export default async function AdminUsersPage() {
                       <SaveSelectForm
                         action={setUserDepot.bind(null, u.id)}
                         fieldName="depotId"
-                        value={u.depotId}
-                        options={allDepots}
+                        value={u.stockistId}
+                        options={allStockists}
                         placeholder="Select depot"
                       />
                     </ScopeRow>
@@ -116,7 +116,7 @@ export default async function AdminUsersPage() {
 
                   {hasField && (
                     <ScopeRow label="Areas">
-                      {!u.depotId ? (
+                      {!u.stockistId ? (
                         <span className="text-xs text-zinc-400">Pick a depot first</span>
                       ) : depotAreas.length === 0 ? (
                         <span className="text-xs text-zinc-400">No areas in this depot yet</span>
@@ -139,11 +139,11 @@ export default async function AdminUsersPage() {
 
                   {hasSupervisor && (
                     <ScopeRow label="Supervises">
-                      {allDepots.length === 0 ? (
-                        <span className="text-xs text-zinc-400">No depots yet</span>
+                      {allStockists.length === 0 ? (
+                        <span className="text-xs text-zinc-400">No stockists yet</span>
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
-                          {allDepots.map((d) => (
+                          {allStockists.map((d) => (
                             <ToggleChip
                               key={d.id}
                               action={toggleUserDepot.bind(null, u.id, d.id)}
