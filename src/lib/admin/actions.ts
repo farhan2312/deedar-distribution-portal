@@ -7,6 +7,7 @@ import { db } from "@/db";
 import {
   accessRequests,
   areas,
+  passwordResetRequests,
   cnfs,
   counters,
   depots,
@@ -333,6 +334,87 @@ export async function addUser(formData: FormData): Promise<AddUserResult> {
 
   revalidatePath("/admin/users");
   return { ok: true, message: `${name} added — password is their mobile number until first login. Assign access below.` };
+}
+
+
+// ── User edit + password ────────────────────────────────────────────────
+
+export type UserEditResult = { ok: true; message: string } | { ok: false; message: string };
+
+/** Edit a user's name and mobile number. The mobile is also their login id, so
+ * changing it changes how they sign in — and it must stay unique. */
+export async function updateUser(userId: string, formData: FormData): Promise<UserEditResult> {
+  await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  if (!name || !/^d{10}$/.test(phone)) {
+    return { ok: false, message: "Enter a name and a valid 10-digit mobile number." };
+  }
+
+  const [clash] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.phone, phone))
+    .limit(1);
+  if (clash && clash.id !== userId) {
+    return { ok: false, message: `Another user already uses mobile ${phone}.` };
+  }
+
+  await db.update(users).set({ name, phone, updatedAt: new Date() }).where(eq(users.id, userId));
+  revalidatePath("/admin/users");
+  return { ok: true, message: `${name} updated.` };
+}
+
+/**
+ * Reset a user's password to their mobile number.
+ *
+ * Same bootstrap convention as `addUser`, and it always sets
+ * `mustChangePassword` — a password anyone who knows the number can guess is
+ * only acceptable as a one-time handover, never as a resting state.
+ */
+export async function resetUserPassword(userId: string): Promise<UserEditResult> {
+  const admin = await requireAdmin();
+
+  const [user] = await db
+    .select({ id: users.id, name: users.name, phone: users.phone })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user) return { ok: false, message: "That user no longer exists." };
+
+  await db
+    .update(users)
+    .set({
+      passwordHash: await hashPassword(user.phone),
+      mustChangePassword: true,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, user.id));
+
+  // Close any open request for this number — the reason it was raised is gone.
+  await db
+    .update(passwordResetRequests)
+    .set({ status: "done", resolvedByUserId: admin.id, resolvedAt: new Date() })
+    .where(
+      and(eq(passwordResetRequests.phone, user.phone), eq(passwordResetRequests.status, "pending")),
+    );
+
+  revalidatePath("/admin/users");
+  return {
+    ok: true,
+    message: `${user.name}'s password is now their mobile number. They must change it at next login.`,
+  };
+}
+
+/** Close a reset request without touching the account — for a number nobody
+ * recognises, or one already sorted out in person. */
+export async function dismissPasswordReset(requestId: string) {
+  const admin = await requireAdmin();
+  await db
+    .update(passwordResetRequests)
+    .set({ status: "dismissed", resolvedByUserId: admin.id, resolvedAt: new Date() })
+    .where(eq(passwordResetRequests.id, requestId));
+  revalidatePath("/admin/users");
 }
 
 export async function removeUser(userId: string) {

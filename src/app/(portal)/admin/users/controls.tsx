@@ -5,6 +5,7 @@ import type { AccessRole } from "@/db/schema";
 import {
   addUser,
   removeUser,
+  resetUserPassword,
   setUserActive,
   setUserCnf,
   setUserDepot,
@@ -12,6 +13,7 @@ import {
   toggleAccessRole,
   toggleUserArea,
   toggleUserDepot,
+  updateUser,
   type AddUserResult,
 } from "@/lib/admin/actions";
 import { useT } from "@/lib/i18n/provider";
@@ -490,6 +492,162 @@ export function UsersPanel({
         </div>
       </div>
       <div ref={ref}>{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Reset a user's password to their mobile number.
+ *
+ * Two-step on purpose: the first click arms it, the second commits. This is a
+ * credential change that locks the user out of whatever they were using, and
+ * it sits inches from "Dismiss" in the request list — a stray click should not
+ * be able to do it.
+ */
+export function ResetPasswordButton({ userId, name }: { userId: string; name: string }) {
+  const t = useT();
+  const [armed, setArmed] = useState(false);
+  const [done, setDone] = useState("");
+  const [pending, start] = useTransition();
+
+  if (done) {
+    return (
+      <span className="text-[12px] font-semibold" style={{ color: "var(--success)" }}>
+        {done}
+      </span>
+    );
+  }
+
+  if (!armed) {
+    return (
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setArmed(true)}>
+        {t("Reset password")}
+      </button>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
+        {t("Set to mobile number?")}
+      </span>
+      <button
+        type="button"
+        className="btn btn-primary btn-sm"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const res = await resetUserPassword(userId);
+            if (res.ok) setDone(t("Password reset"));
+            else {
+              setArmed(false);
+              alert(res.message);
+            }
+          })
+        }
+      >
+        {pending ? t("Resetting…") : t("Confirm")}
+      </button>
+      <button type="button" className="link" onClick={() => setArmed(false)} disabled={pending}>
+        {t("Cancel")}
+      </button>
+      <span className="sr-only">{name}</span>
+    </span>
+  );
+}
+
+/**
+ * Edit a user's name and mobile, and reset their password, from one popover on
+ * their row.
+ *
+ * The mobile is also the login id, so this is the only place it can be
+ * corrected — a typo in it locks someone out of the app entirely, and before
+ * this the only fix was deleting the user, which cascades away their whole
+ * visit history.
+ */
+export function EditUserButton({
+  userId,
+  name,
+  phone,
+}: {
+  userId: string;
+  name: string;
+  phone: string;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, start] = useTransition();
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="link"
+        onClick={() => {
+          setMessage(null);
+          setOpen(true);
+        }}
+        aria-label={`${t("Edit")} ${name}`}
+      >
+        {t("Edit")}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className="mt-2 rounded-xl border p-3"
+      style={{ borderColor: "var(--hairline)", background: "var(--bg-soft)", minWidth: 240 }}
+    >
+      <form
+        action={(formData) =>
+          start(async () => {
+            const res = await updateUser(userId, formData);
+            setMessage({ ok: res.ok, text: res.message });
+            if (res.ok) setOpen(false);
+          })
+        }
+        className="flex flex-col gap-2"
+      >
+        <label className="field mb-0">
+          <span className="text-[11px] font-semibold" style={{ color: "var(--ink-3)" }}>
+            {t("Name")}
+          </span>
+          <input className="inp" name="name" defaultValue={name} maxLength={120} />
+        </label>
+        <label className="field mb-0">
+          <span className="text-[11px] font-semibold" style={{ color: "var(--ink-3)" }}>
+            {t("Mobile")}
+          </span>
+          <input
+            className="inp"
+            name="phone"
+            defaultValue={phone}
+            inputMode="tel"
+            maxLength={10}
+            pattern="\d{10}"
+          />
+        </label>
+        <div className="flex items-center gap-2">
+          <button className="btn btn-primary btn-sm" type="submit" disabled={pending}>
+            {pending ? t("Saving…") : t("Save")}
+          </button>
+          <button type="button" className="link" onClick={() => setOpen(false)} disabled={pending}>
+            {t("Cancel")}
+          </button>
+        </div>
+      </form>
+
+      <div className="mt-2.5 border-t pt-2.5" style={{ borderColor: "var(--hairline-soft)" }}>
+        <ResetPasswordButton userId={userId} name={name} />
+      </div>
+
+      {message && !message.ok && (
+        <p className="mt-2 text-[12px]" style={{ color: "var(--danger)" }}>
+          {message.text}
+        </p>
+      )}
     </div>
   );
 }

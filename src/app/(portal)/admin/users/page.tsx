@@ -1,8 +1,18 @@
 import { alias } from "drizzle-orm/pg-core";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { accessRequests, areas, cnfs, depots, userAreas, userDepots, users, type AccessRole } from "@/db/schema";
-import { approveAccessRequest, rejectAccessRequest } from "@/lib/admin/actions";
+import {
+  accessRequests,
+  areas,
+  cnfs,
+  depots,
+  passwordResetRequests,
+  userAreas,
+  userDepots,
+  users,
+  type AccessRole,
+} from "@/db/schema";
+import { approveAccessRequest, dismissPasswordReset, rejectAccessRequest } from "@/lib/admin/actions";
 import { requireAdmin } from "@/lib/admin/guard";
 import { ROLE_LABEL } from "@/lib/auth/roles";
 import { formatISTDate, formatISTTime } from "@/lib/date";
@@ -14,6 +24,8 @@ import {
   CnfSelect,
   ActiveToggle,
   DeleteUserButton,
+  EditUserButton,
+  ResetPasswordButton,
   DepotSelect,
   SupervisorDepotPicker,
   RoleCheckbox,
@@ -45,7 +57,16 @@ export default async function AdminUsersPage() {
   const t = await getT();
 
   const reviewer = alias(users, "reviewer");
-  const [allUsers, allDepots, allCnfs, allAreas, allUserAreas, allUserDepots, requestRows] = await Promise.all([
+  const [
+    allUsers,
+    allDepots,
+    allCnfs,
+    allAreas,
+    allUserAreas,
+    allUserDepots,
+    requestRows,
+    resetRows,
+  ] = await Promise.all([
     db.select().from(users).orderBy(asc(users.name)),
     db.select().from(depots).orderBy(asc(depots.name)),
     db.select().from(cnfs).orderBy(asc(cnfs.name)),
@@ -66,6 +87,21 @@ export default async function AdminUsersPage() {
       .from(accessRequests)
       .leftJoin(reviewer, eq(reviewer.id, accessRequests.reviewedByUserId))
       .orderBy(desc(accessRequests.createdAt)),
+    // Open "I forgot my password" requests. Left-joined to users so a number
+    // that matches no account still shows — that is worth an admin's eye, not
+    // something to hide.
+    db
+      .select({
+        id: passwordResetRequests.id,
+        phone: passwordResetRequests.phone,
+        createdAt: passwordResetRequests.createdAt,
+        userId: passwordResetRequests.userId,
+        userName: users.name,
+      })
+      .from(passwordResetRequests)
+      .leftJoin(users, eq(users.id, passwordResetRequests.userId))
+      .where(eq(passwordResetRequests.status, "pending"))
+      .orderBy(desc(passwordResetRequests.createdAt)),
   ]);
   const pendingRequests = requestRows.filter((r) => r.status === "pending");
   const decidedRequests = requestRows.filter((r) => r.status !== "pending");
@@ -207,6 +243,57 @@ export default async function AdminUsersPage() {
             </ul>
           )}
         </div>
+      </div>
+
+      {/* Password reset requests — raised from the login page's "Forgot
+          password?" link. There is no email or SMS channel in this app, so an
+          admin actioning it here IS the verification step. */}
+      <div className="card mb-6 p-6">
+        <SectionHead
+          icon={
+            <KeyIcon
+              className="h-5 w-5"
+              style={{ color: resetRows.length > 0 ? "#B25E00" : "var(--ink-3)" }}
+            />
+          }
+          title={`${t("Password reset requests")} (${resetRows.length})`}
+        />
+        <p className="mb-4 text-[12.5px] leading-relaxed" style={{ color: "var(--ink-3)" }}>
+          {t("Resetting sets the password to the user's mobile number and forces them to change it at next login. Tell them in person or by phone — the app cannot.")}
+        </p>
+        {resetRows.length === 0 ? (
+          <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>
+            {t("No password reset requests.")}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2.5">
+            {resetRows.map((r) => (
+              <li
+                key={r.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"
+                style={{ borderColor: "var(--hairline)" }}
+              >
+                <div className="min-w-0">
+                  <div className="text-[13.5px] font-semibold" style={{ color: "var(--ink-1)" }}>
+                    {r.userName ?? t("No account with this number")}
+                  </div>
+                  <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>
+                    {r.phone} · {formatISTDate(r.createdAt)} {formatISTTime(r.createdAt)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 whitespace-nowrap">
+                  {/* No account ⇒ nothing to reset; dismissing is the only move. */}
+                  {r.userId && <ResetPasswordButton userId={r.userId} name={r.userName ?? r.phone} />}
+                  <form action={dismissPasswordReset.bind(null, r.id)} className="inline">
+                    <button className="link link-danger" type="submit">
+                      {t("Dismiss")}
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {decidedRequests.length > 0 && (
@@ -364,14 +451,19 @@ export default async function AdminUsersPage() {
                       )}
                     </td>
                     <td>
-                      {u.id !== admin.id ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <ActiveToggle userId={u.id} active={u.isActive} />
-                          <DeleteUserButton userId={u.id} userName={u.name} />
-                        </div>
-                      ) : (
-                        <span className="block text-center text-[11px]" style={{ color: "var(--ink-3)" }}>{t("you")}</span>
-                      )}
+                      <div className="flex items-center justify-center gap-2">
+                        {u.id !== admin.id ? (
+                          <>
+                            <ActiveToggle userId={u.id} active={u.isActive} />
+                            <DeleteUserButton userId={u.id} userName={u.name} />
+                          </>
+                        ) : (
+                          <span className="text-[11px]" style={{ color: "var(--ink-3)" }}>{t("you")}</span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex justify-center">
+                        <EditUserButton userId={u.id} name={u.name} phone={u.phone} />
+                      </div>
                     </td>
                   </tr>
                 );
@@ -435,6 +527,14 @@ function UserPlusIcon({ className, style }: { className?: string; style?: React.
       <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
       <circle cx="8.5" cy="7" r="4" />
       <line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" />
+    </svg>
+  );
+}
+
+function KeyIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="15" r="4" /><path d="m10.8 12.2 8.2-8.2M17 6l2 2M14 9l2 2" />
     </svg>
   );
 }

@@ -155,6 +155,37 @@ export const accessRequests = pgTable("access_requests", {
 
 export type AccessRequest = typeof accessRequests.$inferSelect;
 
+// ── Password reset requests ──────────────────────────────────────────
+// A user who has forgotten their password asks here; an admin resolves it
+// from Users & Access. Deliberately NOT self-service: there is no email or
+// SMS channel in this app, so there is nothing to send a reset link over —
+// the admin is the out-of-band step that proves who is asking.
+
+export const passwordResetStatusEnum = pgEnum("password_reset_status", [
+  "pending",
+  "done",
+  "dismissed",
+]);
+
+export const passwordResetRequests = pgTable("password_reset_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // The number as typed. Kept even when it matches no account, so an admin
+  // can see someone is locked out under a number nobody registered.
+  phone: varchar("phone", { length: 10 }).notNull(),
+  // Resolved at request time when the number matches an account; null when it
+  // does not. The request page never says which, so a stranger cannot use it
+  // to discover whether a number is registered.
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  status: passwordResetStatusEnum("status").notNull().default("pending"),
+  resolvedByUserId: uuid("resolved_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PasswordResetRequest = typeof passwordResetRequests.$inferSelect;
+
 // ── Counters ─────────────────────────────────────────────────────────
 
 export const counterStatusEnum = pgEnum("counter_status", [
