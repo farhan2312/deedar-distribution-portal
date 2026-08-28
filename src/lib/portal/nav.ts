@@ -60,6 +60,8 @@ export type NavItem = {
 };
 
 export type NavSection = {
+  /** Extra roles that also reach this section, beyond `role`. */
+  alsoRoles?: AccessRole[];
   role: AccessRole;
   title: string;
   items: NavItem[];
@@ -110,6 +112,10 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     role: "depot",
+    // Depots and dealers (including sub-dealers, whose managers hold the
+    // dealer role) share one portal — the screens are identical, only the
+    // stockist behind them differs.
+    alsoRoles: ["dealer"],
     title: "Stockist",
     items: [
       { href: "/depot/counters", label: "Counters", icon: "grid", customHeader: true },
@@ -182,6 +188,11 @@ export const NAV_SECTIONS: NavSection[] = [
 ];
 
 /** Which role-section a portal path belongs to (drives the main-content accent). */
+/** Every role that opens a section — its own, plus any `alsoRoles`. */
+export function sectionRoles(section: NavSection): AccessRole[] {
+  return [section.role, ...(section.alsoRoles ?? [])];
+}
+
 export function sectionForPath(pathname: string): AccessRole {
   if (pathname.startsWith("/field")) return "field";
   if (pathname.startsWith("/supervisor")) return "supervisor";

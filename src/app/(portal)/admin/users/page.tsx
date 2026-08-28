@@ -115,7 +115,9 @@ export default async function AdminUsersPage() {
     .map((c) => ({
       cnfId: c.id,
       cnfName: c.name,
-      stockists: allStockists.filter((d) => d.cnfId === c.id).map((d) => ({ id: d.id, name: d.name })),
+      stockists: allStockists
+        .filter((d) => d.cnfId === c.id)
+        .map((d) => ({ id: d.id, name: d.name, kind: d.kind, parentId: d.parentId })),
     }))
     .filter((g) => g.stockists.length > 0);
   const cnfOptions = allCnfs.map((c) => ({ id: c.id, name: c.name }));
@@ -125,6 +127,24 @@ export default async function AdminUsersPage() {
     .map((u) => ({ id: u.id, name: u.name }));
   const areasByDepot = new Map<string, typeof allAreas>();
   for (const a of allAreas) areasByDepot.set(a.stockistId, [...(areasByDepot.get(a.stockistId) ?? []), a]);
+
+  /**
+   * Areas a rep at `stockistId` may cover, grouped by the stockist that owns
+   * them.
+   *
+   * A dealer's list includes its sub-dealers', so a rep assigned to the dealer
+   * can be given sub-dealer areas without being moved off the dealer — moving
+   * them was what cleared their existing ticks. A depot or sub-dealer has no
+   * children, so its list is just its own.
+   */
+  const areaGroupsFor = (stockistId: string) => {
+    const self = allStockists.find((s) => s.id === stockistId);
+    if (!self) return [];
+    const family = [self, ...allStockists.filter((s) => s.parentId === self.id)];
+    return family
+      .map((s) => ({ id: s.id, name: s.name, areas: areasByDepot.get(s.id) ?? [] }))
+      .filter((g) => g.areas.length > 0);
+  };
 
   const userAreaSet = new Map<string, Set<string>>();
   for (const ua of allUserAreas) {
@@ -357,7 +377,7 @@ export default async function AdminUsersPage() {
             <tbody>
               {allUsers.map((u) => {
                 const roleSet = new Set(u.accessRoles);
-                const depotAreas = u.stockistId ? (areasByDepot.get(u.stockistId) ?? []) : [];
+                const areaGroups = u.stockistId ? areaGroupsFor(u.stockistId) : [];
                 return (
                   <tr
                     key={u.id}
@@ -411,10 +431,33 @@ export default async function AdminUsersPage() {
                         <>
                           <Mapping label={t("Stockist (Field ISR)")}>
                             <DepotSelect userId={u.id} value={u.stockistId} groups={depotGroups} />
-                            {u.stockistId && depotAreas.length > 0 && (
+                            {u.stockistId && areaGroups.length > 0 && (
                               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                {depotAreas.map((a) => (
-                                  <AreaCheckbox key={a.id} userId={u.id} areaId={a.id} name={a.name} checked={userAreaSet.get(u.id)?.has(a.id) ?? false} />
+                                {areaGroups.map((g) => (
+                                  <div key={g.id} className="w-full">
+                                    {/* Only labelled when there is more than one
+                                        stockist in play — a plain depot should
+                                        not gain a heading it does not need. */}
+                                    {areaGroups.length > 1 && (
+                                      <div
+                                        className="mb-1 mt-1 text-[10.5px] font-bold uppercase tracking-wider"
+                                        style={{ color: "var(--ink-3)" }}
+                                      >
+                                        {g.name}
+                                      </div>
+                                    )}
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {g.areas.map((a) => (
+                                        <AreaCheckbox
+                                          key={a.id}
+                                          userId={u.id}
+                                          areaId={a.id}
+                                          name={a.name}
+                                          checked={userAreaSet.get(u.id)?.has(a.id) ?? false}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
                                 ))}
                               </div>
                             )}

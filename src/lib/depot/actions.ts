@@ -48,7 +48,8 @@ async function guard(stockistId: string): Promise<GuardResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Not authorized." };
   const isAdmin = user.accessRoles.includes("admin");
-  if (!isAdmin && !user.accessRoles.includes("depot")) {
+  // Dealers and sub-dealers manage their own stock through this same portal.
+  if (!isAdmin && !user.accessRoles.includes("depot") && !user.accessRoles.includes("dealer")) {
     return { error: "Not authorized." };
   }
   if (!isAdmin && user.depot?.id !== stockistId) {

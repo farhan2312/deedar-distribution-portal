@@ -549,8 +549,21 @@ export async function setUserDepot(userId: string, formData: FormData) {
   await requireAdmin();
   const stockistId = String(formData.get("depotId") ?? "");
   if (!stockistId) return;
+
+  // Re-selecting the SAME stockist must be a no-op. The picker cascades
+  // (C&F → stockist → sub-dealer), so reaching the sub-dealer select means
+  // touching the stockist select first — and an unconditional wipe here threw
+  // away every area tick on the way past.
+  const [before] = await db
+    .select({ stockistId: users.stockistId })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (before?.stockistId === stockistId) return;
+
   await db.update(users).set({ stockistId, updatedAt: new Date() }).where(eq(users.id, userId));
-  // Depot changed — previously-picked areas belonged to the old depot.
+  // Stockist genuinely changed — the previously-picked areas belonged to the
+  // old one and are not valid under the new one.
   await db.delete(userAreas).where(eq(userAreas.userId, userId));
   revalidatePath("/admin/users");
 }
@@ -578,6 +591,33 @@ export async function setUserReportsTo(userId: string, formData: FormData) {
 /** Multi-scope: field → which areas (within their one depot) they cover. */
 export async function toggleUserArea(userId: string, areaId: string) {
   await requireAdmin();
+
+  // The area has to be inside the rep's stockist family: their own stockist,
+  // or — when that is a dealer — one of its sub-dealers. Checked here and not
+  // just in the UI, since the id arrives from the client.
+  const [rep] = await db
+    .select({ stockistId: users.stockistId })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!rep?.stockistId) return;
+
+  const [area] = await db
+    .select({ stockistId: areas.stockistId })
+    .from(areas)
+    .where(eq(areas.id, areaId))
+    .limit(1);
+  if (!area) return;
+
+  if (area.stockistId !== rep.stockistId) {
+    const [owner] = await db
+      .select({ parentId: stockists.parentId })
+      .from(stockists)
+      .where(eq(stockists.id, area.stockistId))
+      .limit(1);
+    if (owner?.parentId !== rep.stockistId) return;
+  }
+
   const existing = await db
     .select()
     .from(userAreas)

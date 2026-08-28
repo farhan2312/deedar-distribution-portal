@@ -13,7 +13,8 @@ export default async function DepotCountersPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccess(user, "depot")) {
+  // A dealer or sub-dealer manager reaches the same screens as a depot.
+  if (!canAccess(user, "depot") && !canAccess(user, "dealer")) {
     const t = await getT();
     return <Notice title={t("Counters")}>{t("You don't have Stockist access.")}</Notice>;
   }

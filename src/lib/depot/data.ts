@@ -1,8 +1,8 @@
 import "server-only";
 import { alias } from "drizzle-orm/pg-core";
-import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import type { AccessRole, ProductSegment, StockMovementType } from "@/db/schema";
+import type { AccessRole, ProductSegment, StockistKind, StockMovementType } from "@/db/schema";
 import {
   areas,
   counters,
@@ -15,6 +15,7 @@ import {
   visits,
 } from "@/db/schema";
 import { formatISTDate, formatISTTime, istDateString, istDayBounds } from "@/lib/date";
+import { ROLLUP_ID as ROLLUP } from "./constants";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 
 export type ScopeUser = {
@@ -22,15 +23,65 @@ export type ScopeUser = {
   depot: { id: string; name: string } | null;
 };
 
-export type StockistOption = { id: string; name: string };
+export type StockistOption = { id: string; name: string; kind?: StockistKind };
 
-/** Depots in scope for the Depot portal: a dealer sees their one depot; admin
- * sees every depot. */
+/**
+ * Stockists this user may open in the portal.
+ *
+ * Admin sees every one. A dealer sees themselves AND their sub-dealers, since
+ * the sub-tier is part of their business and they answer for its stock. A
+ * depot or a sub-dealer manager sees only their own — a sub-dealer is a leaf,
+ * and a depot has nothing beneath it.
+ */
 export async function stockistScope(user: ScopeUser): Promise<StockistOption[]> {
   if (user.accessRoles.includes("admin")) {
-    return db.select({ id: stockists.id, name: stockists.name }).from(stockists).orderBy(asc(stockists.name));
+    return db
+      .select({ id: stockists.id, name: stockists.name, kind: stockists.kind })
+      .from(stockists)
+      .orderBy(asc(stockists.name));
   }
-  return user.depot ? [{ id: user.depot.id, name: user.depot.name }] : [];
+  if (!user.depot) return [];
+
+  const [self] = await db
+    .select({ id: stockists.id, name: stockists.name, kind: stockists.kind })
+    .from(stockists)
+    .where(eq(stockists.id, user.depot.id))
+    .limit(1);
+  if (!self) return [];
+  if (self.kind !== "dealer") return [self];
+
+  const children = await db
+    .select({ id: stockists.id, name: stockists.name, kind: stockists.kind })
+    .from(stockists)
+    .where(eq(stockists.parentId, self.id))
+    .orderBy(asc(stockists.name));
+  return [self, ...children];
+}
+
+export { ROLLUP_ID } from "./constants";
+
+/**
+ * Resolve `?depot=` into the stockist ids to report on.
+ *
+ * `all` sums the whole scope — for a dealer that is their own stock plus every
+ * sub-dealer's, which is the number they actually manage against. Offered only
+ * when there is more than one, so a plain depot never sees a pointless toggle.
+ */
+export function resolveStockistSelection(
+  scope: StockistOption[],
+  requested: string | undefined,
+): { id: string; name: string; ids: string[]; isRollup: boolean } | null {
+  if (scope.length === 0) return null;
+  if (requested === ROLLUP && scope.length > 1) {
+    return {
+      id: ROLLUP,
+      name: `${scope[0].name} + ${scope.length - 1} sub-dealer${scope.length > 2 ? "s" : ""}`,
+      ids: scope.map((s) => s.id),
+      isRollup: true,
+    };
+  }
+  const one = (requested && scope.find((s) => s.id === requested)) || scope[0];
+  return { id: one.id, name: one.name, ids: [one.id], isRollup: false };
 }
 
 /** Resolve the depot being viewed from ?depot= against the in-scope list;
@@ -229,13 +280,15 @@ export type DepotStockData = {
   wholesaleCounters: { id: string; name: string }[];
 };
 
-export async function getDepotStockData(stockistId: string): Promise<DepotStockData> {
+export async function getDepotStockData(stockistIds: string | string[]): Promise<DepotStockData> {
+  // Accepts a list so a dealer's view can roll their sub-dealers in.
+  const ids = Array.isArray(stockistIds) ? stockistIds : [stockistIds];
   const today = istDateString();
   const rep = alias(users, "movement_rep");
   const closer = alias(users, "day_closer");
 
   const [stockRows, movementRows, dayRows, repRows, wholesaleRows] = await Promise.all([
-    db.select().from(stockistStock).where(eq(stockistStock.stockistId, stockistId)),
+    db.select().from(stockistStock).where(inArray(stockistStock.stockistId, ids)),
     // Whole log, newest first — the page shows today plus recent history.
     db
       .select({
@@ -253,7 +306,7 @@ export async function getDepotStockData(stockistId: string): Promise<DepotStockD
       .leftJoin(users, eq(users.id, stockMovements.createdByUserId))
       .leftJoin(rep, eq(rep.id, stockMovements.repUserId))
       .leftJoin(counters, eq(counters.id, stockMovements.wholesaleCounterId))
-      .where(eq(stockMovements.stockistId, stockistId))
+      .where(inArray(stockMovements.stockistId, ids))
       .orderBy(desc(stockMovements.createdAt))
       .limit(25),
     db
@@ -267,24 +320,35 @@ export async function getDepotStockData(stockistId: string): Promise<DepotStockD
       })
       .from(stockistStockDays)
       .leftJoin(closer, eq(closer.id, stockistStockDays.closedByUserId))
-      .where(eq(stockistStockDays.stockistId, stockistId))
+      .where(inArray(stockistStockDays.stockistId, ids))
       .orderBy(desc(stockistStockDays.stockDate))
       .limit(14),
     db
       .select({ id: users.id, name: users.name })
       .from(users)
       .where(
-        and(eq(users.stockistId, stockistId), sql`'field' = ANY(${users.accessRoles}::text[])`),
+        and(inArray(users.stockistId, ids), sql`'field' = ANY(${users.accessRoles}::text[])`),
       )
       .orderBy(asc(users.name)),
     db
       .select({ id: counters.id, name: counters.name })
       .from(counters)
-      .where(and(eq(counters.stockistId, stockistId), eq(counters.type, "Wholesale")))
+      .where(and(inArray(counters.stockistId, ids), eq(counters.type, "Wholesale")))
       .orderBy(asc(counters.name)),
   ]);
 
-  const bySeg = new Map(stockRows.map((r) => [r.segment, r]));
+  // SUMMED per segment, not keyed — with more than one stockist in scope there
+  // is a row per stockist per segment, and `new Map(...)` would silently keep
+  // only the last one, reporting a single sub-dealer's stock as the whole
+  // dealer's. The low threshold adds up the same way, so "below threshold"
+  // still means the same thing across a roll-up.
+  const bySeg = new Map<ProductSegment, { onHand: number; lowThreshold: number }>();
+  for (const r of stockRows) {
+    const acc = bySeg.get(r.segment) ?? { onHand: 0, lowThreshold: 0 };
+    acc.onHand += r.onHand;
+    acc.lowThreshold += r.lowThreshold;
+    bySeg.set(r.segment, acc);
+  }
   const rows: StockRow[] = SEGMENT_ORDER.filter((seg) => bySeg.has(seg)).map((seg) => {
     const r = bySeg.get(seg)!;
     return { segment: seg, onHand: r.onHand, lowThreshold: r.lowThreshold };

@@ -10,6 +10,7 @@ import {
   NAV_SECTIONS,
   ROLE_THEME,
   sectionForPath,
+  sectionRoles,
   themeVars,
 } from "@/lib/portal/nav";
 import { useT } from "@/lib/i18n/provider";
@@ -66,7 +67,9 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
   const roleSet = new Set(accessRoles);
   // Admin is unrestricted: it sees every sidebar section, not just "admin".
   const isAdmin = roleSet.has("admin");
-  const sections = NAV_SECTIONS.filter((s) => isAdmin || roleSet.has(s.role));
+  const sections = NAV_SECTIONS.filter(
+    (s) => isAdmin || sectionRoles(s).some((r) => roleSet.has(r)),
+  );
   const section = sectionForPath(pathname);
   const crumb = breadcrumbForPath(pathname);
   // Every sidebar-listed page gets the same icon + title header, sourced from

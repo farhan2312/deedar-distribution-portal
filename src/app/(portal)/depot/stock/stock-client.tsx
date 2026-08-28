@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ProductSegment, StockMovementType } from "@/db/schema";
 import { PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
 import { closeStockDay, recordMovement } from "@/lib/depot/actions";
+import { ROLLUP_ID } from "@/lib/depot/constants";
 import type { StockistOption, DepotStockData, StockRow } from "@/lib/depot/data";
 import { useT } from "@/lib/i18n/provider";
 import { DepotSelect } from "../_components/depot-select";
@@ -40,10 +41,13 @@ export function DepotStockClient({
   depot,
   scope,
   data,
+  isRollup,
 }: {
   depot: StockistOption;
   scope: StockistOption[];
   data: DepotStockData;
+  /** Viewing a dealer's own stock plus every sub-dealer's, combined. */
+  isRollup?: boolean;
 }) {
   const router = useRouter();
   const t = useT();
@@ -113,7 +117,13 @@ export function DepotStockClient({
             {t("Daily inward / outward movement, tracked per SKU.")}
           </p>
         </div>
-        {scope.length > 1 && <DepotSelect options={scope} value={depot.id} />}
+        {scope.length > 1 && (
+          <DepotSelect
+            options={scope}
+            value={isRollup ? ROLLUP_ID : depot.id}
+            rollupLabel={t("All (incl. sub-dealers)")}
+          />
+        )}
       </div>
 
       <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-3">

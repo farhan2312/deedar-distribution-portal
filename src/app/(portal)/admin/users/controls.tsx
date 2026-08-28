@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState, useTransition } from "react";
-import type { AccessRole } from "@/db/schema";
+import type { AccessRole, StockistKind } from "@/db/schema";
 import {
   addUser,
   removeUser,
@@ -168,7 +168,15 @@ export function DepotCheckbox({
   );
 }
 
-export type DepotGroup = { cnfId: string; cnfName: string; stockists: { id: string; name: string }[] };
+export type StockistOpt = {
+  id: string;
+  name: string;
+  kind: StockistKind;
+  /** Set on a sub-dealer only — the dealer it sits under. */
+  parentId: string | null;
+};
+
+export type DepotGroup = { cnfId: string; cnfName: string; stockists: StockistOpt[] };
 
 /**
  * Sales Officer's depot assignment: pick the C&F, then check depot(s) from just
@@ -217,7 +225,19 @@ export function SupervisorDepotPicker({
       {activeGroup && (
         <div className="flex flex-wrap gap-1.5">
           {activeGroup.stockists.map((d) => (
-            <DepotCheckbox key={d.id} userId={userId} stockistId={d.id} name={d.name} checked={checkedDepotIds.has(d.id)} />
+            <DepotCheckbox
+              key={d.id}
+              userId={userId}
+              stockistId={d.id}
+              // A sub-dealer is labelled under its dealer, so a flat list of
+              // checkboxes still says where each one sits.
+              name={
+                d.parentId
+                  ? `${activeGroup.stockists.find((x) => x.id === d.parentId)?.name ?? ""} › ${d.name}`
+                  : d.name
+              }
+              checked={checkedDepotIds.has(d.id)}
+            />
           ))}
         </div>
       )}
@@ -256,11 +276,27 @@ export function DepotSelect({
   const t = useT();
   const [pending, start] = useTransition();
   const [cnfId, setCnfId] = useState(() => groupFor(groups, value)?.cnfId ?? "");
-  const depotOptions = groups.find((g) => g.cnfId === cnfId)?.stockists ?? [];
-  // The depot select only shows a pre-selected value when it's actually in the
-  // currently chosen C&F's list — otherwise it reads as "Select depot" until a
-  // real choice is made for that C&F.
-  const depotValue = depotOptions.some((d) => d.id === value) ? value! : "";
+
+  const inCnf = groups.find((g) => g.cnfId === cnfId)?.stockists ?? [];
+  // Only depots and dealers at this level; a sub-dealer is reached THROUGH its
+  // dealer, so listing it here too would say it stands alongside its parent.
+  const topLevel = inCnf.filter((d) => d.parentId === null);
+
+  // A saved sub-dealer shows as its parent here, with the sub-dealer select
+  // below holding the real value — otherwise the top select would read blank
+  // for a perfectly valid assignment.
+  const current = inCnf.find((d) => d.id === value) ?? null;
+  const topId = current ? (current.parentId ?? current.id) : "";
+  const [parentId, setParentId] = useState(topId);
+
+  const parent = topLevel.find((d) => d.id === parentId) ?? null;
+  const subDealers = parent?.kind === "dealer" ? inCnf.filter((d) => d.parentId === parent.id) : [];
+
+  function assign(stockistId: string) {
+    const fd = new FormData();
+    fd.set("depotId", stockistId);
+    start(() => setUserDepot(userId, fd));
+  }
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -268,32 +304,61 @@ export function DepotSelect({
         className="inp"
         style={{ padding: "5px 8px", fontSize: 12 }}
         value={cnfId}
-        onChange={(e) => setCnfId(e.target.value)}
+        onChange={(e) => {
+          setCnfId(e.target.value);
+          setParentId("");
+        }}
       >
         <option value="">{t("Select C&F")}</option>
         {groups.map((g) => (
           <option key={g.cnfId} value={g.cnfId}>{g.cnfName}</option>
         ))}
       </select>
+
       <select
         className="inp"
         style={{ padding: "5px 8px", fontSize: 12 }}
-        // Remount when the C&F changes so an uncommitted depot choice from the
+        // Remount when the C&F changes so an uncommitted choice from the
         // PREVIOUS C&F never lingers as this select's displayed value.
         key={cnfId}
-        defaultValue={depotValue}
+        value={parentId}
         disabled={pending || !cnfId}
         onChange={(e) => {
-          const fd = new FormData();
-          fd.set("depotId", e.target.value);
-          start(() => setUserDepot(userId, fd));
+          const next = e.target.value;
+          setParentId(next);
+          // Assigning the parent is what the sub-dealer select is for when one
+          // exists, so only commit here when there is nothing to narrow into —
+          // otherwise merely opening the cascade would reassign the rep.
+          const picked = topLevel.find((d) => d.id === next);
+          const hasChildren = picked?.kind === "dealer" && inCnf.some((d) => d.parentId === picked.id);
+          if (next && !hasChildren) assign(next);
         }}
       >
         <option value="">{cnfId ? t("Select stockist") : t("Pick a C&F first")}</option>
-        {depotOptions.map((d) => (
-          <option key={d.id} value={d.id}>{d.name}</option>
+        {topLevel.map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.name}
+            {d.kind === "dealer" ? ` (${t("Dealer")})` : ""}
+          </option>
         ))}
       </select>
+
+      {subDealers.length > 0 && (
+        <select
+          className="inp"
+          style={{ padding: "5px 8px", fontSize: 12 }}
+          key={`sub-${parentId}`}
+          value={current?.parentId ? current.id : ""}
+          disabled={pending}
+          onChange={(e) => assign(e.target.value || parentId)}
+        >
+          {/* Blank means the dealer itself, not "nothing chosen". */}
+          <option value="">{t("— the dealer itself")}</option>
+          {subDealers.map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }
