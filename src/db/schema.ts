@@ -459,7 +459,7 @@ export const repLocations = pgTable("rep_locations", {
 export type RepLocation = typeof repLocations.$inferSelect;
 
 // ── Depot operations: SKU stock, movements, scheme claims ───────────────
-// The Depot portal (role key `dealer`, shown as "Depot") tracks per-depot
+// The Stockist portal (roles `depot` and `dealer`) tracks per-stockist
 // inventory of the four product SKUs, an inward/outward movement log, and
 // retailer scheme payouts.
 

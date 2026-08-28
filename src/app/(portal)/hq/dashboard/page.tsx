@@ -925,7 +925,7 @@ export default async function HqDashboardPage({
                 <table className="table">
                   <thead>
                     <tr>
-                      {["Counter", "Area", "Depot", "Status", "Last visit"].map((h) => (
+                      {["Counter", "Area", "Stockist", "Status", "Last visit"].map((h) => (
                         <th key={h}>{t(h)}</th>
                       ))}
                     </tr>

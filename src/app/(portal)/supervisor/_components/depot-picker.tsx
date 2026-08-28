@@ -22,7 +22,7 @@ export function DepotPicker({ options, value }: { options: StockistOption[]; val
       style={{ width: "auto", padding: "6px 10px", fontSize: 12 }}
       value={value}
       onChange={(e) => select(e.target.value)}
-      aria-label="Depot"
+      aria-label="Stockist"
     >
       <option value="all">All stockists</option>
       {options.map((o) => (

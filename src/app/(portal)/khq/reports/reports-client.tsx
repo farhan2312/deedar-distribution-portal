@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MapScopePickers } from "@/app/(portal)/_components/map-scope-pickers";
 import { formatISTDate, formatISTTime } from "@/lib/date";
 import { useT } from "@/lib/i18n/provider";
+import { Pagination } from "@/components/ui/pagination";
 import type { StockistKind } from "@/db/schema";
 import { PRODUCT_SEGMENTS } from "@/lib/field/products";
 import { exportCountersCsv, exportVisitsCsv } from "@/lib/khq/report-actions";
@@ -389,69 +390,4 @@ function SegmentCells({ row }: { row: VisitReportRow }) {
 /** Page numbers to render: always first and last, the current page and its
  * neighbours, with `null` marking an ellipsis gap. Keeps the control a fixed
  * width no matter how many pages exist. */
-function pageWindow(page: number, totalPages: number): (number | null)[] {
-  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-  const out: (number | null)[] = [1];
-  const start = Math.max(2, page - 1);
-  const end = Math.min(totalPages - 1, page + 1);
-  if (start > 2) out.push(null);
-  for (let i = start; i <= end; i++) out.push(i);
-  if (end < totalPages - 1) out.push(null);
-  out.push(totalPages);
-  return out;
-}
 
-function Pagination({
-  page,
-  totalPages,
-  onGo,
-  t,
-}: {
-  page: number;
-  totalPages: number;
-  onGo: (p: number) => void;
-  t: (k: string) => string;
-}) {
-  const items = pageWindow(page, totalPages);
-  return (
-    <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
-      <button
-        type="button"
-        className="btn btn-secondary btn-sm"
-        onClick={() => onGo(page - 1)}
-        disabled={page <= 1}
-      >
-        {t("Previous")}
-      </button>
-      {items.map((p, i) =>
-        p == null ? (
-          <span key={`gap-${i}`} className="px-1 text-[12px]" style={{ color: "var(--ink-3)" }}>
-            …
-          </span>
-        ) : (
-          <button
-            key={p}
-            type="button"
-            onClick={() => onGo(p)}
-            className="rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition-colors"
-            style={
-              p === page
-                ? { background: "var(--accent)", color: "#fff", border: "none" }
-                : { background: "var(--surface)", color: "var(--ink-2)", border: "1px solid var(--hairline)" }
-            }
-          >
-            {p}
-          </button>
-        ),
-      )}
-      <button
-        type="button"
-        className="btn btn-secondary btn-sm"
-        onClick={() => onGo(page + 1)}
-        disabled={page >= totalPages}
-      >
-        {t("Next")}
-      </button>
-    </div>
-  );
-}

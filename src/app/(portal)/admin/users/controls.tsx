@@ -283,7 +283,7 @@ export function SupervisorDepotPicker({
       )}
       {otherCheckedCount > 0 && (
         <p className="text-[11px]" style={{ color: "var(--warning)" }}>
-          + {otherCheckedCount} {t(otherCheckedCount === 1 ? "depot checked under another C&F (legacy) — switch C&F above to see them." : "depots checked under another C&F (legacy) — switch C&F above to see them.")}
+          + {otherCheckedCount} {t(otherCheckedCount === 1 ? "stockist checked under another C&F (legacy) — switch C&F above to see them." : "stockists checked under another C&F (legacy) — switch C&F above to see them.")}
         </p>
       )}
     </div>

@@ -1,7 +1,9 @@
 "use client";
 
 import type { DepotCountersData, DepotCounterRow, StockistOption } from "@/lib/depot/data";
+import { useState } from "react";
 import { useT } from "@/lib/i18n/provider";
+import { PAGE_SIZE, Pagination } from "@/components/ui/pagination";
 import { DepotSelect } from "../_components/depot-select";
 
 const STATUS_STYLE: Record<DepotCounterRow["status"], { label: string; bg: string; color: string }> = {
@@ -29,6 +31,13 @@ export function DepotCountersClient({
 }) {
   const t = useT();
   const rows = data.counters;
+  const [page, setPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  // Clamped rather than reset: switching stockist can shrink the list under
+  // the current page, and this corrects it in the same render.
+  const safePage = Math.min(page, totalPages);
+  const paged = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
     <div>
@@ -39,6 +48,13 @@ export function DepotCountersClient({
           </h4>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
             {t("Wholesale outlets served by this stockist.")}
+            {rows.length > PAGE_SIZE && (
+              <>
+                {" · "}
+                {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, rows.length)} {t("of")}{" "}
+                {rows.length}
+              </>
+            )}
           </p>
         </div>
         {scope.length > 1 && <DepotSelect options={scope} value={selectedId} />}
@@ -69,7 +85,7 @@ export function DepotCountersClient({
                 </td>
               </tr>
             ) : (
-              rows.map((c) => {
+              paged.map((c) => {
                 const st = STATUS_STYLE[c.status];
                 return (
                   <tr key={c.id}>
@@ -90,6 +106,10 @@ export function DepotCountersClient({
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <Pagination page={safePage} totalPages={totalPages} onGo={setPage} t={t} />
+      )}
     </div>
   );
 }

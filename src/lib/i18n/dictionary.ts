@@ -272,6 +272,8 @@ const HI: Record<string, string> = {
   "Start your day log before adding counters or visits.":
     "काउंटर या विज़िट जोड़ने से पहले अपना डे लॉग शुरू करें।",
   "Go to Day Log": "डे लॉग पर जाएँ",
+  "stockist checked under another C&F (legacy) — switch C&F above to see them.": "स्टॉकिस्ट दूसरे C&F के तहत चयनित (लीगेसी) — देखने के लिए ऊपर C&F बदलें।",
+  "stockists checked under another C&F (legacy) — switch C&F above to see them.": "स्टॉकिस्ट दूसरे C&F के तहत चयनित (लीगेसी) — देखने के लिए ऊपर C&F बदलें।",
   "My stockist": "मेरा स्टॉकिस्ट",
   "How much stock do I have?": "मेरे पास कितना स्टॉक है?",
   "Which products are running low?": "कौन से प्रोडक्ट कम हो रहे हैं?",
@@ -885,7 +887,7 @@ const HI: Record<string, string> = {
 
   // ── C&F HQ: Dashboard ──
   "Headquarters (Kanpur) →": "मुख्यालय (कानपुर) →",
-  stockists: "डिपो",
+  stockists: "स्टॉकिस्ट",
   Overview: "अवलोकन",
   "Counter visibility": "दुकान दृश्यता",
   "geo-tagged with owner mobile": "मालिक के मोबाइल के साथ जियो-टैग",

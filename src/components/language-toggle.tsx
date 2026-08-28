@@ -13,10 +13,11 @@ export function LanguageToggle({ variant = "light" }: { variant?: "light" | "dar
 
   return (
     <div
-      className="inline-flex gap-0.5 rounded-full p-[3px]"
-      style={{ background: trackBg, opacity: pending ? 0.7 : 1 }}
+      className="inline-flex gap-0.5 rounded-full p-[3px] transition-opacity"
+      style={{ background: trackBg, opacity: pending ? 0.55 : 1 }}
       role="group"
       aria-label="Language"
+      aria-busy={pending}
     >
       {LANGS.map((l) => {
         const active = lang === l;
@@ -25,12 +26,13 @@ export function LanguageToggle({ variant = "light" }: { variant?: "light" | "dar
             key={l}
             type="button"
             onClick={() => setLang(l)}
+            disabled={pending || active}
             aria-pressed={active}
             className="rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors"
             style={{
               background: active ? "var(--accent)" : "transparent",
               color: active ? "#fff" : variant === "dark" ? "rgba(255,255,255,.7)" : "var(--ink-2)",
-              cursor: "pointer",
+              cursor: pending || active ? "default" : "pointer",
             }}
           >
             {LANG_LABEL[l]}

@@ -950,7 +950,7 @@ export default async function KhqDashboardPage({
             <table className="table">
               <thead>
                 <tr>
-                  {["Counter", "Area", "Depot", "Status", "Last visit"].map((h) => (
+                  {["Counter", "Area", "Stockist", "Status", "Last visit"].map((h) => (
                     <th key={h}>{t(h)}</th>
                   ))}
                 </tr>
@@ -995,7 +995,7 @@ export default async function KhqDashboardPage({
         <table className="table">
           <thead>
             <tr>
-              {["Depot", "C&F", "Reps", "Counters", "Visits today", "Packets today", "Avg counter time", "Declining"].map((h) => (
+              {["Stockist", "C&F", "Reps", "Counters", "Visits today", "Packets today", "Avg counter time", "Declining"].map((h) => (
                 <th key={h}>{t(h)}</th>
               ))}
             </tr>

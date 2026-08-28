@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { counterStatusEnum } from "@/db/schema";
 import { useT } from "@/lib/i18n/provider";
+import { PAGE_SIZE, Pagination } from "@/components/ui/pagination";
 
 type CounterStatus = (typeof counterStatusEnum.enumValues)[number];
 
@@ -65,6 +66,7 @@ export function CountersListClient({
   const [q, setQ] = useState("");
   const [area, setArea] = useState("all");
   const [depot, setDepot] = useState("all");
+  const [page, setPage] = useState(1);
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -78,6 +80,16 @@ export function CountersListClient({
       return true;
     });
   }, [rows, q, area, depot]);
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  // Clamped rather than reset in an effect: a filter that shrinks the result
+  // can strand you on page 7 of 3, and recomputing here fixes that in the same
+  // render instead of flashing an empty list first.
+  const safePage = Math.min(page, totalPages);
+  const paged = useMemo(
+    () => visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [visible, safePage],
+  );
 
   // Areas shown in the dropdown depend on the depot filter — picking a depot
   // narrows the area list to that depot's areas. Otherwise the dropdown lists
@@ -113,7 +125,7 @@ export function CountersListClient({
           style={{ padding: "6px 10px", fontSize: 12, minWidth: 200 }}
           type="search"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => { setQ(e.target.value); setPage(1); }}
           placeholder={t("Search by name or mobile…")}
         />
         {stockists.length > 1 && (
@@ -140,7 +152,7 @@ export function CountersListClient({
             className="inp"
             style={{ width: "auto", padding: "6px 10px", fontSize: 12 }}
             value={area}
-            onChange={(e) => setArea(e.target.value)}
+            onChange={(e) => { setArea(e.target.value); setPage(1); }}
             aria-label={t("Area")}
           >
             <option value="all">{t("All areas")}</option>
@@ -150,6 +162,11 @@ export function CountersListClient({
           </select>
         )}
         <span className="ml-auto text-[12px]" style={{ color: "var(--ink-3)" }}>
+          {visible.length > PAGE_SIZE && (
+            <>
+              {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, visible.length)} {t("of")}{" "}
+            </>
+          )}
           {visible.length} {t(visible.length === 1 ? "counter" : "counters")}
         </span>
       </div>
@@ -168,7 +185,7 @@ export function CountersListClient({
         </p>
       ) : (
         <div className="space-y-2">
-          {visible.map((c) => {
+          {paged.map((c) => {
             const st = STATUS_STYLE[c.status];
             return (
               <div key={c.id} className="card card-hover flex items-center gap-3 p-3.5">
@@ -213,6 +230,10 @@ export function CountersListClient({
             );
           })}
         </div>
+      )}
+
+      {totalPages > 1 && (
+        <Pagination page={safePage} totalPages={totalPages} onGo={setPage} t={t} />
       )}
     </div>
   );

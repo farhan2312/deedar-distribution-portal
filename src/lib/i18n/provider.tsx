@@ -2,9 +2,8 @@
 
 import { createContext, useCallback, useContext, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { DEFAULT_LANG, type Lang } from "./config";
+import { DEFAULT_LANG, LANG_COOKIE, type Lang } from "./config";
 import { translate } from "./dictionary";
-import { setLanguage } from "./actions";
 
 type LanguageContextValue = {
   lang: Lang;
@@ -24,8 +23,19 @@ export function LanguageProvider({ lang: initial, children }: { lang: Lang; chil
   const setLang = useCallback(
     (next: Lang) => {
       setLangState(next); // optimistic — client components re-render immediately
-      startTransition(async () => {
-        await setLanguage(next);
+
+      // Write the cookie here rather than awaiting the server action first.
+      //
+      // Server components read the language from this cookie, so they can only
+      // change on a refresh. Awaiting `setLanguage` made that TWO sequential
+      // round-trips — one to set the cookie, then one to re-render — and the
+      // second one re-runs every query on the page. On a dashboard that is
+      // seconds, which is why headings from server components lagged behind
+      // the client ones. The cookie is not httpOnly, so the browser can set it
+      // synchronously and the refresh below already carries the new value.
+      document.cookie = `${LANG_COOKIE}=${next}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+
+      startTransition(() => {
         router.refresh(); // re-render server components with the new language
       });
     },
