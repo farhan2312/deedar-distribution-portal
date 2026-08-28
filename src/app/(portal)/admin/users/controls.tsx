@@ -11,6 +11,7 @@ import {
   setUserDepot,
   setUserReportsTo,
   toggleAccessRole,
+  setUserAreasForStockist,
   toggleUserArea,
   toggleUserDepot,
   updateUser,
@@ -107,6 +108,45 @@ export function RoleCheckbox({
       disabled={pending}
       onChange={() => start(() => toggleAccessRole(userId, role))}
     />
+  );
+}
+
+/**
+ * "Select all" / "Clear" for one stockist's areas.
+ *
+ * One write for the whole group rather than a click per pill — a sub-dealer
+ * with thirty areas is otherwise a minute of clicking. Shows how many are on
+ * so the state is readable without counting the pills.
+ */
+export function AreaGroupToggle({
+  userId,
+  stockistId,
+  checkedCount,
+  total,
+}: {
+  userId: string;
+  stockistId: string;
+  checkedCount: number;
+  total: number;
+}) {
+  const t = useT();
+  const [pending, start] = useTransition();
+  const allOn = checkedCount === total;
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="text-[10.5px] tabular-nums" style={{ color: "var(--ink-3)" }}>
+        {checkedCount}/{total}
+      </span>
+      <button
+        type="button"
+        className="link text-[10.5px]"
+        disabled={pending}
+        onClick={() => start(() => setUserAreasForStockist(userId, stockistId, !allOn))}
+      >
+        {pending ? t("Saving…") : allOn ? t("Clear all") : t("Select all")}
+      </button>
+    </span>
   );
 }
 

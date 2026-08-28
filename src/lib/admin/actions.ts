@@ -589,6 +589,59 @@ export async function setUserReportsTo(userId: string, formData: FormData) {
 }
 
 /** Multi-scope: field → which areas (within their one depot) they cover. */
+/**
+ * Tick or clear every area belonging to one stockist, in a single write.
+ *
+ * A sub-dealer can own thirty-odd areas; doing that a checkbox at a time is
+ * thirty round-trips and thirty re-renders. The stockist must still be inside
+ * the rep's family, checked the same way as the single toggle.
+ */
+export async function setUserAreasForStockist(
+  userId: string,
+  stockistId: string,
+  select: boolean,
+) {
+  await requireAdmin();
+
+  const [rep] = await db
+    .select({ stockistId: users.stockistId })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!rep?.stockistId) return;
+
+  if (stockistId !== rep.stockistId) {
+    const [owner] = await db
+      .select({ parentId: stockists.parentId })
+      .from(stockists)
+      .where(eq(stockists.id, stockistId))
+      .limit(1);
+    if (owner?.parentId !== rep.stockistId) return;
+  }
+
+  const owned = await db
+    .select({ id: areas.id })
+    .from(areas)
+    .where(eq(areas.stockistId, stockistId));
+  if (owned.length === 0) return;
+  const ids = owned.map((o) => o.id);
+
+  if (select) {
+    // Re-inserting an existing pair would violate the composite key, so the
+    // conflict is ignored rather than the set being diffed first.
+    await db
+      .insert(userAreas)
+      .values(ids.map((areaId) => ({ userId, areaId })))
+      .onConflictDoNothing();
+  } else {
+    await db
+      .delete(userAreas)
+      .where(and(eq(userAreas.userId, userId), inArray(userAreas.areaId, ids)));
+  }
+
+  revalidatePath("/admin/users");
+}
+
 export async function toggleUserArea(userId: string, areaId: string) {
   await requireAdmin();
 

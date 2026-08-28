@@ -272,6 +272,7 @@ const HI: Record<string, string> = {
   "Start your day log before adding counters or visits.":
     "काउंटर या विज़िट जोड़ने से पहले अपना डे लॉग शुरू करें।",
   "Go to Day Log": "डे लॉग पर जाएँ",
+  "Areas": "क्षेत्र",
   "— the dealer itself": "— डीलर स्वयं",
   "All (incl. sub-dealers)": "सभी (सब-डीलर सहित)",
   "Add sub-dealer": "सब-डीलर जोड़ें",

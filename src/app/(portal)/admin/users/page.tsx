@@ -21,6 +21,7 @@ import { NavIconView } from "../../_components/nav-icons";
 import {
   AddUserForm,
   AreaCheckbox,
+  AreaGroupToggle,
   CnfSelect,
   ActiveToggle,
   DeleteUserButton,
@@ -433,19 +434,31 @@ export default async function AdminUsersPage() {
                             <DepotSelect userId={u.id} value={u.stockistId} groups={depotGroups} />
                             {u.stockistId && areaGroups.length > 0 && (
                               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                {areaGroups.map((g) => (
+                                {areaGroups.map((g) => {
+                                  const on = g.areas.filter((a) =>
+                                    userAreaSet.get(u.id)?.has(a.id),
+                                  ).length;
+                                  return (
                                   <div key={g.id} className="w-full">
-                                    {/* Only labelled when there is more than one
-                                        stockist in play — a plain depot should
-                                        not gain a heading it does not need. */}
-                                    {areaGroups.length > 1 && (
-                                      <div
-                                        className="mb-1 mt-1 text-[10.5px] font-bold uppercase tracking-wider"
+                                    {/* The heading carries the group's name and
+                                        its select-all. A single-group stockist
+                                        still gets the control — the name is
+                                        dropped, since there is nothing to tell
+                                        it apart from. */}
+                                    <div className="mb-1 mt-1 flex flex-wrap items-center justify-between gap-2">
+                                      <span
+                                        className="text-[10.5px] font-bold uppercase tracking-wider"
                                         style={{ color: "var(--ink-3)" }}
                                       >
-                                        {g.name}
-                                      </div>
-                                    )}
+                                        {areaGroups.length > 1 ? g.name : t("Areas")}
+                                      </span>
+                                      <AreaGroupToggle
+                                        userId={u.id}
+                                        stockistId={g.id}
+                                        checkedCount={on}
+                                        total={g.areas.length}
+                                      />
+                                    </div>
                                     <div className="flex flex-wrap gap-1.5">
                                       {g.areas.map((a) => (
                                         <AreaCheckbox
@@ -458,7 +471,8 @@ export default async function AdminUsersPage() {
                                       ))}
                                     </div>
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             )}
                           </Mapping>
