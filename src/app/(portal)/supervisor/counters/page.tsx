@@ -81,17 +81,16 @@ export default async function SupervisorCountersPage() {
     .map(([id, name]) => ({ id, name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  // Title reflects the scope: one depot names it, several is "your stockists".
-  const scopeSuffix =
-    scopeStockists.length === 1 ? ` — ${scopeStockists[0].name}` : ` — ${t("your stockists")}`;
+  // One depot names itself; several collapse to "your stockists".
+  const scopeLabel =
+    scopeStockists.length === 1 ? scopeStockists[0].name : t("your stockists");
 
   return (
     <CountersListClient
       rows={rows}
       areas={areasInScope}
       stockists={depotsInScope}
-      title={t("All Counters") + scopeSuffix}
-      subtitle={t("Every counter in the stockists you supervise — view only.")}
+      scope={scopeLabel}
       truncated={counterRows.length >= MAX_ROWS}
       maxRows={MAX_ROWS}
       showCheckIn={false}

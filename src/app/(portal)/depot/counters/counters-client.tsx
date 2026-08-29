@@ -41,21 +41,19 @@ export function DepotCountersClient({
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            {t("Wholesale counters")} — {stockistName}
-          </h4>
-          <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            {t("Wholesale outlets served by this stockist.")}
-            {rows.length > PAGE_SIZE && (
-              <>
-                {" · "}
-                {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, rows.length)} {t("of")}{" "}
-                {rows.length}
-              </>
-            )}
-          </p>
+      {/* Title and description live in the top bar; this row carries only what
+          the shell can't know — which stockist, and how far down the list. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-[12px]" style={{ color: "var(--ink-3)" }}>
+          <span className="chip" style={{ background: "var(--accent-tint)", color: "var(--accent)", borderColor: "transparent" }}>
+            {stockistName}
+          </span>
+          {rows.length > PAGE_SIZE && (
+            <span>
+              {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, rows.length)} {t("of")}{" "}
+              {rows.length}
+            </span>
+          )}
         </div>
         {scope.length > 1 && <DepotSelect options={scope} value={selectedId} />}
       </div>

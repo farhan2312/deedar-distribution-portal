@@ -1,5 +1,14 @@
 import "server-only";
 import { istDateString } from "@/lib/date";
+import {
+  daysBetween,
+  fyStartYear,
+  isPeriodKey,
+  matchPreset,
+  periodBounds,
+  shiftDays,
+  type PeriodKey,
+} from "./periods";
 
 /**
  * Free date-range scoping for the company dashboard.
@@ -14,7 +23,7 @@ import { istDateString } from "@/lib/date";
  * convention the rest of the app uses.
  */
 
-export type RangeParams = { from?: string; to?: string };
+export type RangeParams = { from?: string; to?: string; period?: string };
 
 export type Range = {
   /** Inclusive IST calendar dates, `YYYY-MM-DD`. */
@@ -34,13 +43,22 @@ export type Range = {
   minDate: string;
   /** Newest selectable date: today. A future range would always be empty. */
   maxDate: string;
-  /** Human label, e.g. "2026 so far" or "1 Apr – 30 Jun 2026". */
+  /** Human label, e.g. "FY 2026–27" or "1 Apr – 30 Jun 2026". */
   label: string;
-  /** True when the range is exactly year-to-date, the default. */
+  /** Qualifier for a label whose window hasn't closed yet — "so far", or "".
+   * Separate from `label` so the page can style it down. */
+  note: string;
+  /** True when the range is exactly year-to-date. */
   isYtd: boolean;
+  /** Which preset pill is lit, or null for a hand-picked window. */
+  period: PeriodKey | null;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Re-exported: these were defined here before the client needed them, and
+// plenty of server code still imports them from this module.
+export { shiftDays, daysBetween };
 
 /** IST midnight on a calendar date, as a UTC instant. */
 export function istStartOf(dateStr: string): Date {
@@ -56,15 +74,6 @@ export function istEndOf(dateStr: string): Date {
  * off-by-one at the timezone edge. */
 function anchor(dateStr: string): Date {
   return new Date(`${dateStr}T12:00:00+05:30`);
-}
-
-export function shiftDays(dateStr: string, days: number): string {
-  return istDateString(new Date(anchor(dateStr).getTime() + days * DAY_MS));
-}
-
-/** Whole days from `a` to `b`, inclusive of both ends. */
-export function daysBetween(a: string, b: string): number {
-  return Math.round((anchor(b).getTime() - anchor(a).getTime()) / DAY_MS) + 1;
 }
 
 function isDate(s: string | null | undefined): s is string {
@@ -87,35 +96,50 @@ export function startOfYear(dateStr: string): string {
 }
 
 /**
- * Resolve `?from=&to=` into a concrete range, defaulting to year-to-date.
+ * Resolve `?period=` or `?from=&to=` into a concrete range.
  *
- * `earliestDate` comes from the oldest visit in the DB so the slider can't
- * scroll back through empty years. Both ends are clamped into
+ * Precedence is explicit dates first, then a named preset, then the caller's
+ * fallback preset. Explicit dates win because they are what the two calendar
+ * inputs write, and a stale `?period=` left in the URL must not override the
+ * date the viewer just picked.
+ *
+ * `earliestDate` comes from the oldest row in the DB — it bounds the calendar
+ * inputs and defines what "All time" means. Hand-picked ends are clamped into
  * `[minDate, today]` and swapped if they arrive reversed, so a hand-edited URL
  * degrades to a sane range rather than an empty one.
  */
 export function resolveRange(
   params: RangeParams,
   earliestDate: string | null,
-  /** What an absent `?from=&to=` means. The dashboard opens on the year so far;
-   * an ISR's page opens on today, because "what did they do today" is the
-   * question being asked when you click their name. */
-  fallback: "ytd" | "today" = "ytd",
+  /** Which preset an untouched URL means. The dashboard and an ISR's page open
+   * on the current financial year; Reports opens on all time, because a report
+   * that silently hides last year's rows is a report nobody can trust. */
+  fallback: PeriodKey = "fy",
 ): Range {
   const today = istDateString();
   const ytdStart = startOfYear(today);
+  const dataStart = isDate(earliestDate) ? earliestDate : null;
 
-  // The slider floor: the older of "first data" and "Jan 1 this year", so the
-  // default YTD range is always fully reachable on the track even on a
-  // database whose history starts in March.
-  const earliest = isDate(earliestDate) && earliestDate < ytdStart ? earliestDate : ytdStart;
+  const preset = isPeriodKey(params.period) ? params.period : fallback;
+  const presetBounds = periodBounds(preset, today, dataStart);
+
+  // The calendar floor has to reach at least as far back as whatever is
+  // selected, or the date inputs would carry a value below their own `min`.
+  // It also always covers 1 Jan, so this year is reachable on a database
+  // whose history starts in March.
+  let earliest = ytdStart;
+  if (dataStart && dataStart < earliest) earliest = dataStart;
+  if (presetBounds.from < earliest) earliest = presetBounds.from;
   const minDate = earliest < today ? earliest : today;
 
   const clamp = (d: string) => (d < minDate ? minDate : d > today ? today : d);
 
-  const defaultFrom = fallback === "today" ? today : ytdStart;
-  let from = isDate(params.from) ? clamp(params.from) : defaultFrom;
-  let to = isDate(params.to) ? clamp(params.to) : today;
+  // Preset bounds are used as-is: they are correct by construction, and
+  // clamping them to the calendar floor would collapse "Last FY" to a single
+  // day on a database that only holds this year.
+  const hasCustom = isDate(params.from) || isDate(params.to);
+  let from = isDate(params.from) ? clamp(params.from) : presetBounds.from;
+  let to = isDate(params.to) ? clamp(params.to) : presetBounds.to;
   if (from > to) [from, to] = [to, from];
 
   const days = daysBetween(from, to);
@@ -126,6 +150,9 @@ export function resolveRange(
 
   const isYtd = from === ytdStart && to === today;
   const sameYear = from.slice(0, 4) === to.slice(0, 4);
+  // Custom dates still light a pill when they happen to equal one, so a link
+  // pasted with ?from=&to= doesn't look like it has no filter applied.
+  const period = hasCustom ? matchPreset(from, to, dataStart, today) : preset;
 
   return {
     from,
@@ -139,14 +166,55 @@ export function resolveRange(
     minDate,
     maxDate: today,
     isYtd,
-    label: isYtd
-      ? from.slice(0, 4)
-      : from === to
-        ? longDayLabel(from)
-        : sameYear
-          ? `${anchor(from).toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" })} – ${longDayLabel(to)}`
-          : `${longDayLabel(from)} – ${longDayLabel(to)}`,
+    period,
+    label: presetLabel(period, from) ?? spanLabel(from, to, sameYear),
+    // "Last 30 days" and "All time" are already whole phrases; only the
+    // windows that run up to an unfinished today take the qualifier.
+    note: period === "fy" || period === "month" || isYtd ? "so far" : "",
   };
+}
+
+/** "FY 2026–27" — the Indian financial year the date falls in. */
+function fyLabel(dateStr: string): string {
+  const y = fyStartYear(dateStr);
+  return `FY ${y}–${String((y + 1) % 100).padStart(2, "0")}`;
+}
+
+function presetLabel(period: PeriodKey | null, from: string): string | null {
+  switch (period) {
+    case "today":
+      return "Today";
+    case "yesterday":
+      return "Yesterday";
+    case "fy":
+    case "lastfy":
+      return fyLabel(from);
+    case "month":
+      return anchor(from).toLocaleDateString("en-GB", {
+        timeZone: "Asia/Kolkata",
+        month: "long",
+        year: "numeric",
+      });
+    case "30d":
+      return "Last 30 days";
+    case "90d":
+      return "Last 90 days";
+    case "all":
+      return "All time";
+    default:
+      return null;
+  }
+}
+
+function spanLabel(from: string, to: string, sameYear: boolean): string {
+  if (from === to) return longDayLabel(from);
+  if (!sameYear) return `${longDayLabel(from)} – ${longDayLabel(to)}`;
+  const shortFrom = anchor(from).toLocaleDateString("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+  });
+  return `${shortFrom} – ${longDayLabel(to)}`;
 }
 
 /**

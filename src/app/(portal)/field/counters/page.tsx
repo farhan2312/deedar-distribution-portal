@@ -99,16 +99,12 @@ export default async function FieldCountersPage() {
     .map(([id, name]) => ({ id, name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const title =
-    t("All Counters") + (user.depot ? ` — ${user.depot.name}` : "");
-
   return (
     <CountersListClient
       rows={rows}
       areas={areasInScope}
       stockists={depotsInScope}
-      title={title}
-      subtitle={t("Every counter at your stockist — tap Check in to open its page.")}
+      scope={user.depot?.name ?? t("Your stockist")}
       truncated={counterRows.length >= MAX_ROWS}
       maxRows={MAX_ROWS}
       showCheckIn={true}

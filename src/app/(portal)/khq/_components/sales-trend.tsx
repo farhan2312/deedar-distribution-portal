@@ -42,13 +42,14 @@ export function SalesTrend({
   const max = Math.max(1, ...bars.map((b) => b.value));
   const total = bars.reduce((s, b) => s + b.value, 0);
 
-  // Drilling now narrows the dashboard's date range rather than setting a
-  // year/month pair — same gesture, but it composes with the time slider
-  // instead of fighting it.
+  // Drilling narrows the dashboard to that month by writing explicit dates.
+  // The preset has to go with it: leaving `?period=` behind would light a pill
+  // that no longer describes what is on screen.
   function drill(from: string, to: string) {
     const q = new URLSearchParams(params.toString());
     q.set("from", from);
     q.set("to", to);
+    q.delete("period");
     router.push(`${pathname}?${q.toString()}`);
   }
 

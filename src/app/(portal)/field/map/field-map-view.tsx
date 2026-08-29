@@ -113,7 +113,7 @@ export function FieldMapView({
 
       <div className="mb-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
         <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-          {scopeLabel} — {t("counters map")}
+          {scopeLabel}
         </h4>
         <div className="flex flex-wrap items-center gap-3.5">
           <LegendDot color={COUNTER_COLORS.visited} label={t("Visited today")} />

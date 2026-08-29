@@ -2,10 +2,18 @@ import "server-only";
 import { and, asc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import type { AccessRole } from "@/db/schema";
-import { areas, cnfs, counters, stockists, visits } from "@/db/schema";
+import { cnfs, counters, stockists, visits } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
+import { areaOptionsFor, withSubDealers } from "./area-options";
 
-export type ScopeOption = { id: string; name: string };
+export type ScopeOption = {
+  id: string;
+  name: string;
+  /** Optgroup heading. Set when one dropdown mixes options from more than one
+   * owner — a dealer's areas alongside its sub-dealers' — so the list still
+   * says who owns what. Absent means "no heading", the common case. */
+  group?: string;
+};
 
 /** Which map is being viewed — decides the non-admin fallback scoping. */
 export type MapSection = "field" | "supervisor" | "hq";
@@ -142,7 +150,12 @@ export async function resolveMapScope(
     }
   }
   const depot = pick(depotOptions, params.depot);
-  const scopedStockistIds = depot ? [depot.id] : depotOptions.map((d) => d.id);
+  // Choosing a dealer means its sub-dealers too: their areas are part of that
+  // dealer's territory, and the Area dropdown lists them, so the counters
+  // behind them have to be in scope as well.
+  const scopedStockistIds = await withSubDealers(
+    depot ? [depot.id] : depotOptions.map((d) => d.id),
+  );
 
   // ── Area level ─────────────────────────────────────────────────────────
   // An ISR picks from their own areas. Everyone else picks from the selected
@@ -152,11 +165,9 @@ export async function resolveMapScope(
   if (section === "field" && !isAdmin) {
     areaOptions = [...user.areas].sort((a, b) => a.name.localeCompare(b.name));
   } else if (scopedStockistIds.length) {
-    areaOptions = await db
-      .select({ id: areas.id, name: areas.name })
-      .from(areas)
-      .where(inArray(areas.stockistId, scopedStockistIds))
-      .orderBy(asc(areas.name));
+    // Grouped by owner once more than one stockist is in scope — a dealer's
+    // own areas first, then a heading per sub-dealer.
+    areaOptions = await areaOptionsFor(scopedStockistIds);
   }
   const area = pick(areaOptions, params.area);
 
@@ -168,8 +179,10 @@ export async function resolveMapScope(
     where = eq(counters.areaId, area.id);
     stockistIds = scopedStockistIds.length ? scopedStockistIds : null;
   } else if (depot) {
-    where = eq(counters.stockistId, depot.id);
-    stockistIds = [depot.id];
+    // `scopedStockistIds` is the dealer plus its sub-dealers here, so a dealer
+    // rolls its sub-dealers up rather than showing as an oddly empty branch.
+    where = inArray(counters.stockistId, scopedStockistIds);
+    stockistIds = scopedStockistIds;
   } else if (section === "field" && !isAdmin) {
     // An ISR with no area picked sees all of their own areas.
     const ids = areaOptions.map((a) => a.id);

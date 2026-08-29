@@ -44,8 +44,7 @@ export function CountersListClient({
   rows,
   areas,
   stockists,
-  title,
-  subtitle,
+  scope,
   truncated,
   maxRows,
   showCheckIn,
@@ -55,8 +54,8 @@ export function CountersListClient({
   areas: { id: string; name: string }[];
   /** Depots the filter dropdown offers. Filter is hidden when there's ≤ 1. */
   stockists: { id: string; name: string }[];
-  title: string;
-  subtitle: string;
+  /** Which stockist(s) the rows cover — the page title is in the top bar. */
+  scope: string;
   truncated: boolean;
   maxRows: number;
   showCheckIn: boolean;
@@ -107,15 +106,11 @@ export function CountersListClient({
 
   return (
     <div style={{ animation: "fadeUp .3s ease" }}>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            {title}
-          </h4>
-          <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            {subtitle}
-          </p>
-        </div>
+      {/* Title and description are in the top bar; this names the scope. */}
+      <div className="mb-3">
+        <span className="chip" style={{ background: "var(--accent-tint)", color: "var(--accent)", borderColor: "transparent" }}>
+          {scope}
+        </span>
       </div>
 
       {/* Filters */}

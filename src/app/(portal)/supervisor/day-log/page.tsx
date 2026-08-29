@@ -78,18 +78,11 @@ export default async function SupervisorDayLogPage({
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          {/* Page title comes from the shell; this carries the scope in view. */}
-          <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            {scopeLabel}
-          </h4>
-          <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            {isAdmin
-              ? t("Clock-in / clock-out for every field salesman, company-wide.")
-              : t("Clock-in / clock-out for every salesman who reports to you.")}
-          </p>
-        </div>
+      {/* Title and description come from the shell; this carries the scope. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <span className="chip" style={{ background: "var(--accent-tint)", color: "var(--accent)", borderColor: "transparent" }}>
+          {scopeLabel}
+        </span>
         {stockists.length > 1 && <DepotPicker options={stockists} value={depot?.id ?? "all"} />}
       </div>
 

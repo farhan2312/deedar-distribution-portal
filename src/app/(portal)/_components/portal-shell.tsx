@@ -72,11 +72,18 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
   );
   const section = sectionForPath(pathname);
   const crumb = breadcrumbForPath(pathname);
-  // Every sidebar-listed page gets the same icon + title header, sourced from
-  // the nav config so a page can never drift from its sidebar entry. Routes
-  // with no nav entry (/dashboard, /account/*, counter detail pages) render
-  // their own bespoke headers instead.
+  // The heading is sourced from the nav config so a page can never drift from
+  // its sidebar entry.
   const navItem = navItemForPath(pathname);
+  /**
+   * What the top bar shows. A nav item gives the real name and blurb; a detail
+   * page (rep, counter, ISR) has no nav entry, so it falls back to the
+   * breadcrumb's id-stripped segment — "ISR" under "Sales Officer" — and the
+   * page itself supplies the specific name below.
+   */
+  const heading = navItem
+    ? { title: navItem.heading ?? navItem.label, subtitle: navItem.blurb ?? null }
+    : { title: crumb.page, subtitle: crumb.section };
 
   // Root uses `h-dvh`, not `h-screen`: on iOS Safari `100vh` is taller than the
   // visible area while the URL bar is showing, which pushes the bottom of the
@@ -160,7 +167,7 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
 
       {/* Main content — recolored per role section (vars set on the root) */}
       <main className="min-w-0 flex-1 overflow-y-auto">
-        {/* Top bar — breadcrumb left, language + bug report right */}
+        {/* Top bar — page heading left, language + bug report right */}
         <div
           className="sticky top-0 z-20 flex items-center justify-between gap-2 px-4 py-2.5 md:gap-3 md:px-8 md:py-3"
           style={{
@@ -168,30 +175,43 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
             borderBottom: "1px solid var(--hairline-soft)",
           }}
         >
-          {/* The sidebar carries the brand on desktop; on mobile it's hidden, so
-              the top bar shows the mark instead of the breadcrumb. */}
-          <div className="flex min-w-0 flex-1 items-center gap-2 md:hidden">
+          {/* The page heading lives HERE rather than in the content.
+              The top bar was carrying a breadcrumb that mostly restated the
+              sidebar's highlighted item, while every page spent its first
+              ~80px on a title saying the same thing again. Promoting the title
+              into the bar removes the repetition and lets content start at the
+              top of the scroll area. */}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            {/* The sidebar carries the brand on desktop; on mobile it is
+                hidden, so the mark rides alongside the heading instead. */}
             <span
-              className="flex h-7 w-7 flex-none items-center justify-center rounded-lg text-[13px] font-bold text-white"
+              className="flex h-7 w-7 flex-none items-center justify-center rounded-lg text-[13px] font-bold text-white md:hidden"
               style={{ background: "var(--accent)" }}
             >
               D
             </span>
-            <span
-              className="truncate text-[14px] font-bold"
-              style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}
-            >
-              Deedar
-            </span>
+            {/* Both truncate rather than wrap — the bar has to stay one row
+                tall — so `title` keeps the full text reachable on hover. */}
+            <div className="min-w-0">
+              <h1
+                className="truncate text-[15px] font-bold leading-tight md:text-[18px]"
+                style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}
+                title={t(heading.title)}
+              >
+                {t(heading.title)}
+              </h1>
+              {heading.subtitle && (
+                <p
+                  className="hidden truncate text-[12px] leading-tight md:block"
+                  style={{ color: "var(--ink-3)" }}
+                  title={t(heading.subtitle)}
+                >
+                  {t(heading.subtitle)}
+                </p>
+              )}
+            </div>
           </div>
-          <nav aria-label="Breadcrumb" className="hidden items-center gap-2 text-[13px] md:flex">
-            <span style={{ color: "var(--ink-3)" }}>{t(crumb.section)}</span>
-            <span style={{ color: "var(--ink-3)" }}>›</span>
-            <span className="font-semibold" style={{ color: "var(--accent)" }}>
-              {t(crumb.page)}
-            </span>
-          </nav>
-          {/* flex-none so the actions never compress; the brand truncates instead. */}
+          {/* flex-none so the actions never compress; the heading truncates instead. */}
           <div className="flex flex-none items-center gap-1.5 md:gap-3">
             <LiveLocationPill active={trackingActive} />
             <LanguageToggle />
@@ -202,13 +222,7 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
         {/* Wide by default so tables/dashboards use the body; narrow pages
             (New Counter, Beat, forms) self-center via their own `mx-auto max-w-*`. */}
         {/* pb clears the fixed bottom nav on mobile (bar height + safe area). */}
-        <div className="mx-auto max-w-[1600px] px-4 pb-28 pt-5 md:px-8 md:pb-8 md:pt-8">
-          {navItem && !navItem.customHeader && (
-            <div className="mb-5 md:mb-6">
-              <h1 className="page-title">{t(navItem.label)}</h1>
-              {navItem.blurb && <p className="page-subtitle max-w-2xl">{t(navItem.blurb)}</p>}
-            </div>
-          )}
+        <div className="mx-auto max-w-[1600px] px-4 pb-28 pt-4 md:px-8 md:pb-8 md:pt-5">
           {children}
         </div>
       </main>

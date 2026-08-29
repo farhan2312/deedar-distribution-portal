@@ -1,19 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, counters, dayLogs, stockists, users, visits, type ProductSegment, type VisitItem } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
-import { durationLabel, formatISTDate, formatISTTime, istDateString } from "@/lib/date";
+import { formatISTDate, formatISTTime, istDateString, minutesLabel } from "@/lib/date";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { pickupBarColor, soldAgainstPickup } from "@/lib/field/day-stock";
 import { competitorDisplayLabel, formatDuration, PRODUCT_SEGMENTS } from "@/lib/field/products";
-import { istEndOf, istStartOf } from "@/lib/khq/range";
+import { resolveRange, type RangeParams } from "@/lib/khq/range";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { ProgressBar } from "@/components/ui/progress-bar";
-import { IsrDayPicker } from "../../_components/day-picker";
+import { PERIOD_PRESETS } from "@/lib/khq/periods";
+import { PeriodFilter } from "../../_components/period-filter";
 
 const SEGMENT_COLOR: Record<ProductSegment, string> = {
   DG10: "#7B2FA0",
@@ -33,7 +34,7 @@ export default async function KhqIsrPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<RangeParams>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -61,8 +62,9 @@ export default async function KhqIsrPage({
     return <Notice title={t("ISR detail")}>{t("No such ISR.")}</Notice>;
   }
 
-  // The date floor is THIS ISR's first visit, so the picker covers their whole
-  // history rather than the company's.
+  // The calendar floor is THIS ISR's first visit, so the filter covers their
+  // whole history rather than the company's — and "All time" means their all
+  // time, not the company's.
   const [first] = await db
     .select({ d: sql<string | null>`min(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date::text` })
     .from(visits)
@@ -70,21 +72,11 @@ export default async function KhqIsrPage({
 
   const now = nowInstant();
   const today = istDateString(now);
-  // Opens on today; the picker moves it to any single day in their history.
-  const { date: requestedDate } = await searchParams;
-  const minDate = first?.d && first.d < today ? first.d : today;
-  const isDate = (d: string | undefined): d is string =>
-    !!d && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(d);
-  const date = isDate(requestedDate)
-    ? requestedDate < minDate
-      ? minDate
-      : requestedDate > today
-        ? today
-        : requestedDate
-    : today;
+  const range = resolveRange(await searchParams, first?.d ?? null);
+  const singleDay = range.from === range.to;
 
-  const dayStart = istStartOf(date);
-  const dayEnd = istEndOf(date);
+  const dayStart = range.start;
+  const dayEnd = range.end;
   const inRange = and(
     eq(visits.userId, isrId),
     gte(visits.visitedAt, dayStart),
@@ -138,7 +130,14 @@ export default async function KhqIsrPage({
     db
       .select()
       .from(dayLogs)
-      .where(and(eq(dayLogs.userId, isrId), eq(dayLogs.logDate, date))),
+      .where(
+        and(
+          eq(dayLogs.userId, isrId),
+          gte(dayLogs.logDate, range.from),
+          lte(dayLogs.logDate, range.to),
+        ),
+      )
+      .orderBy(desc(dayLogs.logDate)),
     // Lifetime totals — deliberately unbounded by the date picker. The tiles
     // answer "how much has this ISR done", which shouldn't reset to zero just
     // because you paged to a day they were off.
@@ -157,9 +156,22 @@ export default async function KhqIsrPage({
       .where(eq(counters.createdByUserId, isrId)),
   ]);
 
-  const log = logRows[0] ?? null;
+  // A one-day window still has exactly one log, so the single-day view keeps
+  // its clock times; a longer one sums instead.
+  const log = singleDay ? (logRows[0] ?? null) : null;
   const packets = visitRows.reduce((sum, v) => sum + v.sold, 0);
-  const pickup = log?.pickupTotal ?? 0;
+  const pickup = logRows.reduce((sum, l) => sum + (l.pickupTotal ?? 0), 0);
+  const remaining = logRows.reduce((sum, l) => sum + (l.remainingTotal ?? 0), 0);
+  const daysWorked = logRows.filter((l) => l.startAt).length;
+  // An open day counts up to now, but only if it is actually today — an
+  // unclosed log from last month would otherwise contribute weeks.
+  const onJobMinutes = logRows.reduce((sum, l) => {
+    if (!l.startAt) return sum;
+    const end = l.endAt ?? (l.logDate === today ? now : null);
+    if (!end) return sum;
+    return sum + Math.max(0, (end.getTime() - l.startAt.getTime()) / 60000);
+  }, 0);
+  const anyOpen = logRows.some((l) => l.startAt && !l.endAt);
 
   // Per-SKU split, summed from the items JSONB in JS — a jsonb SRF join errors
   // on any non-array legacy row, same as on the dashboards.
@@ -176,13 +188,13 @@ export default async function KhqIsrPage({
   const day = {
     packets,
     pickup,
-    remaining: log?.remainingTotal ?? 0,
+    remaining,
     achieved: soldAgainstPickup(packets, pickup),
-    onJob: log?.startAt ? durationLabel(log.startAt, log.endAt ?? (date === today ? now : null)) : "—",
+    onJob: daysWorked > 0 ? minutesLabel(onJobMinutes) : "—",
   };
-  const hasActivity = visitRows.length > 0 || createdRows.length > 0 || !!log?.startAt;
+  const hasActivity = visitRows.length > 0 || createdRows.length > 0 || daysWorked > 0;
 
-  const coveredToday = new Set(visitRows.map((v) => v.counterId)).size;
+  const covered = new Set(visitRows.map((v) => v.counterId)).size;
   const total = lifetime[0] ?? { visits: 0, packets: 0, counters: 0, days: 0 };
   const totalCreated = lifetimeCreated[0]?.n ?? 0;
 
@@ -199,13 +211,25 @@ export default async function KhqIsrPage({
             {isr.depot ?? t("No stockist")}
             {isr.phone ? ` · ${isr.phone}` : ""}
             {" · "}
-            {formatISTDate(date)}
-            {date === today && ` (${t("Today")})`}
+            {t(range.label)}
+            {range.note ? ` ${t(range.note)}` : ""}
           </p>
         </div>
-        <div className="flex flex-none flex-wrap items-center gap-2">
-          <IsrDayPicker value={date} minDate={minDate} maxDate={today} />
-        </div>
+      </div>
+
+      {/* Period — pills plus calendars need the full width. This page gets the
+          full preset list: one ISR's single day is the question it answers, so
+          Today and Yesterday belong here even though they don't on a
+          company-wide dashboard. */}
+      <div className="mb-4">
+        <PeriodFilter
+          period={range.period}
+          from={range.from}
+          to={range.to}
+          minDate={range.minDate}
+          maxDate={range.maxDate}
+          presets={PERIOD_PRESETS}
+        />
       </div>
 
       {/* Lifetime totals, not the selected day's — the day is in the card
@@ -220,15 +244,17 @@ export default async function KhqIsrPage({
         <SummaryTile label={t("Days worked")} value={total.days} tint="#2E5FA3" />
       </div>
       <p className="mb-5 text-[12px]" style={{ color: "var(--ink-3)" }}>
-        {t("All time — the day below is filtered by the date picker.")}
+        {t("All time — the breakdown below follows the period filter.")}
       </p>
 
       {!hasActivity ? (
-        <Notice title={isr.name}>{t("No activity on this day.")}</Notice>
+        <Notice title={isr.name}>
+          {singleDay ? t("No activity on this day.") : t("No activity in this period.")}
+        </Notice>
       ) : (
         <div className="flex flex-col gap-5">
           <section className="card overflow-hidden p-0">
-              {/* Day header: the figures for this day */}
+              {/* The figures for the selected window */}
               <div
                 className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4"
                 style={{ borderColor: "var(--hairline-soft)" }}
@@ -238,17 +264,21 @@ export default async function KhqIsrPage({
                     className="text-[16px] font-bold"
                     style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}
                   >
-                    {t("Day log")}
+                    {singleDay ? t("Day log") : t("Day logs")}
                   </h2>
                   <p className="mt-1 text-[12px]" style={{ color: "var(--ink-3)" }}>
-                    {log?.startAt
-                      ? `${formatISTTime(log!.startAt!)} → ${log!.endAt ? formatISTTime(log!.endAt) : t("still open")} · ${day.onJob} ${t("on job")}`
-                      : t("Day not started")}
+                    {singleDay
+                      ? log?.startAt
+                        ? `${formatISTTime(log.startAt)} → ${log.endAt ? formatISTTime(log.endAt) : t("still open")} · ${day.onJob} ${t("on job")}`
+                        : t("Day not started")
+                      : daysWorked > 0
+                        ? `${daysWorked} ${t("days worked")} · ${day.onJob} ${t("on job")}${anyOpen ? ` · ${t("one still open")}` : ""}`
+                        : t("No day started in this period")}
                     {day.pickup > 0 && (
                       <>
                         {" · "}
                         {t("Picked up")} <strong style={{ color: "var(--ink-2)" }}>{day.pickup}</strong>
-                        {log?.endAt && (
+                        {(singleDay ? !!log?.endAt : day.remaining > 0) && (
                           <>
                             {" · "}
                             {t("Remaining")} <strong style={{ color: "var(--ink-2)" }}>{day.remaining}</strong>
@@ -261,7 +291,7 @@ export default async function KhqIsrPage({
                 <div className="flex flex-wrap gap-4">
                   <DayStat label={t("Sold")} value={day.packets} outOf={day.pickup || null} accent />
                   <DayStat label={t("Visits")} value={visitRows.length} />
-                  <DayStat label={t("Covered")} value={coveredToday} />
+                  <DayStat label={t("Covered")} value={covered} />
                   <DayStat label={t("New")} value={createdRows.length} />
                 </div>
               </div>
@@ -304,14 +334,17 @@ export default async function KhqIsrPage({
               </div>
               {visitRows.length === 0 ? (
                 <p className="px-5 pb-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
-                  {t("No visits on this day.")}
+                  {singleDay ? t("No visits on this day.") : t("No visits in this period.")}
                 </p>
               ) : (
                 <div className="table-wrap">
                   <table className="table">
                     <thead>
                       <tr>
-                        {["Time", "Counter", "Area", "Sold", "Stock", "Rank", "Competitor", "On counter"].map((h) => (
+                        {(singleDay
+                          ? ["Time", "Counter", "Area", "Sold", "Stock", "Rank", "Competitor", "On counter"]
+                          : ["Date", "Time", "Counter", "Area", "Sold", "Stock", "Rank", "Competitor", "On counter"]
+                        ).map((h) => (
                           <th key={h}>{t(h)}</th>
                         ))}
                       </tr>
@@ -319,6 +352,9 @@ export default async function KhqIsrPage({
                     <tbody>
                       {visitRows.map((v) => (
                         <tr key={v.id}>
+                          {!singleDay && (
+                            <td className="whitespace-nowrap tabular-nums">{formatISTDate(v.visitedAt)}</td>
+                          )}
                           <td className="whitespace-nowrap tabular-nums">{formatISTTime(v.visitedAt)}</td>
                           <td className="font-semibold">
                             {v.counterName}
@@ -352,7 +388,7 @@ export default async function KhqIsrPage({
               </div>
               {createdRows.length === 0 ? (
                 <p className="px-5 pb-5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-                  {t("No counters added on this day.")}
+                  {singleDay ? t("No counters added on this day.") : t("No counters added in this period.")}
                 </p>
               ) : (
                 <div className="grid gap-2.5 px-5 pb-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -369,7 +405,9 @@ export default async function KhqIsrPage({
                         {t(counterTypeLabel(c.type, c.typeOther))} · {c.area}
                       </div>
                       <div className="mt-1 flex items-center gap-2 text-[11px]" style={{ color: "var(--ink-3)" }}>
-                        <span className="tabular-nums">{formatISTTime(c.createdAt)}</span>
+                        <span className="tabular-nums">
+                          {singleDay ? formatISTTime(c.createdAt) : formatISTDate(c.createdAt)}
+                        </span>
                         {c.lat == null || c.lng == null ? (
                           <span style={{ color: "var(--warning)" }}>· {t("no GPS")}</span>
                         ) : null}

@@ -144,13 +144,6 @@ export function AssignBeat({
 
   return (
     <div>
-      <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        {t("Assign Daily Beat")}
-      </h4>
-      <p className="mt-0.5 mb-5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-        {t("Build a set of counters and hand them to a sales rep — schedule 1 day ahead or up to a week out.")}
-      </p>
-
       <div className="card mb-5 p-5">
         <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
           <div className="field">

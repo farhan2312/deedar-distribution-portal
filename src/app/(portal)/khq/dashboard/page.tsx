@@ -36,7 +36,7 @@ import {
 import { RefreshButton } from "../../supervisor/_components/refresh-button";
 import { IsrLeaderboard } from "../_components/isr-leaderboard";
 import { StatePicker } from "../_components/state-picker";
-import { DateRangePicker } from "../_components/date-range-picker";
+import { PeriodFilter } from "../_components/period-filter";
 import { SalesTrend, type TrendBar } from "../_components/sales-trend";
 
 // ── Palettes ───────────────────────────────────────────────────────────────
@@ -606,7 +606,7 @@ export default async function KhqDashboardPage({
     .sort((a, b) => (b.days ?? 99999) - (a.days ?? 99999))
     .slice(0, 12);
 
-  const rangeNote = range.isCurrent ? t("so far") : "";
+  const rangeNote = range.note ? t(range.note) : "";
 
   const kpis: KpiProps[] = [
     { icon: "box", tint: "#7B2FA0", label: t("Packets sold"), value: packets.toLocaleString("en-IN"), delta: packetsDelta, deltaLabel: t("vs last period") },
@@ -634,17 +634,23 @@ export default async function KhqDashboardPage({
               </span>
             )}
           </h1>
-          <p className="page-subtitle max-w-2xl">
-            {selectedState
-              ? `${t("Totals for")} ${selectedState.name}.`
-              : t("Company-wide totals for the selected dates.")}
-          </p>
         </div>
         <div className="flex flex-none flex-wrap items-end gap-2">
-          <DateRangePicker from={range.from} to={range.to} minDate={range.minDate} maxDate={range.maxDate} />
           <StatePicker options={allStates} value={selectedState?.id ?? "all"} />
           <RefreshButton />
         </div>
+      </div>
+
+      {/* Period — its own row: six pills plus two calendars don't fit beside
+          the title without wrapping into an unreadable stack. */}
+      <div className="mb-4">
+        <PeriodFilter
+          period={range.period}
+          from={range.from}
+          to={range.to}
+          minDate={range.minDate}
+          maxDate={range.maxDate}
+        />
       </div>
 
       {/* Context strip */}
@@ -691,7 +697,7 @@ export default async function KhqDashboardPage({
                     {grain === "month" ? t("peak month") : t("peak day")}
                   </div>
                 </div>
-                {!range.isYtd && <BackToYtd label={t("← Back to YTD")} />}
+                {range.period !== "fy" && <BackToDefault label={t("← Back to this FY")} />}
               </div>
             }
           />
@@ -1026,11 +1032,12 @@ export default async function KhqDashboardPage({
   );
 }
 
-/** Plain link back to the whole-year view — a server component, so no client
- * JS for what is just a URL change. */
-function BackToYtd({ label }: { label: string }) {
-  // Clearing from/to lets `resolveRange` fall back to its YTD default, so the
-  // link doesn't have to know today's date.
+/** Plain link back to the default period — a server component, so no client
+ * JS for what is just a URL change. Reached after drilling into a month from
+ * the trend chart. */
+function BackToDefault({ label }: { label: string }) {
+  // Clearing every param lets `resolveRange` fall back to its own default, so
+  // the link doesn't have to know today's date or which preset that is.
   return (
     <a href="?" className="link text-[12px]">
       {label}

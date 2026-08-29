@@ -17,7 +17,6 @@ import { requireAdmin } from "@/lib/admin/guard";
 import { ROLE_LABEL } from "@/lib/auth/roles";
 import { formatISTDate, formatISTTime } from "@/lib/date";
 import { getT } from "@/lib/i18n/server";
-import { NavIconView } from "../../_components/nav-icons";
 import {
   AddUserForm,
   AreaCheckbox,
@@ -183,38 +182,22 @@ export default async function AdminUsersPage() {
 
   return (
     <div style={{ animation: "fadeUp .3s ease" }}>
-      {/* Own header (customHeader in nav) so the stat cards share the title row. */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-3.5">
-          <span
-            className="flex h-12 w-12 flex-none items-center justify-center rounded-2xl text-white"
-            style={{ background: "var(--accent)", boxShadow: "var(--shadow-sm)" }}
-          >
-            <NavIconView icon="userCog" className="h-6 w-6" />
-          </span>
-          <div className="min-w-0">
-            <h1 className="page-title">{t("Users & access")}</h1>
-            <p className="page-subtitle max-w-xl">
-              {t("Central Admin adds every user and controls which sections they see in their sidebar.")}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <StatCard
-            icon={<UsersIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />}
-            iconBg="var(--accent-tint)"
-            label={t("Total users")}
-            value={allUsers.length}
-            sub={`${allUsers.filter((u) => u.isActive).length} ${t("active")}`}
-          />
-          <StatCard
-            icon={<ClockIcon className="h-5 w-5" style={{ color: pendingRequests.length > 0 ? "#B25E00" : "var(--ink-3)" }} />}
-            iconBg={pendingRequests.length > 0 ? "rgba(224,177,92,.2)" : "var(--bg-soft)"}
-            label={t("Pending requests")}
-            value={pendingRequests.length}
-            sub={t("Awaiting approval")}
-          />
-        </div>
+      {/* The title sits in the top bar, so the page opens on the numbers. */}
+      <div className="mb-6 flex flex-wrap gap-3">
+        <StatCard
+          icon={<UsersIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />}
+          iconBg="var(--accent-tint)"
+          label={t("Total users")}
+          value={allUsers.length}
+          sub={`${allUsers.filter((u) => u.isActive).length} ${t("active")}`}
+        />
+        <StatCard
+          icon={<ClockIcon className="h-5 w-5" style={{ color: pendingRequests.length > 0 ? "#B25E00" : "var(--ink-3)" }} />}
+          iconBg={pendingRequests.length > 0 ? "rgba(224,177,92,.2)" : "var(--bg-soft)"}
+          label={t("Pending requests")}
+          value={pendingRequests.length}
+          sub={t("Awaiting approval")}
+        />
       </div>
 
       {/* Add user + Access requests */}

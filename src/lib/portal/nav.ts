@@ -23,7 +23,7 @@ export const ROLE_THEME: Record<AccessRole, RoleTheme> = {
   dealer: { strong: "#128A82", deep: "#0A6660", bg: "#DFF5F3", dot: "#4FC3B8", muted: "#5FA39D", rgb: "18, 138, 130" },
   hq: { strong: "#B9812E", deep: "#8F611D", bg: "#FBEAD1", dot: "#E3A542", muted: "#CBA06B", rgb: "185, 129, 46" },
   khq: { strong: "#C1442A", deep: "#93301C", bg: "#FBE5E1", dot: "#E8836C", muted: "#C17A6A", rgb: "193, 68, 42" },
-  admin: { strong: "#6B5B3E", deep: "#4C3F28", bg: "#EFE6D2", dot: "#A6926B", muted: "#B3A588", rgb: "107, 91, 62" },
+  admin: { strong: "#6B5B3E", deep: "#4C3F28", bg: "#EFE6D2", dot: "#A6926B", muted: "#B3A588", rgb: "107, 91, 62" }
 };
 
 export type NavIcon =
@@ -47,16 +47,17 @@ export type NavIcon =
 
 export type NavItem = {
   href: string;
+  /** Sidebar text — kept short so the rail stays scannable. */
   label: string;
+  /** Top-bar title, when the page deserves a fuller name than the sidebar
+   * can carry ("Beat" in the rail, "Today's Beat" as the heading). Defaults
+   * to `label`. */
+  heading?: string;
   icon: NavIcon;
-  /** One-line description shown under the title in the page header (portal
-   * shell). Keeps the title + subtitle together as one grouped unit so a page
-   * body never has to render an orphaned subtitle. */
+  /** One-line description shown under the title in the portal shell's top
+   * bar. Kept with the title so a page body never renders an orphaned
+   * subtitle. */
   blurb?: string;
-  /** When true the portal shell renders NO auto-header for this route — the
-   * page draws its own (e.g. to put stat cards on the same row as the title).
-   * The page is then responsible for the icon + title itself. */
-  customHeader?: boolean;
 };
 
 export type NavSection = {
@@ -73,41 +74,101 @@ export const NAV_SECTIONS: NavSection[] = [
     role: "field",
     title: "Field Salesman ISR",
     items: [
-      { href: "/field/day-log", label: "Day Log", icon: "calendar", customHeader: true },
-      { href: "/field/beat", label: "Beat", icon: "target", customHeader: true },
+      {
+        href: "/field/day-log",
+        label: "Day Log",
+        icon: "calendar",
+        blurb: "Clock in, log the stock you picked up, and close out the day.",
+      },
+      {
+        href: "/field/beat",
+        label: "Beat",
+        heading: "Today's Beat",
+        icon: "target",
+        blurb: "The counters assigned to you for today — check in as you go.",
+      },
       // Browsable list of every counter in the rep's depot — a way to check
       // into a counter that isn't on today's beat without hunting by mobile.
-      { href: "/field/counters", label: "All Counters", icon: "grid", customHeader: true },
-      { href: "/field/map", label: "Live map", icon: "mapPin", customHeader: true },
-      { href: "/field/new-counter", label: "New Counter", icon: "plusCircle", customHeader: true },
+      {
+        href: "/field/counters",
+        label: "All Counters",
+        icon: "grid",
+        blurb: "Every counter at your stockist — tap Check in to open its page.",
+      },
+      {
+        href: "/field/map",
+        label: "Live map",
+        icon: "mapPin",
+        blurb: "You and your counters, plotted live.",
+      },
+      {
+        href: "/field/new-counter",
+        label: "New Counter",
+        icon: "plusCircle",
+        blurb: "Add a retail outlet to your stockist's list.",
+      },
     ],
   },
   {
     role: "supervisor",
     title: "Sales Officer",
     items: [
-      { href: "/supervisor/map", label: "Live map", icon: "mapPin", customHeader: true },
-      { href: "/supervisor/analytics", label: "Analytics", icon: "barChart", customHeader: true },
-      { href: "/supervisor/day-log", label: "Day Log", icon: "calendar", customHeader: true },
       {
-        // Draws its own header so the depot picker sits on the title row.
+        href: "/supervisor/map",
+        label: "Live map",
+        icon: "mapPin",
+        blurb: "Your field salesmen and their counters, plotted live.",
+      },
+      {
+        href: "/supervisor/analytics",
+        label: "Analytics",
+        heading: "Analytics Overview",
+        icon: "barChart",
+        blurb: "Track your team's performance and visits across your stockists.",
+      },
+      {
+        href: "/supervisor/day-log",
+        label: "Day Log",
+        icon: "calendar",
+        blurb: "Clock-in and clock-out times for every field salesman in view.",
+      },
+      {
         href: "/supervisor/exceptions",
         label: "Exceptions",
         icon: "alert",
-        customHeader: true,
+        blurb:
+          "Reps who clocked in but never clocked out. Force-close the day with the correct end time on their behalf.",
       },
-      { href: "/supervisor/assign-beat", label: "Assign Beat", icon: "users", customHeader: true },
+      {
+        href: "/supervisor/assign-beat",
+        label: "Assign Beat",
+        heading: "Assign Daily Beat",
+        icon: "users",
+        blurb:
+          "Build a set of counters and hand them to a sales rep — schedule 1 day ahead or up to a week out.",
+      },
       // Read-only browseable list of every counter in the SO's supervised
       // stockists — for scoping beats and answering "does depot X have this
       // outlet?" without needing to check-in.
-      { href: "/supervisor/counters", label: "All Counters", icon: "grid", customHeader: true },
+      {
+        href: "/supervisor/counters",
+        label: "All Counters",
+        heading: "All Counters — your stockists",
+        icon: "grid",
+        blurb: "Every counter in the stockists you supervise — view only.",
+      },
       {
         href: "/supervisor/assignments",
         label: "Assignment Summary",
         icon: "clipboard",
         blurb: "Every daily beat assignment scheduled across the week.",
       },
-      { href: "/supervisor/new-counter", label: "New Counter", icon: "plusCircle", customHeader: true },
+      {
+        href: "/supervisor/new-counter",
+        label: "New Counter",
+        icon: "plusCircle",
+        blurb: "Add a retail outlet to one of the stockists you supervise.",
+      },
     ],
   },
   {
@@ -118,18 +179,49 @@ export const NAV_SECTIONS: NavSection[] = [
     alsoRoles: ["dealer"],
     title: "Stockist",
     items: [
-      { href: "/depot/counters", label: "Counters", icon: "grid", customHeader: true },
-      { href: "/depot/schemes", label: "Schemes", icon: "tag", customHeader: true },
-      { href: "/depot/stock", label: "Stock", icon: "box", customHeader: true },
+      {
+        href: "/depot/counters",
+        label: "Counters",
+        heading: "Wholesale counters",
+        icon: "grid",
+        blurb: "Wholesale outlets served by this stockist.",
+      },
+      {
+        href: "/depot/schemes",
+        label: "Schemes",
+        icon: "tag",
+        blurb: "Retailer scheme payouts, settled via UPI.",
+      },
+      {
+        href: "/depot/stock",
+        label: "Stock",
+        icon: "box",
+        blurb: "Daily inward / outward movement, tracked per SKU.",
+      },
     ],
   },
   {
     role: "hq",
     title: "C&F Sales",
     items: [
-      { href: "/hq/dashboard", label: "Dashboard", icon: "dashboard", customHeader: true },
-      { href: "/hq/map", label: "Live map", icon: "mapPin", customHeader: true },
-      { href: "/hq/depots", label: "Stockists & Areas", icon: "building", customHeader: true },
+      {
+        href: "/hq/dashboard",
+        label: "Dashboard",
+        icon: "dashboard",
+        blurb: "Performance across every stockist, area and rep in this C&F.",
+      },
+      {
+        href: "/hq/map",
+        label: "Live map",
+        icon: "mapPin",
+        blurb: "Every field salesman and counter across this C&F, live.",
+      },
+      {
+        href: "/hq/depots",
+        label: "Stockists & Areas",
+        icon: "building",
+        blurb: "The depots, dealers and areas that make up this C&F.",
+      },
     ],
   },
   {
@@ -146,9 +238,7 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/khq/reports",
         label: "Reports",
         icon: "clipboard",
-        // Draws its own header so the Counters/Visits tab pills + Export CSV
-        // button sit on the title row.
-        customHeader: true,
+        blurb: "All counters and visits company-wide, exportable to CSV.",
       },
     ],
   },
@@ -159,17 +249,17 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         href: "/admin/hierarchy",
         label: "Hierarchy",
+        heading: "Territory Management",
         icon: "sitemap",
-        blurb: "Central Admin sets up down to C&F HQ; each C&F Manager then adds their own depots and areas.",
+        blurb:
+          "Central Admin sets up down to C&F HQ; each C&F Manager then adds their own depots and areas.",
       },
       {
         href: "/admin/users",
         label: "Users & access",
         icon: "userCog",
-        blurb: "Central Admin adds every user and controls which sections they see in their sidebar.",
-        // Draws its own header so the Total-users / Pending-requests stat cards
-        // sit on the same row as the title instead of dropping below it.
-        customHeader: true,
+        blurb:
+          "Central Admin adds every user and controls which sections they see in their sidebar.",
       },
       {
         href: "/admin/schemes",
@@ -226,7 +316,7 @@ export function navItemForPath(pathname: string): NavItem | null {
 const SEGMENT_LABEL: Record<string, string> = {
   rep: "ISR",
   isr: "ISR",
-  cnf: "C&F",
+  cnf: "C&F"
 };
 
 /** A path segment that identifies a record rather than naming a page — a UUID
@@ -274,6 +364,6 @@ export function themeVars(theme: RoleTheme): React.CSSProperties {
     // tuned for white and are too dim to read on #121212.
     "--role-accent-lift": theme.dot,
     "--role-tint": theme.bg,
-    "--accent-rgb": theme.rgb,
+    "--accent-rgb": theme.rgb
   } as React.CSSProperties;
 }

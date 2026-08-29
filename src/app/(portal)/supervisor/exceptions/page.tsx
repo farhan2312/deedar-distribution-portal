@@ -22,7 +22,6 @@ export default async function SupervisorExceptionsPage({
     const t = await getT();
     return <Notice title={t("Exceptions")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
-  const t = await getT();
 
   const { depot: requestedDepot } = await searchParams;
   const stockists = await getScopeStockists(user);
@@ -56,16 +55,12 @@ export default async function SupervisorExceptionsPage({
 
   return (
     <div>
-      {/* Own header (nav `customHeader`) so the depot picker sits on the title row. */}
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="page-title">{t("Exceptions")}</h1>
-          <p className="page-subtitle max-w-2xl">
-            {t("Reps who clocked in but never clocked out. Force-close the day with the correct end time on their behalf.")}
-          </p>
+      {/* The title is in the top bar; only the picker needs a row of its own. */}
+      {stockists.length > 1 && (
+        <div className="mb-4 flex justify-end">
+          <DepotPicker options={stockists} value={depot?.id ?? "all"} />
         </div>
-        {stockists.length > 1 && <DepotPicker options={stockists} value={depot?.id ?? "all"} />}
-      </div>
+      )}
 
       <ExceptionsClient rows={rows} />
     </div>

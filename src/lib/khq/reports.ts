@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, ilike, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
@@ -17,16 +17,24 @@ import {
 } from "@/db/schema";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { COMPETITOR_LABEL, PRODUCT_SEGMENTS } from "@/lib/field/products";
+import { areaOptionsFor, withSubDealers } from "@/lib/portal/area-options";
 import type { ScopeLevel } from "@/lib/portal/map-scope";
+import type { PeriodKey } from "./periods";
+import { resolveRange } from "./range";
 
 export type CounterStatus = (typeof counterStatusEnum.enumValues)[number];
 export type CounterType = (typeof counterTypeEnum.enumValues)[number];
 
 /**
  * Kanpur HQ Reports — company-wide dumps of counters and visits, filterable
- * (C&F → Depot → Area + text search + optional date range on visits) and
- * exportable to CSV. Screen queries are paginated 50/page; the CSV export
- * pulls the full filtered set via a server action.
+ * (C&F → Depot → Area + text search + period) and exportable to CSV. Screen
+ * queries are paginated 50/page; the CSV export pulls the full filtered set
+ * via a server action.
+ *
+ * The period applies to both tabs, against the date each tab is actually about:
+ * when a counter was created, and when a visit happened. It defaults to All
+ * time — a report that silently hides last year's rows is a report nobody can
+ * trust — so the filter only ever narrows what you would otherwise see.
  */
 
 export type ReportTab = "counters" | "visits";
@@ -36,25 +44,25 @@ export type ReportsParams = {
   depot?: string;
   area?: string;
   q?: string;
-  from?: string; // "YYYY-MM-DD" (IST); visits tab only
-  to?: string;   // "YYYY-MM-DD" (IST); visits tab only
-  page?: string; // 1-based; both tabs
+  period?: string; // preset key; both tabs
+  from?: string;   // "YYYY-MM-DD" (IST); both tabs
+  to?: string;     // "YYYY-MM-DD" (IST); both tabs
+  page?: string;   // 1-based; both tabs
 };
 
 /** Sanitised, resolved filters. `null` = "no restriction at this level". */
 export type ReportsFilters = {
   cnfId: string | null;
-  stockistId: string | null;
+  /** The chosen stockist, plus its sub-dealers when it is a dealer. Null =
+   * no restriction at this level. */
+  stockistIds: string[] | null;
   areaId: string | null;
   q: string;
-  /** Inclusive-exclusive UTC window derived from the from/to IST dates. Both
-   * null means "all time" — the visits list defaults to unrestricted so the
-   * viewer sees the full log, then narrows by picking dates. */
-  visitFrom: Date | null;
-  visitTo: Date | null;
-  /** Original IST date strings so the UI keeps its inputs populated. */
-  fromDate: string;
-  toDate: string;
+  /** Inclusive-exclusive UTC window for the selected period. Both null on
+   * "All time", so that preset puts no bound in the SQL at all rather than a
+   * bound that merely happens to cover every row. */
+  from: Date | null;
+  to: Date | null;
 };
 
 export type ReportsScope = {
@@ -63,6 +71,15 @@ export type ReportsScope = {
   page: number;
   /** Levels rendered by `<MapScopePickers/>` — reused as-is. */
   levels: ScopeLevel[];
+  /** Everything `<PeriodFilter/>` needs to render its own state. */
+  period: {
+    key: PeriodKey | null;
+    from: string;
+    to: string;
+    minDate: string;
+    maxDate: string;
+    label: string;
+  };
 };
 
 /** Per-segment (sold/stock) breakdown parsed out of `visits.items`, indexed by
@@ -145,42 +162,30 @@ export async function resolveReportsScope(params: ReportsParams): Promise<Report
   const depotOptions = cnfId ? cnfStockists : [];
   const stockistId = pickId(depotOptions, params.depot);
 
-  const areaOptions = stockistId
-    ? await db
-        .select({ id: areas.id, name: areas.name })
-        .from(areas)
-        .where(eq(areas.stockistId, stockistId))
-        .orderBy(asc(areas.name))
-    : [];
+  // A dealer carries its sub-dealers: their areas belong to that dealer's
+  // territory, so they are listed (under their own heading) and their counters
+  // stay in scope.
+  const stockistIds = stockistId ? await withSubDealers([stockistId]) : null;
+  const areaOptions = stockistIds ? await areaOptionsFor(stockistIds) : [];
   const areaId = pickId(areaOptions, params.area);
 
-  // No default date window: visits are unrestricted unless the viewer picks
-  // dates. Keeps the log honest — an empty result means the DB really is
-  // empty, not that a helpful default has hidden yesterday's rows.
-  const fromDate = normalizeDate(params.from) ?? "";
-  const toDate = normalizeDate(params.to) ?? "";
-  let visitFrom: Date | null = null;
-  let visitTo: Date | null = null;
-  if (fromDate && toDate) {
-    [visitFrom, visitTo] = istDateRangeToUtc(fromDate, toDate);
-  } else if (fromDate) {
-    [visitFrom] = istDateRangeToUtc(fromDate, fromDate);
-    // No upper bound → open-ended forward from this date.
-  } else if (toDate) {
-    // No lower bound → everything up to and including this date.
-    const [, to] = istDateRangeToUtc(toDate, toDate);
-    visitTo = to;
-  }
+  // The calendar floor is the oldest counter in the system: every visit's
+  // counter existed before the visit, so this bounds both tabs.
+  const [oldest] = await db
+    .select({ d: sql<string | null>`min(${counters.createdAt} AT TIME ZONE 'Asia/Kolkata')::date::text` })
+    .from(counters);
+
+  // Defaults to "all", the one preset that leaves the SQL unbounded.
+  const range = resolveRange(params, oldest?.d ?? null, "all");
+  const unbounded = range.period === "all";
 
   const filters: ReportsFilters = {
     cnfId,
-    stockistId,
+    stockistIds,
     areaId,
     q: (params.q ?? "").trim(),
-    visitFrom,
-    visitTo,
-    fromDate,
-    toDate,
+    from: unbounded ? null : range.start,
+    to: unbounded ? null : range.end,
   };
 
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
@@ -191,7 +196,20 @@ export async function resolveReportsScope(params: ReportsParams): Promise<Report
     { key: "area", label: "Area", allLabel: "All areas", options: areaOptions, value: areaId ?? "all" },
   ];
 
-  return { tab, filters, page, levels };
+  return {
+    tab,
+    filters,
+    page,
+    levels,
+    period: {
+      key: range.period,
+      from: range.from,
+      to: range.to,
+      minDate: range.minDate,
+      maxDate: range.maxDate,
+      label: range.label,
+    },
+  };
 }
 
 // ── Counter fetch ───────────────────────────────────────────────────────
@@ -199,8 +217,11 @@ export async function resolveReportsScope(params: ReportsParams): Promise<Report
 /** Counter predicate common to on-screen and CSV queries. */
 function counterWhere(f: ReportsFilters): SQL | undefined {
   const parts: SQL[] = [];
+  // A counter's date is when it was created — the only date it has.
+  if (f.from) parts.push(gte(counters.createdAt, f.from));
+  if (f.to) parts.push(lt(counters.createdAt, f.to));
   if (f.areaId) parts.push(eq(counters.areaId, f.areaId));
-  else if (f.stockistId) parts.push(eq(counters.stockistId, f.stockistId));
+  else if (f.stockistIds) parts.push(inArray(counters.stockistId, f.stockistIds));
   else if (f.cnfId) parts.push(eq(stockists.cnfId, f.cnfId));
   if (f.q) {
     const like = `%${f.q}%`;
@@ -285,10 +306,10 @@ export async function fetchCountersReport(
 
 function visitWhere(f: ReportsFilters): SQL | undefined {
   const parts: SQL[] = [];
-  if (f.visitFrom) parts.push(gte(visits.visitedAt, f.visitFrom));
-  if (f.visitTo) parts.push(lt(visits.visitedAt, f.visitTo));
+  if (f.from) parts.push(gte(visits.visitedAt, f.from));
+  if (f.to) parts.push(lt(visits.visitedAt, f.to));
   if (f.areaId) parts.push(eq(counters.areaId, f.areaId));
-  else if (f.stockistId) parts.push(eq(counters.stockistId, f.stockistId));
+  else if (f.stockistIds) parts.push(inArray(counters.stockistId, f.stockistIds));
   else if (f.cnfId) parts.push(eq(stockists.cnfId, f.cnfId));
   if (f.q) {
     const like = `%${f.q}%`;
@@ -521,22 +542,6 @@ function formatMmSs(seconds: number | null): string {
 function pickId<T extends { id: string }>(options: T[], requested: string | undefined): string | null {
   if (!requested || requested === "all") return null;
   return options.some((o) => o.id === requested) ? requested : null;
-}
-
-/** Accept "YYYY-MM-DD", reject anything else (undefined / bad format). */
-function normalizeDate(s: string | undefined): string | null {
-  if (!s) return null;
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
-}
-
-/** IST calendar dates → UTC window `[start, endExclusive)` for `visited_at`.
- * Same fixed +5:30 offset the rest of the app uses. */
-function istDateRangeToUtc(fromIst: string, toIst: string): [Date, Date] {
-  // IST midnight is 18:30 UTC the previous day.
-  const start = new Date(`${fromIst}T00:00:00+05:30`);
-  const end = new Date(`${toIst}T00:00:00+05:30`);
-  end.setUTCDate(end.getUTCDate() + 1); // end-of-day inclusive
-  return [start, end];
 }
 
 function competitorLabel(c: string | null): string {

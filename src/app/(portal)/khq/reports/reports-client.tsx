@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useOptimistic, useState, useTransition, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MapScopePickers } from "@/app/(portal)/_components/map-scope-pickers";
 import { formatISTDate, formatISTTime } from "@/lib/date";
 import { useT } from "@/lib/i18n/provider";
 import { Pagination } from "@/components/ui/pagination";
+import { PeriodFilter } from "../_components/period-filter";
 import type { StockistKind } from "@/db/schema";
 import { PRODUCT_SEGMENTS } from "@/lib/field/products";
 import { exportCountersCsv, exportVisitsCsv } from "@/lib/khq/report-actions";
@@ -71,10 +72,13 @@ export function ReportsClient({
   // Local copies for controlled inputs — kept in sync with the URL so a Back
   // button restore repopulates the fields.
   const [q, setQ] = useState(scope.filters.q);
-  const [from, setFrom] = useState(scope.filters.fromDate);
-  const [to, setTo] = useState(scope.filters.toDate);
   const [exporting, startExport] = useTransition();
   const [exportError, setExportError] = useState<string | null>(null);
+  // Same treatment as the period pills: highlight on click, not on the
+  // server's answer. `useOptimistic` falls back to `scope.tab` once the new page
+  // lands, so a failed navigation can't strand the wrong pill lit.
+  const [navigating, startNav] = useTransition();
+  const [shownTab, showTab] = useOptimistic(scope.tab);
 
   const total = scope.tab === "counters" ? countersTotal : visitsTotal;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -85,33 +89,35 @@ export function ReportsClient({
    * filter change resets to page 1 — staying on page 7 of a now-3-page result
    * would show an empty table. */
   function push(patch: Record<string, string | null>, resetPage = true) {
-    const next = new URLSearchParams(params.toString());
-    for (const [k, v] of Object.entries(patch)) {
-      if (v == null || v === "") next.delete(k);
-      else next.set(k, v);
-    }
-    if (resetPage && !("page" in patch)) next.delete("page");
-    router.push(`${pathname}?${next.toString()}`);
+    // In a transition so the current results stay on screen and interactive
+    // while the next page renders, instead of the whole view blocking.
+    startNav(() => {
+      const next = new URLSearchParams(params.toString());
+      for (const [k, v] of Object.entries(patch)) {
+        if (v == null || v === "") next.delete(k);
+        else next.set(k, v);
+      }
+      if (resetPage && !("page" in patch)) next.delete("page");
+      router.push(`${pathname}?${next.toString()}`);
+    });
   }
 
   function switchTab(nextTab: "counters" | "visits") {
-    if (nextTab === scope.tab) return;
-    push({ tab: nextTab });
+    if (nextTab === shownTab) return;
+    // The optimistic write has to share the transition with the push, or React
+    // commits the highlight and drops it again on the very next render.
+    startNav(() => {
+      showTab(nextTab);
+      const next = new URLSearchParams(params.toString());
+      next.set("tab", nextTab);
+      next.delete("page");
+      router.push(`${pathname}?${next.toString()}`);
+    });
   }
 
   function applySearch(e: FormEvent) {
     e.preventDefault();
     push({ q: q.trim() || null });
-  }
-
-  function applyDates() {
-    push({ from: from || null, to: to || null });
-  }
-
-  function clearDates() {
-    setFrom("");
-    setTo("");
-    push({ from: null, to: null });
   }
 
   function goToPage(p: number) {
@@ -139,13 +145,25 @@ export function ReportsClient({
 
   return (
     <div>
-      {/* Own header (nav customHeader) so tabs + export sit on the title row. */}
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="page-title">{t("Reports")}</h1>
-          <p className="page-subtitle max-w-2xl">
-            {t("All counters and visits company-wide, exportable to CSV.")}
-          </p>
+      {/* Tabs left, export right — the title now lives in the top bar, so
+          these share the row the heading used to occupy. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
+          {(["counters", "visits"] as const).map((tk) => (
+            <button
+              key={tk}
+              onClick={() => switchTab(tk)}
+              className="rounded-full px-4 py-2 text-[13px] font-semibold transition-colors"
+              style={{
+                background: shownTab === tk ? "var(--accent)" : "transparent",
+                color: shownTab === tk ? "#fff" : "var(--ink-2)",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              {tk === "counters" ? t("Counters") : t("Visits")}
+            </button>
+          ))}
         </div>
         <button
           type="button"
@@ -157,23 +175,15 @@ export function ReportsClient({
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-4 inline-flex gap-0.5 rounded-full p-[3px]" style={{ background: "var(--bg-soft)" }}>
-        {(["counters", "visits"] as const).map((tk) => (
-          <button
-            key={tk}
-            onClick={() => switchTab(tk)}
-            className="rounded-full px-4 py-2 text-[13px] font-semibold transition-colors"
-            style={{
-              background: scope.tab === tk ? "var(--accent)" : "transparent",
-              color: scope.tab === tk ? "#fff" : "var(--ink-2)",
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            {tk === "counters" ? t("Counters") : t("Visits")}
-          </button>
-        ))}
+      <div className="mb-3">
+        <PeriodFilter
+          period={scope.period.key}
+          from={scope.period.from}
+          to={scope.period.to}
+          minDate={scope.period.minDate}
+          maxDate={scope.period.maxDate}
+          resetParams={["page"]}
+        />
       </div>
 
       {/* Filter row */}
@@ -196,33 +206,6 @@ export function ReportsClient({
             {t("Search")}
           </button>
         </form>
-        {scope.tab === "visits" && (
-          <div className="flex items-center gap-2">
-            <label className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("From")}</label>
-            <input
-              type="date"
-              className="inp"
-              style={{ width: "auto", padding: "6px 10px", fontSize: 12 }}
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              onBlur={applyDates}
-            />
-            <label className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("To")}</label>
-            <input
-              type="date"
-              className="inp"
-              style={{ width: "auto", padding: "6px 10px", fontSize: 12 }}
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              onBlur={applyDates}
-            />
-            {(from || to) && (
-              <button type="button" className="link text-[12px]" onClick={clearDates}>
-                {t("Clear dates")}
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       {exportError && (
@@ -240,15 +223,19 @@ export function ReportsClient({
           : `${t("Showing")} ${firstRow}–${lastRow} ${t("of")} ${total}`}
       </div>
 
-      {scope.tab === "counters" ? (
-        <CountersTable rows={counters} t={t} />
-      ) : (
-        <VisitsTable rows={visits} t={t} />
-      )}
+      {/* Dimmed while the next page is on its way, so a stale table reads as
+          stale rather than as the answer to what was just clicked. */}
+      <div className="transition-opacity" style={{ opacity: navigating ? 0.6 : 1 }}>
+        {scope.tab === "counters" ? (
+          <CountersTable rows={counters} t={t} />
+        ) : (
+          <VisitsTable rows={visits} t={t} />
+        )}
 
-      {totalPages > 1 && (
-        <Pagination page={scope.page} totalPages={totalPages} onGo={goToPage} t={t} />
-      )}
+        {totalPages > 1 && (
+          <Pagination page={scope.page} totalPages={totalPages} onGo={goToPage} t={t} />
+        )}
+      </div>
     </div>
   );
 }

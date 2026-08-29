@@ -254,30 +254,23 @@ export default async function SupervisorAnalyticsPage({
 
   return (
     <div>
-      {/* Header + controls */}
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="page-title">{t("Analytics Overview")}</h1>
-          <p className="page-subtitle max-w-2xl">
-            {t("Track your team's performance and visits across your stockists.")}
-          </p>
+      {/* Context strip left, controls right. The title moved to the top bar,
+          so what you're looking at and what changes it share one row. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-[12px]" style={{ color: "var(--ink-3)" }}>
+          <span className="chip" style={{ background: "var(--accent-tint)", color: "var(--accent)", borderColor: "transparent" }}>
+            {isToday ? t("Today") : formatISTDate(dayStr)}
+          </span>
+          <span>·</span>
+          <span>{scopeLabel}</span>
+          <span>·</span>
+          <span>{reps.length} {t("reps")}</span>
         </div>
         <div className="flex flex-none flex-wrap items-center gap-2">
           <DayPicker value={dayStr} options={dayOptions} />
           <RefreshButton />
           {stockists.length > 1 && <DepotPicker options={stockists} value={depot?.id ?? "all"} />}
         </div>
-      </div>
-
-      {/* Context strip — what you're looking at */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-[12px]" style={{ color: "var(--ink-3)" }}>
-        <span className="chip" style={{ background: "var(--accent-tint)", color: "var(--accent)", borderColor: "transparent" }}>
-          {isToday ? t("Today") : formatISTDate(dayStr)}
-        </span>
-        <span>·</span>
-        <span>{scopeLabel}</span>
-        <span>·</span>
-        <span>{reps.length} {t("reps")}</span>
       </div>
 
       {/* KPI grid */}

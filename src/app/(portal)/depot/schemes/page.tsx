@@ -39,15 +39,11 @@ export default async function DepotSchemesPage({
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h4 className="text-[16px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            {t("Schemes")} — {depot.name}
-          </h4>
-          <p className="mt-0.5 text-[13px]" style={{ color: "var(--ink-3)" }}>
-            {t("Retailer scheme payouts, settled via UPI.")}
-          </p>
-        </div>
+      {/* Title and description live in the top bar; this names the stockist. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <span className="chip" style={{ background: "var(--accent-tint)", color: "var(--accent)", borderColor: "transparent" }}>
+          {depot.name}
+        </span>
         {scope.length > 1 && <DepotSelect options={scope} value={depot.id} />}
       </div>
 

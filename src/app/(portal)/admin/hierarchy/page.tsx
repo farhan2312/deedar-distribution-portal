@@ -1,101 +1,99 @@
+import { asc, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, cnfs, counters, stockists, states, users } from "@/db/schema";
+import { areas, cnfs, counters, states, stockists, users } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin/guard";
-import { getT } from "@/lib/i18n/server";
-import { AddCnfForm, AddStateForm } from "./hierarchy-forms";
-import { HierarchyTree, type StateNode, type StockistNode } from "./tree";
+import { HierarchyColumns, type HierarchyData } from "./columns";
 
-export default async function AdminHierarchyPage() {
+/**
+ * Territory management as Miller columns: State → C&F → Stockist → Sub-Dealer
+ * → Areas, each column listing the children of the selection to its left.
+ *
+ * Every count is aggregated in SQL. The previous version pulled every counter
+ * row (688 and climbing) purely to length-count them in JS, which is a page
+ * load that grows with the business for a number that does not.
+ */
+export default async function AdminHierarchyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ state?: string; cnf?: string; stockist?: string; sub?: string }>;
+}) {
   await requireAdmin();
-  const t = await getT();
+  const sel = await searchParams;
 
-  const [allStates, allCnfs, allStockists, allAreas, allCounters, allUsers] = await Promise.all([
-    db.select().from(states),
-    db.select().from(cnfs),
-    db.select().from(stockists),
-    db.select().from(areas),
-    db.select({ areaId: counters.areaId, stockistId: counters.stockistId }).from(counters),
-    db.select({ stockistId: users.stockistId, roles: users.accessRoles }).from(users),
+  const [
+    allStates,
+    allCnfs,
+    allStockists,
+    allAreas,
+    countersByArea,
+    countersByStockist,
+    repsByStockist,
+  ] = await Promise.all([
+    db.select().from(states).orderBy(asc(states.name)),
+    db.select().from(cnfs).orderBy(asc(cnfs.name)),
+    db.select().from(stockists).orderBy(asc(stockists.name)),
+    db.select().from(areas).orderBy(asc(areas.name)),
+    db
+      .select({ areaId: counters.areaId, n: sql<number>`count(*)::int` })
+      .from(counters)
+      .groupBy(counters.areaId),
+    db
+      .select({ stockistId: counters.stockistId, n: sql<number>`count(*)::int` })
+      .from(counters)
+      .groupBy(counters.stockistId),
+    db
+      .select({ stockistId: users.stockistId, n: sql<number>`count(*)::int` })
+      .from(users)
+      .where(sql`'field' = ANY(${users.accessRoles}::text[]) and ${users.stockistId} is not null`)
+      .groupBy(users.stockistId),
   ]);
 
-  const countersByArea = new Map<string, number>();
-  const countersByDepot = new Map<string, number>();
-  for (const c of allCounters) {
-    countersByArea.set(c.areaId, (countersByArea.get(c.areaId) ?? 0) + 1);
-    countersByDepot.set(c.stockistId, (countersByDepot.get(c.stockistId) ?? 0) + 1);
-  }
-  const repsByDepot = new Map<string, number>();
-  for (const u of allUsers) {
-    if (u.stockistId && u.roles.includes("field")) {
-      repsByDepot.set(u.stockistId, (repsByDepot.get(u.stockistId) ?? 0) + 1);
-    }
-  }
+  const areaCount = new Map(countersByArea.map((r) => [r.areaId, r.n]));
+  const stockistCounters = new Map(countersByStockist.map((r) => [r.stockistId, r.n]));
+  const stockistReps = new Map(repsByStockist.map((r) => [r.stockistId!, r.n]));
 
-  // Sub-dealers hang off their dealer rather than sitting beside it, so the
-  // tree mirrors the real structure: C&F → depot | dealer → sub-dealer → area.
-  const toNode = (d: (typeof allStockists)[number]): StockistNode => ({
-    id: d.id,
-    name: d.name,
-    cnfId: d.cnfId,
-    kind: d.kind,
-    counters: countersByDepot.get(d.id) ?? 0,
-    reps: repsByDepot.get(d.id) ?? 0,
-    areas: allAreas
-      .filter((a) => a.stockistId === d.id)
-      .map((a) => ({ id: a.id, name: a.name, counters: countersByArea.get(a.id) ?? 0 })),
-    subDealers: allStockists
-      .filter((c) => c.parentId === d.id)
-      .map((c) => toNode(c)),
-  });
-
-  const tree: StateNode[] = allStates.map((st) => ({
-    id: st.id,
-    name: st.name,
-    country: st.country,
-    cnfs: allCnfs
-      .filter((c) => c.stateId === st.id)
-      .map((cf) => ({
-        id: cf.id,
-        name: cf.name,
-        // Top level is depots and dealers; a sub-dealer appears only inside
-        // its parent, never here.
-        stockists: allStockists
-          .filter((d) => d.cnfId === cf.id && d.parentId === null)
-          .map(toNode),
-      })),
-  }));
+  const data: HierarchyData = {
+    states: allStates.map((s) => ({
+      id: s.id,
+      name: s.name,
+      country: s.country,
+      cnfCount: allCnfs.filter((c) => c.stateId === s.id).length,
+    })),
+    cnfs: allCnfs.map((c) => ({
+      id: c.id,
+      name: c.name,
+      stateId: c.stateId,
+      // Top-level only: a sub-dealer belongs to its dealer, not to the C&F list.
+      stockistCount: allStockists.filter((d) => d.cnfId === c.id && d.parentId === null).length,
+    })),
+    stockists: allStockists.map((d) => ({
+      id: d.id,
+      name: d.name,
+      cnfId: d.cnfId,
+      kind: d.kind,
+      parentId: d.parentId,
+      counters: stockistCounters.get(d.id) ?? 0,
+      reps: stockistReps.get(d.id) ?? 0,
+      subDealers: allStockists.filter((x) => x.parentId === d.id).length,
+      areas: allAreas.filter((a) => a.stockistId === d.id).length,
+    })),
+    areas: allAreas.map((a) => ({
+      id: a.id,
+      name: a.name,
+      stockistId: a.stockistId,
+      counters: areaCount.get(a.id) ?? 0,
+    })),
+  };
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <div className="card mb-5 p-4">
-        <div className="text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-          {t("Headquarters")}
-        </div>
-        <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
-          {t("Kanpur")} · {allStates.length} {t(allStates.length === 1 ? "state" : "states")} {t("onboarded")}
-        </div>
-      </div>
-
-      <div className="mb-6 grid gap-5 sm:grid-cols-2">
-        <div className="card p-5">
-          <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            {t("Add a state")}
-          </h6>
-          <AddStateForm />
-        </div>
-        <div className="card p-5">
-          <h6 className="mb-3 text-[14px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-            {t("Add a C&F HQ")}
-          </h6>
-          {allStates.length === 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("Add a state first.")}</p>
-          ) : (
-            <AddCnfForm states={allStates.map((s) => ({ id: s.id, name: s.name }))} />
-          )}
-        </div>
-      </div>
-
-      <HierarchyTree tree={tree} />
-    </div>
+    <HierarchyColumns
+      data={data}
+      selection={{
+        state: sel.state ?? null,
+        cnf: sel.cnf ?? null,
+        stockist: sel.stockist ?? null,
+        sub: sel.sub ?? null,
+      }}
+    />
   );
 }
