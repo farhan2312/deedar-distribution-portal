@@ -415,7 +415,7 @@ export async function updateUser(userId: string, formData: FormData): Promise<Us
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
-  if (!name || !/^d{10}$/.test(phone)) {
+  if (!name || !/^\d{10}$/.test(phone)) {
     return { ok: false, message: "Enter a name and a valid 10-digit mobile number." };
   }
 
