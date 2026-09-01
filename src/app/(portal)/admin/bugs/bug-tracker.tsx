@@ -83,9 +83,11 @@ const DRAG_TYPE = "application/x-bug-id";
  * status select. Losing the ability to triage from a keyboard would be a poor
  * trade for the convenience.
  *
- * Only the grip is draggable, never the whole card: `draggable` on a container
- * makes the browser treat mousedown on its descendants as the start of a drag,
- * which stops the buttons and the select inside from responding at all.
+ * The whole card is the drag target, but `draggable` on a container makes the
+ * browser treat mousedown on its descendants as the start of a drag, which
+ * stops the buttons and the select inside from responding at all. So the
+ * attribute is turned off while the pointer is over the controls, and back on
+ * everywhere else — a small drag target would be the worse trade.
  *
  * A move is optimistic: the card lands in the new column on drop and
  * `useOptimistic` rolls it back by itself if the server rejects the change.
@@ -416,8 +418,9 @@ function BugCard({
   const [shot, setShot] = useState<string | null>(null);
   const [loadingShot, setLoadingShot] = useState(false);
   const [dragging, setDragging] = useState(false);
-  // The grip is the drag source, but the whole card should be what you see
-  // moving, so the card element is handed to setDragImage.
+  // Off while the pointer sits over the footer controls, so a click on the
+  // Details button or the select is a click and not the start of a drag.
+  const [canDrag, setCanDrag] = useState(true);
   const cardRef = useRef<HTMLElement>(null);
 
   const sev = SEVERITY_STYLE[r.severity];
@@ -444,22 +447,21 @@ function BugCard({
   }
 
   return (
-    <article ref={cardRef} className="card p-3" style={{ opacity: dragging ? 0.4 : busy ? 0.7 : 1 }}>
+    <article
+      ref={cardRef}
+      draggable={canDrag}
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DRAG_TYPE, r.id);
+        e.dataTransfer.effectAllowed = "move";
+        setDragging(true);
+      }}
+      onDragEnd={() => setDragging(false)}
+      className={`card p-3 ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
+      style={{ opacity: dragging ? 0.4 : busy ? 0.7 : 1 }}
+      title={canDrag ? t("Drag to move") : undefined}
+    >
       <div className="flex items-start gap-2">
-        <span
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.setData(DRAG_TYPE, r.id);
-            e.dataTransfer.effectAllowed = "move";
-            if (cardRef.current) e.dataTransfer.setDragImage(cardRef.current, 16, 16);
-            setDragging(true);
-          }}
-          onDragEnd={() => setDragging(false)}
-          className="flex-none cursor-grab select-none px-0.5 pt-0.5 active:cursor-grabbing"
-          style={{ color: "var(--ink-3)", lineHeight: 1 }}
-          title={t("Drag to move")}
-          aria-hidden
-        >
+        <span className="flex-none pt-0.5" style={{ color: "var(--ink-3)", lineHeight: 1 }} aria-hidden>
           <GripIcon />
         </span>
         <span className="flex-none text-[14px]" aria-hidden>
@@ -485,6 +487,10 @@ function BugCard({
         </div>
       )}
 
+      {/* Drag is suspended over this block. Without it the browser starts a
+          drag on mousedown and the click never lands — which is exactly how
+          the Details button and the select stopped working the first time. */}
+      <div onMouseEnter={() => setCanDrag(false)} onMouseLeave={() => setCanDrag(true)}>
       {(r.description || r.hasScreenshot) && (
         <button
           type="button"
@@ -546,6 +552,7 @@ function BugCard({
           </option>
         ))}
       </select>
+      </div>
     </article>
   );
 }
