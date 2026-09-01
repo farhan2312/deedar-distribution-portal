@@ -7,13 +7,17 @@ import {
   cnfs,
   stockists,
   passwordResetRequests,
-  userAreas,
-  userStockists,
   users,
   type AccessRole,
 } from "@/db/schema";
 import { approveAccessRequest, dismissPasswordReset, rejectAccessRequest } from "@/lib/admin/actions";
 import { requireAdmin } from "@/lib/admin/guard";
+import {
+  fetchAssignmentsFor,
+  fetchSupervisorOptions,
+  fetchUsersPage,
+  type UsersListParams,
+} from "@/lib/admin/users-list";
 import { ROLE_LABEL } from "@/lib/auth/roles";
 import { formatISTDate, formatISTTime } from "@/lib/date";
 import { getT } from "@/lib/i18n/server";
@@ -53,27 +57,30 @@ function initials(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
-export default async function AdminUsersPage() {
+export default async function AdminUsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<UsersListParams>;
+}) {
   const admin = await requireAdmin();
   const t = await getT();
+  const params = await searchParams;
 
   const reviewer = alias(users, "reviewer");
   const [
-    allUsers,
     allStockists,
     allCnfs,
     allAreas,
-    allUserAreas,
-    allUserDepots,
+    supervisorOptions,
     requestRows,
     resetRows,
   ] = await Promise.all([
-    db.select().from(users).orderBy(asc(users.name)),
     db.select().from(stockists).orderBy(asc(stockists.name)),
     db.select().from(cnfs).orderBy(asc(cnfs.name)),
     db.select().from(areas).orderBy(asc(areas.name)),
-    db.select().from(userAreas),
-    db.select().from(userStockists),
+    // The whole roster, not just this page — a rep on page 1 can report to a
+    // supervisor on page 3.
+    fetchSupervisorOptions(),
     db
       .select({
         id: accessRequests.id,
@@ -104,6 +111,16 @@ export default async function AdminUsersPage() {
       .where(eq(passwordResetRequests.status, "pending"))
       .orderBy(desc(passwordResetRequests.createdAt)),
   ]);
+  // Users are paged, searched and C&F-filtered in SQL. The join tables are
+  // then read for this page's 25 users only, rather than in full.
+  const list = await fetchUsersPage(
+    params,
+    allCnfs.map((c) => c.id),
+  );
+  const pageUsers = list.rows;
+  const { areasByUser: userAreaSet, stockistsByUser: userDepotSet } =
+    await fetchAssignmentsFor(pageUsers.map((u) => u.id));
+
   const pendingRequests = requestRows.filter((r) => r.status === "pending");
   const decidedRequests = requestRows.filter((r) => r.status !== "pending");
 
@@ -121,10 +138,6 @@ export default async function AdminUsersPage() {
     }))
     .filter((g) => g.stockists.length > 0);
   const cnfOptions = allCnfs.map((c) => ({ id: c.id, name: c.name }));
-  // A field rep reports to a Supervisor (SO) — only supervisors are options.
-  const supervisorOptions = allUsers
-    .filter((u) => u.accessRoles.includes("supervisor"))
-    .map((u) => ({ id: u.id, name: u.name }));
   const areasByDepot = new Map<string, typeof allAreas>();
   for (const a of allAreas) areasByDepot.set(a.stockistId, [...(areasByDepot.get(a.stockistId) ?? []), a]);
 
@@ -146,40 +159,6 @@ export default async function AdminUsersPage() {
       .filter((g) => g.areas.length > 0);
   };
 
-  const userAreaSet = new Map<string, Set<string>>();
-  for (const ua of allUserAreas) {
-    if (!userAreaSet.has(ua.userId)) userAreaSet.set(ua.userId, new Set());
-    userAreaSet.get(ua.userId)!.add(ua.areaId);
-  }
-  const userDepotSet = new Map<string, Set<string>>();
-  for (const ud of allUserDepots) {
-    if (!userDepotSet.has(ud.userId)) userDepotSet.set(ud.userId, new Set());
-    userDepotSet.get(ud.userId)!.add(ud.stockistId);
-  }
-
-  // The C&F(s) a user belongs to, for the client-side C&F filter. Derived here
-  // rather than at render time because different roles reach a C&F differently:
-  //   • hq            → users.cnfId directly
-  //   • field/dealer  → stockists[users.stockistId].cnfId
-  //   • supervisor    → stockists[userStockists.stockistId].cnfId  (can be multiple)
-  // Admin/khq are cross-C&F, so no filter membership.
-  const cnfByDepot = new Map<string, string>();
-  for (const d of allStockists) cnfByDepot.set(d.id, d.cnfId);
-  const userCnfIds = new Map<string, Set<string>>();
-  for (const u of allUsers) {
-    const cnfs = new Set<string>();
-    if (u.cnfId) cnfs.add(u.cnfId);
-    if (u.stockistId) {
-      const c = cnfByDepot.get(u.stockistId);
-      if (c) cnfs.add(c);
-    }
-    for (const stockistId of userDepotSet.get(u.id) ?? []) {
-      const c = cnfByDepot.get(stockistId);
-      if (c) cnfs.add(c);
-    }
-    userCnfIds.set(u.id, cnfs);
-  }
-
   return (
     <div style={{ animation: "fadeUp .3s ease" }}>
       {/* The title sits in the top bar, so the page opens on the numbers. */}
@@ -188,8 +167,8 @@ export default async function AdminUsersPage() {
           icon={<UsersIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />}
           iconBg="var(--accent-tint)"
           label={t("Total users")}
-          value={allUsers.length}
-          sub={`${allUsers.filter((u) => u.isActive).length} ${t("active")}`}
+          value={list.totalUsers}
+          sub={`${list.activeUsers} ${t("active")}`}
         />
         <StatCard
           icon={<ClockIcon className="h-5 w-5" style={{ color: pendingRequests.length > 0 ? "#B25E00" : "var(--ink-3)" }} />}
@@ -344,7 +323,14 @@ export default async function AdminUsersPage() {
         </details>
       )}
 
-      <UsersPanel cnfOptions={cnfOptions}>
+      <UsersPanel
+        cnfOptions={cnfOptions}
+        filters={list.filters}
+        total={list.total}
+        page={list.page}
+        totalPages={list.totalPages}
+        pageSize={list.pageSize}
+      >
         <div className="table-wrap">
           <table className="table" style={{ minWidth: 1040 }}>
             <thead>
@@ -359,19 +345,12 @@ export default async function AdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {allUsers.map((u) => {
+              {pageUsers.map((u) => {
                 const roleSet = new Set(u.accessRoles);
                 const areaGroups = u.stockistId ? areaGroupsFor(u.stockistId) : [];
                 return (
                   <tr
                     key={u.id}
-                    data-user-row
-                    data-search={`${u.name} ${u.phone}`.toLowerCase()}
-                    // Space-separated so the filter can substring-match one id.
-                    // Admin / khq / unmapped users have an empty attribute and are
-                    // therefore hidden when a specific C&F is picked (they don't
-                    // belong to it) but visible under "All C&F".
-                    data-cnf={[...(userCnfIds.get(u.id) ?? [])].join(" ")}
                     // Muted via a background tint, NOT row opacity — opacity on
                     // the row would cap the action buttons' contrast too, which
                     // is exactly what made the Activate button look dead.

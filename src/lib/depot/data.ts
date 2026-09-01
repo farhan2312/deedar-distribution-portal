@@ -110,13 +110,38 @@ export type DepotCountersData = {
   bulkSales: number;
   /** Wholesale counters only — retail outlets belong to the field reps and are
    * intentionally hidden from the Depot portal (they aren't the depot's list
-   * to manage). */
+   * to manage). One page's worth. */
   counters: DepotCounterRow[];
+  /** Wholesale counters at this stockist, across every page. */
+  total: number;
+  page: number;
+  totalPages: number;
+  pageSize: number;
 };
 
-export async function getDepotCountersData(stockistId: string): Promise<DepotCountersData> {
+/** Rows per page — matches the other counters lists. */
+export const DEPOT_COUNTERS_PAGE_SIZE = 50;
+
+export async function getDepotCountersData(
+  stockistId: string,
+  requestedPage = 1,
+): Promise<DepotCountersData> {
   const bounds = istDayBounds();
-  const [counterRows, visitRows, outwardToday] = await Promise.all([
+  const wholesaleHere = and(
+    eq(counters.stockistId, stockistId),
+    eq(counters.type, "Wholesale"),
+  );
+
+  const [{ n: total }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(counters)
+    .where(wholesaleHere);
+  const pageSize = DEPOT_COUNTERS_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // Clamped: switching stockist can shrink the list under the current page.
+  const page = Math.min(Math.max(1, requestedPage), totalPages);
+
+  const [counterRows, outwardToday] = await Promise.all([
     // Scoped to Wholesale at the SQL layer so retail rows never even leave
     // the DB — the client can't reveal them via devtools either.
     db
@@ -131,17 +156,12 @@ export async function getDepotCountersData(stockistId: string): Promise<DepotCou
       })
       .from(counters)
       .innerJoin(areas, eq(areas.id, counters.areaId))
-      .where(and(eq(counters.stockistId, stockistId), eq(counters.type, "Wholesale")))
-      .orderBy(asc(counters.name)),
-    // Only used to hydrate the per-counter "last observed stock" on the
-    // wholesale rows — scoped to wholesale counters so we don't pull retail
-    // visits we'd then throw away.
-    db
-      .select({ counterId: visits.counterId, stock: visits.stock })
-      .from(visits)
-      .innerJoin(counters, eq(counters.id, visits.counterId))
-      .where(and(eq(counters.stockistId, stockistId), eq(counters.type, "Wholesale")))
-      .orderBy(desc(visits.visitedAt)),
+      .where(wholesaleHere)
+      // Tiebreaker — see the note in lib/counters/list.ts. Names are not
+      // unique, and paging a non-total order loses rows.
+      .orderBy(asc(counters.name), asc(counters.id))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
     // "Bulk sales" = bora lifting by wholesale counters. This is what the
     // depot actually cares about — retail sales are the reps' number, not
     // the depot's, so no "salesman market sales" tile here.
@@ -158,10 +178,20 @@ export async function getDepotCountersData(stockistId: string): Promise<DepotCou
       ),
   ]);
 
-  // Rows are newest-first, so the first hit per counter wins.
+  // Last observed stock, for this page's counters only. This used to select
+  // every visit ever recorded against the stockist's wholesale counters and
+  // keep the first row per counter in JS — a scan that grew with history
+  // forever to produce one number per row. DISTINCT ON does the same pick in
+  // the index, over 50 counters instead of all of them.
+  const pageIds = counterRows.map((c) => c.id);
   const latestStock = new Map<string, number>();
-  for (const v of visitRows) {
-    if (!latestStock.has(v.counterId)) latestStock.set(v.counterId, v.stock);
+  if (pageIds.length > 0) {
+    const stockRows = await db
+      .selectDistinctOn([visits.counterId], { counterId: visits.counterId, stock: visits.stock })
+      .from(visits)
+      .where(inArray(visits.counterId, pageIds))
+      .orderBy(visits.counterId, desc(visits.visitedAt));
+    for (const v of stockRows) latestStock.set(v.counterId, v.stock);
   }
   // qty is signed (outward is negative) — report it as a positive packet count.
   const bulkSales = outwardToday.reduce((s, m) => s + Math.abs(m.qty), 0);
@@ -176,7 +206,7 @@ export async function getDepotCountersData(stockistId: string): Promise<DepotCou
     status: c.status,
   }));
 
-  return { bulkSales, counters: rows };
+  return { bulkSales, counters: rows, total, page, totalPages, pageSize };
 }
 
 // ── Schemes page ────────────────────────────────────────────────────────

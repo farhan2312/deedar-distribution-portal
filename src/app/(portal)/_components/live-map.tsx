@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -216,7 +216,11 @@ export function LiveMap({
   counterActionHrefBase?: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  // The element that goes fullscreen — the host plus the button on top of it,
+  // so the control stays reachable once the map fills the screen.
+  const wrapRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const [full, setFull] = useState(false);
   const repLayerRef = useRef<Map<string, RepMarker>>(new Map());
   const fittedRef = useRef(false);
   const t = useT();
@@ -381,11 +385,121 @@ export function LiveMap({
     }
   }, [positions, repNames]);
 
+  /**
+   * Real fullscreen where the browser has it, a viewport-filling overlay where
+   * it doesn't. `requestFullscreen` is absent on iPhone Safari and can reject
+   * outright (an iframe without the allow-fullscreen permission), so the CSS
+   * path is not a fallback for old browsers — it is the path on real devices.
+   */
+  const toggleFull = useCallback(async () => {
+    const el = wrapRef.current;
+    if (!el) return;
+    if (full) {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen().catch(() => {});
+      }
+      setFull(false);
+    } else {
+      await el.requestFullscreen?.().catch(() => {});
+      setFull(true);
+    }
+  }, [full]);
+
+  // Leaving fullscreen via Esc or the browser's own chrome never runs the
+  // toggle, so the flag has to follow the document rather than lead it.
+  useEffect(() => {
+    function onChange() {
+      if (!document.fullscreenElement) setFull(false);
+    }
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  // Esc closes the CSS overlay too. Native fullscreen swallows the keypress
+  // itself, so this only ever fires on the fallback path.
+  useEffect(() => {
+    if (!full) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !document.fullscreenElement) setFull(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [full]);
+
+  // Leaflet caches the container size, so tiles come out clipped or half-drawn
+  // until it is told to re-measure. One frame's delay lets the new box paint.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const id = requestAnimationFrame(() => map.invalidateSize());
+    return () => cancelAnimationFrame(id);
+  }, [full]);
+
   return (
     <div
-      ref={hostRef}
-      className="w-full overflow-hidden rounded-2xl border"
-      style={{ aspectRatio: "21 / 9", minHeight: 380, borderColor: "var(--hairline-soft)", zIndex: 0 }}
-    />
+      ref={wrapRef}
+      className="relative w-full overflow-hidden border"
+      style={{
+        borderColor: "var(--hairline-soft)",
+        background: "var(--surface)",
+        ...(full
+          ? // Fixed rather than just relying on the Fullscreen API: iOS Safari
+            // on iPhone has no Element.requestFullscreen, so this is what
+            // maximises the map there — and it is harmless when the element is
+            // genuinely fullscreen.
+            { position: "fixed" as const, inset: 0, zIndex: 9999, borderRadius: 0 }
+          : { borderRadius: 16, zIndex: 0 }),
+      }}
+    >
+      <div
+        ref={hostRef}
+        className="h-full w-full"
+        style={full ? undefined : { aspectRatio: "21 / 9", minHeight: 380 }}
+      />
+
+      {/* Sits above Leaflet's own controls, which top out around z-index 800. */}
+      <button
+        type="button"
+        onClick={toggleFull}
+        aria-label={full ? t("Exit full screen") : t("Full screen")}
+        title={full ? t("Exit full screen") : t("Full screen")}
+        className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-lg border shadow-sm transition-colors"
+        style={{
+          zIndex: 1000,
+          background: "var(--surface)",
+          borderColor: "var(--hairline)",
+          color: "var(--ink-2)",
+        }}
+      >
+        {full ? <ExitFullIcon /> : <EnterFullIcon />}
+      </button>
+    </div>
+  );
+}
+
+const fsIco = {
+  width: 16,
+  height: 16,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+function EnterFullIcon() {
+  return (
+    <svg {...fsIco}>
+      <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
+function ExitFullIcon() {
+  return (
+    <svg {...fsIco}>
+      <path d="M3 8h3a2 2 0 0 0 2-2V3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M21 16h-3a2 2 0 0 0-2 2v3" />
+    </svg>
   );
 }

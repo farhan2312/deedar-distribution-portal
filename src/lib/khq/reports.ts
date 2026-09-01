@@ -277,7 +277,9 @@ export async function fetchCountersReport(
     .innerJoin(cnfs, eq(cnfs.id, stockists.cnfId))
     .leftJoin(creator, eq(creator.id, counters.createdByUserId))
     .where(counterWhere(f))
-    .orderBy(desc(counters.createdAt));
+    // Tiebreaker: two counters created in the same transaction share a
+    // timestamp, and paging a non-total order drops and repeats rows.
+    .orderBy(desc(counters.createdAt), asc(counters.id));
 
   const rows = opts ? await query.limit(opts.limit).offset(opts.offset) : await query;
 
@@ -356,7 +358,9 @@ export async function fetchVisitsReport(
     .leftJoin(parentStockist, eq(parentStockist.id, stockists.parentId))
     .innerJoin(cnfs, eq(cnfs.id, stockists.cnfId))
     .where(visitWhere(f))
-    .orderBy(desc(visits.visitedAt));
+    // Tiebreaker, as above — visits recorded in the same second would
+    // otherwise straddle a page boundary unpredictably.
+    .orderBy(desc(visits.visitedAt), asc(visits.id));
 
   const rows = opts ? await query.limit(opts.limit).offset(opts.offset) : await query;
 

@@ -2,11 +2,17 @@ import { asc, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, cnfs, counters, states, stockists, users } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin/guard";
-import { HierarchyColumns, type HierarchyData } from "./columns";
+import { HierarchyColumns } from "./columns";
+import { HierarchyHeader } from "./hierarchy-header";
+import type { HierarchyData } from "./hierarchy-shared";
+import { isHierarchyView } from "./view";
+import { HierarchyTree } from "./tree";
 
 /**
- * Territory management as Miller columns: State → C&F → Stockist → Sub-Dealer
- * → Areas, each column listing the children of the selection to its left.
+ * Territory management, in either of two layouts (`?view=`): Miller columns
+ * — State → C&F → Stockist → Sub-Dealer → Areas, each column listing the
+ * children of the selection to its left — or an outline tree showing the whole
+ * shape at once. Both read the same payload, so switching costs no query.
  *
  * Every count is aggregated in SQL. The previous version pulled every counter
  * row (688 and climbing) purely to length-count them in JS, which is a page
@@ -15,7 +21,13 @@ import { HierarchyColumns, type HierarchyData } from "./columns";
 export default async function AdminHierarchyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string; cnf?: string; stockist?: string; sub?: string }>;
+  searchParams: Promise<{
+    state?: string;
+    cnf?: string;
+    stockist?: string;
+    sub?: string;
+    view?: string;
+  }>;
 }) {
   await requireAdmin();
   const sel = await searchParams;
@@ -85,15 +97,26 @@ export default async function AdminHierarchyPage({
     })),
   };
 
+  // Columns is the default: it is the one that scales to a big territory
+  // without becoming a wall of rows.
+  const view = isHierarchyView(sel.view) ? sel.view : "columns";
+
   return (
-    <HierarchyColumns
-      data={data}
-      selection={{
-        state: sel.state ?? null,
-        cnf: sel.cnf ?? null,
-        stockist: sel.stockist ?? null,
-        sub: sel.sub ?? null,
-      }}
-    />
+    <div>
+      <HierarchyHeader view={view} />
+      {view === "tree" ? (
+        <HierarchyTree data={data} />
+      ) : (
+        <HierarchyColumns
+          data={data}
+          selection={{
+            state: sel.state ?? null,
+            cnf: sel.cnf ?? null,
+            stockist: sel.stockist ?? null,
+            sub: sel.sub ?? null,
+          }}
+        />
+      )}
+    </div>
   );
 }

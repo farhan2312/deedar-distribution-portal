@@ -4,14 +4,15 @@
  * Page-number pager, shared by every long list in the app.
  *
  * Extracted from the Reports screen so the counters lists page identically —
- * same page size, same control, same wording. Purely presentational: the
- * caller owns where `page` lives, which is a URL param on Reports (linkable,
- * survives a reload) and component state on the counters lists (their filters
- * are client-side too, so there is nothing to link to).
+ * same control, same wording. Purely presentational: the caller owns where
+ * `page` lives, and on every list that is now a URL param, so a page is
+ * linkable and survives a reload.
+ *
+ * Page size is NOT exported from here any more. Each list's server module owns
+ * its own constant and hands it down as a prop, because the LIMIT and the
+ * rendering have to agree and the SQL is the side that must not import from a
+ * client component.
  */
-
-/** Rows per page across the app's lists. */
-export const PAGE_SIZE = 50;
 
 /**
  * Page numbers to render, with `null` for a gap.

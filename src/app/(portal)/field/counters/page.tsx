@@ -1,19 +1,20 @@
 import { redirect } from "next/navigation";
-import { and, asc, eq, gte, lt } from "drizzle-orm";
+import { and, eq, gte, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, counters, stockists, visits } from "@/db/schema";
+import { visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { istDayBounds } from "@/lib/date";
-import { counterTypeLabel } from "@/lib/field/counter-types";
+import { fetchCountersList, type CountersListParams } from "@/lib/counters/list";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { CountersListClient, type CounterListRow } from "@/app/(portal)/_components/counters-list";
 
-/** Safety cap — a normal depot holds hundreds of counters, not thousands. */
-const MAX_ROWS = 1000;
-
-export default async function FieldCountersPage() {
+export default async function FieldCountersPage({
+  searchParams,
+}: {
+  searchParams: Promise<CountersListParams>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getT();
@@ -30,83 +31,49 @@ export default async function FieldCountersPage() {
     );
   }
 
-  // ISR → their own depot; admin → all counters (bounded).
-  const depotFilter = user.depot ? eq(counters.stockistId, user.depot.id) : undefined;
+  // ISR → their own stockist; admin → every counter.
+  const list = await fetchCountersList({
+    scopeStockistIds: user.depot ? [user.depot.id] : null,
+    params: await searchParams,
+  });
 
-  const [counterRows, todaysVisitRows] = await Promise.all([
-    db
-      .select({
-        id: counters.id,
-        name: counters.name,
-        phone: counters.phone,
-        type: counters.type,
-        typeOther: counters.typeOther,
-        areaId: counters.areaId,
-        areaName: areas.name,
-        stockistId: counters.stockistId,
-        stockistName: stockists.name,
-        status: counters.status,
-      })
-      .from(counters)
-      .innerJoin(areas, eq(areas.id, counters.areaId))
-      .innerJoin(stockists, eq(stockists.id, counters.stockistId))
-      .where(depotFilter)
-      .orderBy(asc(counters.name))
-      .limit(MAX_ROWS),
-    // ISR's own visits today — colours rows. Admin gets an empty set.
-    isAdmin
-      ? Promise.resolve([] as { counterId: string }[])
-      : (() => {
-          const { start, end } = istDayBounds();
-          return db
-            .select({ counterId: visits.counterId })
-            .from(visits)
-            .where(
-              and(
-                eq(visits.userId, user.id),
-                gte(visits.visitedAt, start),
-                lt(visits.visitedAt, end),
-              ),
-            );
-        })(),
-  ]);
+  // Only this page's counters need the "visited today" flag, so the lookup is
+  // bounded by the page rather than by the rep's whole day.
+  const pageIds = list.rows.map((r) => r.id);
+  let visitedToday = new Set<string>();
+  if (!isAdmin && pageIds.length > 0) {
+    const { start, end } = istDayBounds();
+    const seen = await db
+      .select({ counterId: visits.counterId })
+      .from(visits)
+      .where(
+        and(
+          eq(visits.userId, user.id),
+          inArray(visits.counterId, pageIds),
+          gte(visits.visitedAt, start),
+          lt(visits.visitedAt, end),
+        ),
+      );
+    visitedToday = new Set(seen.map((v) => v.counterId));
+  }
 
-  const visitedToday = new Set(todaysVisitRows.map((v) => v.counterId));
-
-  const rows: CounterListRow[] = counterRows.map((c) => ({
-    id: c.id,
-    name: c.name,
-    phone: c.phone,
-    type: counterTypeLabel(c.type, c.typeOther),
-    areaId: c.areaId,
-    areaName: c.areaName,
-    stockistId: c.stockistId,
-    stockistName: c.stockistName,
-    status: c.status,
+  const rows: CounterListRow[] = list.rows.map((c) => ({
+    ...c,
     canVisit: isAdmin || c.stockistId === user.depot?.id,
     visitedToday: visitedToday.has(c.id),
   }));
 
-  // Filter option lists — derived from what's actually in the returned data.
-  const areasInScope = Array.from(
-    new Map(counterRows.map((c) => [c.areaId, c.areaName])).entries(),
-  )
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const depotsInScope = Array.from(
-    new Map(counterRows.map((c) => [c.stockistId, c.stockistName])).entries(),
-  )
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
   return (
     <CountersListClient
       rows={rows}
-      areas={areasInScope}
-      stockists={depotsInScope}
+      areaOptions={list.areaOptions}
+      stockistOptions={list.stockistOptions}
+      filters={list.filters}
+      total={list.total}
+      page={list.page}
+      totalPages={list.totalPages}
+      pageSize={list.pageSize}
       scope={user.depot?.name ?? t("Your stockist")}
-      truncated={counterRows.length >= MAX_ROWS}
-      maxRows={MAX_ROWS}
       showCheckIn={true}
     />
   );

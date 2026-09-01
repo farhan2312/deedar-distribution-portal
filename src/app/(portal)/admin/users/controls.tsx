@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useRef, useState, useTransition } from "react";
+import { useActionState, useOptimistic, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AccessRole, StockistKind } from "@/db/schema";
 import {
   addUser,
@@ -18,6 +19,7 @@ import {
   type AddUserResult,
 } from "@/lib/admin/actions";
 import { useT } from "@/lib/i18n/provider";
+import { Pagination } from "@/components/ui/pagination";
 import { ConfirmDelete } from "@/components/ui/confirm-delete";
 
 /**
@@ -522,30 +524,58 @@ export function DeleteUserButton({ userId, userName }: { userId: string; userNam
  * C&F's field/SO/depot users, so the depot/area dropdowns and pill-checkboxes
  * you're about to touch aren't hidden behind unrelated rows.
  */
+/**
+ * Header, filters and pager around the users table.
+ *
+ * Search and the C&F filter used to hide rendered rows by toggling a class,
+ * which meant they only ever searched the rows already on the page. Both are
+ * query params now and run in SQL, so a search covers every user and the
+ * result is paged rather than truncated.
+ */
 export function UsersPanel({
   children,
   cnfOptions,
+  filters,
+  total,
+  page,
+  totalPages,
+  pageSize,
 }: {
   children: React.ReactNode;
   cnfOptions: { id: string; name: string }[];
+  /** What the server applied, so the controls show their real state. */
+  filters: { q: string; cnfId: string | null };
+  total: number;
+  page: number;
+  totalPages: number;
+  pageSize: number;
 }) {
   const t = useT();
-  const ref = useRef<HTMLDivElement>(null);
-  const [q, setQ] = useState("");
-  const [cnf, setCnf] = useState("all");
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [pending, startTransition] = useTransition();
 
-  function apply(nextQ: string, nextCnf: string) {
-    const needle = nextQ.trim().toLowerCase();
-    const rows = ref.current?.querySelectorAll<HTMLElement>("[data-user-row]");
-    rows?.forEach((row) => {
-      const hay = row.getAttribute("data-search") ?? "";
-      const cnfs = row.getAttribute("data-cnf") ?? "";
-      const passesSearch = needle.length === 0 || hay.includes(needle);
-      // Space-separated ids; wrap with spaces so an id can't substring-match another.
-      const passesCnf = nextCnf === "all" || ` ${cnfs} `.includes(` ${nextCnf} `);
-      row.classList.toggle("hidden", !(passesSearch && passesCnf));
-    });
+  // Only the search box is local — it must not navigate on every keystroke.
+  const [q, setQ] = useState(filters.q);
+  // The C&F select lights up on click and defers to the server on settle.
+  const [shownCnf, showCnf] = useOptimistic(filters.cnfId ?? "all");
+
+  function push(patch: Record<string, string | null>, keepPage = false) {
+    const next = new URLSearchParams(params.toString());
+    for (const [k, v] of Object.entries(patch)) {
+      if (v == null || v === "" || v === "all") next.delete(k);
+      else next.set(k, v);
+    }
+    // Any filter change resets to page 1 — page 3 of a now-1-page result is an
+    // empty table.
+    if (!keepPage) next.delete("page");
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
+
+  const firstRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastRow = Math.min(page * pageSize, total);
 
   return (
     <div className="card overflow-hidden p-0">
@@ -566,10 +596,13 @@ export function UsersPanel({
           <select
             className="inp"
             style={{ width: "auto", minWidth: 180 }}
-            value={cnf}
+            value={shownCnf}
             onChange={(e) => {
-              setCnf(e.target.value);
-              apply(q, e.target.value);
+              const next = e.target.value;
+              startTransition(() => {
+                showCnf(next);
+                push({ cnf: next });
+              });
             }}
             aria-label={t("Filter by C&F HQ")}
           >
@@ -578,7 +611,13 @@ export function UsersPanel({
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <div className="relative w-full sm:w-72">
+          <form
+            className="relative w-full sm:w-72"
+            onSubmit={(e) => {
+              e.preventDefault();
+              startTransition(() => push({ q: q.trim() || null }));
+            }}
+          >
             <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
             </svg>
@@ -588,15 +627,45 @@ export function UsersPanel({
               type="search"
               value={q}
               placeholder={t("Search by name or mobile…")}
-              onChange={(e) => {
-                setQ(e.target.value);
-                apply(e.target.value, cnf);
-              }}
+              onChange={(e) => setQ(e.target.value)}
             />
-          </div>
+          </form>
         </div>
       </div>
-      <div ref={ref}>{children}</div>
+
+      {/* Dimmed while the next page is in flight, so a stale table doesn't read
+          as the answer to what was just typed. */}
+      <div className="transition-opacity" style={{ opacity: pending ? 0.6 : 1 }}>
+        {total === 0 ? (
+          <p className="p-5 text-[13.5px]" style={{ color: "var(--ink-3)" }}>
+            {t("No users match — try clearing the filter.")}
+          </p>
+        ) : (
+          children
+        )}
+
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3"
+          style={{ borderColor: "var(--hairline-soft)" }}
+        >
+          <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
+            {total > pageSize && (
+              <>
+                {firstRow}–{lastRow} {t("of")}{" "}
+              </>
+            )}
+            {total} {t(total === 1 ? "user" : "users")}
+          </span>
+          {totalPages > 1 && (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onGo={(n: number) => startTransition(() => push({ page: n <= 1 ? null : String(n) }, true))}
+              t={t}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }

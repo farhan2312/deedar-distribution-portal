@@ -9,7 +9,7 @@ import { DepotCountersClient } from "./counters-client";
 export default async function DepotCountersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ depot?: string }>;
+  searchParams: Promise<{ depot?: string; page?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -24,9 +24,12 @@ export default async function DepotCountersPage({
     const t = await getT();
     return <Notice title={t("Counters")}>{t("You aren't mapped to a stockist yet — ask Central Admin.")}</Notice>;
   }
-  const { depot: requested } = await searchParams;
+  const { depot: requested, page } = await searchParams;
   const depot = pickStockist(scope, requested)!;
-  const data = await getDepotCountersData(depot.id);
+  const data = await getDepotCountersData(
+    depot.id,
+    Math.max(1, Number.parseInt(page ?? "1", 10) || 1),
+  );
 
   return <DepotCountersClient stockistName={depot.name} scope={scope} selectedId={depot.id} data={data} />;
 }

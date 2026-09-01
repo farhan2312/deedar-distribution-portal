@@ -1303,6 +1303,37 @@ const HI: Record<string, string> = {
   "Day logs": "दिन के लॉग",
   "← Back to this FY": "← इस वित्त वर्ष पर वापस",
   "All time — the breakdown below follows the period filter.": "सर्वकालिक — नीचे का विवरण अवधि फ़िल्टर के अनुसार है।",
+  // Territory Management: view switch + tree
+  "Columns": "कॉलम",
+  "Tree": "ट्री",
+  "View mode": "व्यू मोड",
+  "Expand all": "सब खोलें",
+  "Collapse all": "सब बंद करें",
+  "No states yet.": "अभी कोई राज्य नहीं।",
+  "areas": "एरिया",
+  // Users & Access pagination
+  "users": "उपयोगकर्ता",
+  "No users match — try clearing the filter.": "कोई उपयोगकर्ता नहीं मिला — फ़िल्टर हटाकर देखें।",
+  // Bug tracker board
+  "Drop to move here": "यहाँ ले जाने के लिए छोड़ें",
+  "Move to": "यहाँ ले जाएँ",
+  "Details": "विवरण",
+  "Less": "कम",
+  // Bug tracker board: card details
+  "Details + screenshot": "विवरण + स्क्रीनशॉट",
+  "Open full size": "पूरा आकार खोलें",
+  "Drag to move": "खींचकर ले जाएँ",
+  // Bug tracker: summary cards + filters
+  "Bugs": "बग",
+  "Features": "फ़ीचर",
+  "Critical unresolved": "गंभीर, अनसुलझे",
+  "All severities": "सभी गंभीरताएँ",
+  "Clear filters": "फ़िल्टर हटाएँ",
+  "Search title or description…": "शीर्षक या विवरण खोजें…",
+  "No reports match — try clearing the filter.": "कोई रिपोर्ट नहीं मिली — फ़िल्टर हटाकर देखें।",
+  // Live map
+  "Full screen": "फ़ुल स्क्रीन",
+  "Exit full screen": "फ़ुल स्क्रीन से बाहर",
 };
 
 export function translate(lang: Lang, key: string): string {

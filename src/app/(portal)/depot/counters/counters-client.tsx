@@ -1,9 +1,10 @@
 "use client";
 
 import type { DepotCountersData, DepotCounterRow, StockistOption } from "@/lib/depot/data";
-import { useState } from "react";
+import { useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useT } from "@/lib/i18n/provider";
-import { PAGE_SIZE, Pagination } from "@/components/ui/pagination";
+import { Pagination } from "@/components/ui/pagination";
 import { DepotSelect } from "../_components/depot-select";
 
 const STATUS_STYLE: Record<DepotCounterRow["status"], { label: string; bg: string; color: string }> = {
@@ -17,6 +18,9 @@ const STATUS_STYLE: Record<DepotCounterRow["status"], { label: string; bg: strin
  * field reps' territory, not the depot's list to manage. That scoping is
  * enforced server-side in `getDepotCountersData`; the client just renders
  * whatever it's handed.
+ *
+ * `data.counters` is one page, paged in SQL. It used to be every wholesale
+ * counter at the stockist with no LIMIT at all, sliced in the browser.
  */
 export function DepotCountersClient({
   stockistName,
@@ -30,14 +34,24 @@ export function DepotCountersClient({
   data: DepotCountersData;
 }) {
   const t = useT();
-  const rows = data.counters;
-  const [page, setPage] = useState(1);
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [pending, startTransition] = useTransition();
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  // Clamped rather than reset: switching stockist can shrink the list under
-  // the current page, and this corrects it in the same render.
-  const safePage = Math.min(page, totalPages);
-  const paged = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const { counters: rows, total, page, totalPages, pageSize } = data;
+  const firstRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastRow = Math.min(page * pageSize, total);
+
+  function goToPage(next: number) {
+    startTransition(() => {
+      const q = new URLSearchParams(params.toString());
+      if (next <= 1) q.delete("page");
+      else q.set("page", String(next));
+      const query = q.toString();
+      router.push(query ? `${pathname}?${query}` : pathname);
+    });
+  }
 
   return (
     <div>
@@ -48,10 +62,9 @@ export function DepotCountersClient({
           <span className="chip" style={{ background: "var(--accent-tint)", color: "var(--accent)", borderColor: "transparent" }}>
             {stockistName}
           </span>
-          {rows.length > PAGE_SIZE && (
+          {total > pageSize && (
             <span>
-              {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, rows.length)} {t("of")}{" "}
-              {rows.length}
+              {firstRow}–{lastRow} {t("of")} {total}
             </span>
           )}
         </div>
@@ -66,7 +79,8 @@ export function DepotCountersClient({
         />
       </div>
 
-      <div className="table-wrap">
+      {/* Dimmed while the next page is in flight. */}
+      <div className="table-wrap transition-opacity" style={{ opacity: pending ? 0.6 : 1 }}>
         <table className="table">
           <thead>
             <tr>
@@ -76,14 +90,14 @@ export function DepotCountersClient({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {total === 0 ? (
               <tr>
                 <td colSpan={6} style={{ color: "var(--ink-3)" }}>
                   {t("No wholesale counters yet.")}
                 </td>
               </tr>
             ) : (
-              paged.map((c) => {
+              rows.map((c) => {
                 const st = STATUS_STYLE[c.status];
                 return (
                   <tr key={c.id}>
@@ -106,7 +120,7 @@ export function DepotCountersClient({
       </div>
 
       {totalPages > 1 && (
-        <Pagination page={safePage} totalPages={totalPages} onGo={setPage} t={t} />
+        <Pagination page={page} totalPages={totalPages} onGo={goToPage} t={t} />
       )}
     </div>
   );
