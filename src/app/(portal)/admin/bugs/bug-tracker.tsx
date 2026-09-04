@@ -1,10 +1,11 @@
 "use client";
 
-import { useOptimistic, useRef, useState, useTransition, type FormEvent } from "react";
+import { useOptimistic, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { BugSeverity, BugStatus, BugType } from "@/db/schema";
 import { getBugScreenshot, setBugStatus } from "@/lib/bugs/actions";
 import { useT } from "@/lib/i18n/provider";
+import { SearchInput } from "@/components/ui/search-input";
 
 /** Whole-tracker counts for the summary row — never narrowed by the filter. */
 export type BugStats = {
@@ -114,8 +115,6 @@ export function BugBoard({
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<BugStatus | null>(null);
 
-  // Only the search box is local — it must not navigate on every keystroke.
-  const [q, setQ] = useState(filters.q);
   const [shownFilters, showFilters] = useOptimistic({
     type: filters.type,
     severity: filters.severity,
@@ -129,11 +128,6 @@ export function BugBoard({
     }
     const query = next.toString();
     router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }
-
-  function applySearch(e: FormEvent) {
-    e.preventDefault();
-    startTransition(() => push({ q: q.trim() || null }));
   }
 
   const filtered = !!(filters.type || filters.severity || filters.q);
@@ -235,31 +229,23 @@ export function BugBoard({
           ))}
         </select>
 
-        <form onSubmit={applySearch} className="flex items-center gap-2">
-          <input
-            className="inp"
-            style={{ padding: "6px 10px", fontSize: 12, minWidth: 200 }}
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t("Search title or description…")}
-          />
-          <button type="submit" className="btn btn-secondary btn-sm">
-            {t("Search")}
-          </button>
-        </form>
+        <SearchInput
+          param="q"
+          initial={filters.q}
+          style={{ padding: "6px 10px", fontSize: 12, minWidth: 200 }}
+          placeholder={t("Search title or description…")}
+        />
 
         {filtered && (
           <button
             type="button"
             className="link text-[12px]"
-            onClick={() => {
-              setQ("");
+            onClick={() =>
               startTransition(() => {
                 showFilters({ type: null, severity: null });
                 push({ type: null, severity: null, q: null });
-              });
-            }}
+              })
+            }
           >
             {t("Clear filters")}
           </button>

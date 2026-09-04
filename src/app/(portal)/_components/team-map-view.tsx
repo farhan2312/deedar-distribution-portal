@@ -114,7 +114,10 @@ export async function TeamMapView({
                   return (
                     <li
                       key={r.id}
-                      className="border-b px-3.5 py-2.5 last:border-b-0"
+                      // A wash on hover, but not the accent edge `list-row`
+                      // adds: these rows go nowhere on click, and the edge is
+                      // this app's way of saying a row is a link.
+                      className="border-b px-3.5 py-2.5 transition-colors last:border-b-0 hover:bg-[var(--bg-soft)]"
                       style={{ borderColor: "var(--hairline-soft)" }}
                     >
                       <div className="flex items-center gap-1.5">

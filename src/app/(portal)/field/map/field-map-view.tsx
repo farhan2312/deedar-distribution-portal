@@ -159,7 +159,11 @@ export function FieldMapView({
                   const s = counterStatus(c, t);
                   return (
                     <li key={c.id} className="border-b last:border-b-0" style={{ borderColor: "var(--hairline-soft)" }}>
-                      <Link href={`/field/counter/${c.id}`} className="block px-3.5 py-2.5 transition-colors">
+                      {/* `list-row` is the shared clickable-row style: the
+                          same wash a table row gets on hover, plus an accent
+                          edge that wipes in — the row already went somewhere
+                          on click and said nothing about it. */}
+                      <Link href={`/field/counter/${c.id}`} className="list-row block px-3.5 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <span className="h-2 w-2 flex-none rounded-full" style={{ background: s.color }} />
                           <span className="truncate text-[13px] font-semibold" style={{ color: "var(--ink-1)" }} title={c.name}>

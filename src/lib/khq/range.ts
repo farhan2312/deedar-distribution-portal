@@ -1,8 +1,9 @@
 import "server-only";
 import { istDateString } from "@/lib/date";
 import {
+  comparisonFor,
   daysBetween,
-  fyStartYear,
+  fyYear,
   isPeriodKey,
   matchPreset,
   periodBounds,
@@ -32,9 +33,13 @@ export type Range = {
   /** UTC window for the selected range. */
   start: Date;
   end: Date;
-  /** Equally long window immediately before it — for period-over-period deltas. */
-  prevStart: Date;
-  prevEnd: Date;
+  /**
+   * What this period is measured against, or null when there is nothing to
+   * compare with ("All time"). The calendar presets compare with the whole of
+   * the previous calendar period; everything else with the equal-length window
+   * before it.
+   */
+  comparison: { start: Date; end: Date; label: string } | null;
   /** Whole days in the range, inclusive of both ends. */
   days: number;
   /** True when the range runs to today, so totals read as "so far". */
@@ -43,7 +48,7 @@ export type Range = {
   minDate: string;
   /** Newest selectable date: today. A future range would always be empty. */
   maxDate: string;
-  /** Human label, e.g. "FY 2026–27" or "1 Apr – 30 Jun 2026". */
+  /** Human label, e.g. "FY 2026" or "1 Apr – 30 Jun 2026". */
   label: string;
   /** Qualifier for a label whose window hasn't closed yet — "so far", or "".
    * Separate from `label` so the page can style it down. */
@@ -112,7 +117,7 @@ export function resolveRange(
   params: RangeParams,
   earliestDate: string | null,
   /** Which preset an untouched URL means. The dashboard and an ISR's page open
-   * on the current financial year; Reports opens on all time, because a report
+   * on the current year; Reports opens on all time, because a report
    * that silently hides last year's rows is a report nobody can trust. */
   fallback: PeriodKey = "fy",
 ): Range {
@@ -143,10 +148,6 @@ export function resolveRange(
   if (from > to) [from, to] = [to, from];
 
   const days = daysBetween(from, to);
-  // The comparison window is the same number of days ending the day before
-  // `from` — so a 30-day range is always compared against the previous 30.
-  const prevTo = shiftDays(from, -1);
-  const prevFrom = shiftDays(prevTo, -(days - 1));
 
   const isYtd = from === ytdStart && to === today;
   const sameYear = from.slice(0, 4) === to.slice(0, 4);
@@ -159,8 +160,10 @@ export function resolveRange(
     to,
     start: istStartOf(from),
     end: istEndOf(to),
-    prevStart: istStartOf(prevFrom),
-    prevEnd: istEndOf(prevTo),
+    comparison: (() => {
+      const c = comparisonFor(hasCustom ? matchPreset(from, to, dataStart, today) : preset, from, to);
+      return c ? { start: istStartOf(c.from), end: istEndOf(c.to), label: c.label } : null;
+    })(),
     days,
     isCurrent: to === today,
     minDate,
@@ -174,10 +177,10 @@ export function resolveRange(
   };
 }
 
-/** "FY 2026–27" — the Indian financial year the date falls in. */
+/** "FY 2026" — the financial year the date falls in, which here is the
+ * calendar year, so the label is just the year. */
 function fyLabel(dateStr: string): string {
-  const y = fyStartYear(dateStr);
-  return `FY ${y}–${String((y + 1) % 100).padStart(2, "0")}`;
+  return `FY ${fyYear(dateStr)}`;
 }
 
 function presetLabel(period: PeriodKey | null, from: string): string | null {

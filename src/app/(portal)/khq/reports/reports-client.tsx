@@ -1,11 +1,12 @@
 "use client";
 
-import { useOptimistic, useState, useTransition, type FormEvent } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MapScopePickers } from "@/app/(portal)/_components/map-scope-pickers";
 import { formatISTDate, formatISTTime } from "@/lib/date";
 import { useT } from "@/lib/i18n/provider";
 import { Pagination } from "@/components/ui/pagination";
+import { SearchInput } from "@/components/ui/search-input";
 import { PeriodFilter } from "../_components/period-filter";
 import type { StockistKind } from "@/db/schema";
 import { PRODUCT_SEGMENTS } from "@/lib/field/products";
@@ -69,9 +70,6 @@ export function ReportsClient({
   const pathname = usePathname();
   const params = useSearchParams();
 
-  // Local copies for controlled inputs — kept in sync with the URL so a Back
-  // button restore repopulates the fields.
-  const [q, setQ] = useState(scope.filters.q);
   const [exporting, startExport] = useTransition();
   const [exportError, setExportError] = useState<string | null>(null);
   // Same treatment as the period pills: highlight on click, not on the
@@ -113,11 +111,6 @@ export function ReportsClient({
       next.delete("page");
       router.push(`${pathname}?${next.toString()}`);
     });
-  }
-
-  function applySearch(e: FormEvent) {
-    e.preventDefault();
-    push({ q: q.trim() || null });
   }
 
   function goToPage(p: number) {
@@ -189,23 +182,17 @@ export function ReportsClient({
       {/* Filter row */}
       <div className="card mb-4 flex flex-wrap items-center gap-2 p-3.5">
         <MapScopePickers levels={scope.levels} />
-        <form onSubmit={applySearch} className="flex items-center gap-2">
-          <input
-            className="inp"
-            style={{ width: "auto", padding: "6px 10px", fontSize: 12, minWidth: 200 }}
-            type="search"
-            value={q}
-            placeholder={
-              scope.tab === "counters"
-                ? t("Search counter name or mobile…")
-                : t("Search counter or rep name…")
-            }
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <button type="submit" className="btn btn-secondary btn-sm">
-            {t("Search")}
-          </button>
-        </form>
+        <SearchInput
+          param="q"
+          initial={scope.filters.q}
+          resetParam="page"
+          style={{ width: "auto", padding: "6px 10px", fontSize: 12, minWidth: 200 }}
+          placeholder={
+            scope.tab === "counters"
+              ? t("Search counter name or mobile…")
+              : t("Search counter or rep name…")
+          }
+        />
       </div>
 
       {exportError && (
@@ -243,6 +230,7 @@ export function ReportsClient({
 // ── Tables ──────────────────────────────────────────────────────────────
 
 function CountersTable({ rows, t }: { rows: CounterReportRow[]; t: (k: string) => string }) {
+  const router = useRouter();
   if (rows.length === 0) return null;
   return (
     <div className="table-wrap">
@@ -260,7 +248,24 @@ function CountersTable({ rows, t }: { rows: CounterReportRow[]; t: (k: string) =
             const statusLabel =
               r.status === "active" ? t("Active") : r.status === "dormant" ? t("Dormant") : t("Declining");
             return (
-              <tr key={r.id}>
+              <tr
+                key={r.id}
+                onClick={() => router.push(`/khq/counter/${r.id}`)}
+                // A <tr> takes no focus and answers no key, so the affordance
+                // has to be spelled out: without these the counter would be
+                // reachable with a mouse and by no other means.
+                tabIndex={0}
+                role="link"
+                aria-label={`${r.name} — ${t("open counter")}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    router.push(`/khq/counter/${r.id}`);
+                  }
+                }}
+                className="cursor-pointer"
+                title={t("open counter")}
+              >
                 <td className="font-semibold">{r.name}</td>
                 <td className="whitespace-nowrap tabular-nums">{r.phone ?? "—"}</td>
                 <td>{t(r.type)}</td>

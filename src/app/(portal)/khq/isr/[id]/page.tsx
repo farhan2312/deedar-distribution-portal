@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, counters, dayLogs, stockists, users, visits, type ProductSegment, type VisitItem } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
@@ -14,7 +14,14 @@ import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { PERIOD_PRESETS } from "@/lib/khq/periods";
+import { ArrowPager, UrlPagination } from "@/components/ui/url-pagination";
 import { PeriodFilter } from "../../_components/period-filter";
+
+/** Visits per page. A visit is a table row, so this matches the other tables. */
+const VISITS_PER_PAGE = 25;
+
+/** New counters per page: six across x five rows of cards. */
+const COUNTERS_PER_PAGE = 30;
 
 const SEGMENT_COLOR: Record<ProductSegment, string> = {
   DG10: "#7B2FA0",
@@ -34,7 +41,7 @@ export default async function KhqIsrPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<RangeParams>;
+  searchParams: Promise<RangeParams & { vpage?: string; cpage?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -72,8 +79,16 @@ export default async function KhqIsrPage({
 
   const now = nowInstant();
   const today = istDateString(now);
-  const range = resolveRange(await searchParams, first?.d ?? null);
+  const sp = await searchParams;
+  const range = resolveRange(sp, first?.d ?? null);
   const singleDay = range.from === range.to;
+
+  // Both lists are paged in SQL and page independently, so they each own a
+  // param. The page number is resolved after the counts come back, since a
+  // range with fewer rows than the URL asks for has to clamp rather than show
+  // an empty list.
+  const askedVisitPage = Math.max(1, Number.parseInt(sp.vpage ?? "1", 10) || 1);
+  const askedCounterPage = Math.max(1, Number.parseInt(sp.cpage ?? "1", 10) || 1);
 
   const dayStart = range.start;
   const dayEnd = range.end;
@@ -83,50 +98,37 @@ export default async function KhqIsrPage({
     lt(visits.visitedAt, dayEnd),
   );
 
-  const [visitRows, createdRows, logRows, lifetime, lifetimeCreated] = await Promise.all([
+  /**
+   * Counts and aggregates first, rows second.
+   *
+   * The table used to render every visit in the range, and the totals above it
+   * were derived from that same array. Paging the array would have quietly
+   * turned "packets sold" into "packets sold on this page", so the figures now
+   * come from SQL over the whole range and only the table is paged.
+   */
+  const [visitAgg, counterAgg, itemRows, logRows, lifetime, lifetimeCreated] = await Promise.all([
     db
       .select({
-        id: visits.id,
-        visitedAt: visits.visitedAt,
-        sold: visits.sold,
-        stock: visits.stock,
-        items: visits.items,
-        rank: visits.rank,
-        competitor: visits.competitor,
-        competitorBrand: visits.competitorBrand,
-        durationSeconds: visits.durationSeconds,
-        counterId: visits.counterId,
-        counterName: counters.name,
-        counterType: counters.type,
-        counterTypeOther: counters.typeOther,
-        area: areas.name,
+        n: sql<number>`count(*)::int`,
+        packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
+        covered: sql<number>`count(distinct ${visits.counterId})::int`,
       })
       .from(visits)
-      .innerJoin(counters, eq(counters.id, visits.counterId))
-      .innerJoin(areas, eq(areas.id, counters.areaId))
-      .where(inRange)
-      .orderBy(desc(visits.visitedAt)),
+      .where(inRange),
     db
-      .select({
-        id: counters.id,
-        name: counters.name,
-        type: counters.type,
-        typeOther: counters.typeOther,
-        area: areas.name,
-        createdAt: counters.createdAt,
-        lat: counters.lat,
-        lng: counters.lng,
-      })
+      .select({ n: sql<number>`count(*)::int` })
       .from(counters)
-      .innerJoin(areas, eq(areas.id, counters.areaId))
       .where(
         and(
           eq(counters.createdByUserId, isrId),
           gte(counters.createdAt, dayStart),
           lt(counters.createdAt, dayEnd),
         ),
-      )
-      .orderBy(desc(counters.createdAt)),
+      ),
+    // Just the items column, for the per-SKU split. One narrow column across
+    // the range is far less than the joined rows it used to be read from, and
+    // the split has to cover every visit rather than one page of them.
+    db.select({ items: visits.items }).from(visits).where(inRange),
     db
       .select()
       .from(dayLogs)
@@ -156,10 +158,69 @@ export default async function KhqIsrPage({
       .where(eq(counters.createdByUserId, isrId)),
   ]);
 
+  const visitTotal = visitAgg[0]?.n ?? 0;
+  const createdTotal = counterAgg[0]?.n ?? 0;
+  const visitPages = Math.max(1, Math.ceil(visitTotal / VISITS_PER_PAGE));
+  const counterPages = Math.max(1, Math.ceil(createdTotal / COUNTERS_PER_PAGE));
+  const visitPage = Math.min(askedVisitPage, visitPages);
+  const counterPage = Math.min(askedCounterPage, counterPages);
+
+  const [visitRows, createdRows] = await Promise.all([
+    db
+      .select({
+        id: visits.id,
+        visitedAt: visits.visitedAt,
+        sold: visits.sold,
+        stock: visits.stock,
+        items: visits.items,
+        rank: visits.rank,
+        competitor: visits.competitor,
+        competitorBrand: visits.competitorBrand,
+        durationSeconds: visits.durationSeconds,
+        counterId: visits.counterId,
+        counterName: counters.name,
+        counterType: counters.type,
+        counterTypeOther: counters.typeOther,
+        area: areas.name,
+      })
+      .from(visits)
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .where(inRange)
+      // Two visits in the same second would otherwise straddle a page boundary
+      // unpredictably; the id makes the sort total.
+      .orderBy(desc(visits.visitedAt), asc(visits.id))
+      .limit(VISITS_PER_PAGE)
+      .offset((visitPage - 1) * VISITS_PER_PAGE),
+    db
+      .select({
+        id: counters.id,
+        name: counters.name,
+        type: counters.type,
+        typeOther: counters.typeOther,
+        area: areas.name,
+        createdAt: counters.createdAt,
+        lat: counters.lat,
+        lng: counters.lng,
+      })
+      .from(counters)
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .where(
+        and(
+          eq(counters.createdByUserId, isrId),
+          gte(counters.createdAt, dayStart),
+          lt(counters.createdAt, dayEnd),
+        ),
+      )
+      .orderBy(desc(counters.createdAt), asc(counters.id))
+      .limit(COUNTERS_PER_PAGE)
+      .offset((counterPage - 1) * COUNTERS_PER_PAGE),
+  ]);
+
   // A one-day window still has exactly one log, so the single-day view keeps
   // its clock times; a longer one sums instead.
   const log = singleDay ? (logRows[0] ?? null) : null;
-  const packets = visitRows.reduce((sum, v) => sum + v.sold, 0);
+  const packets = visitAgg[0]?.packets ?? 0;
   const pickup = logRows.reduce((sum, l) => sum + (l.pickupTotal ?? 0), 0);
   const remaining = logRows.reduce((sum, l) => sum + (l.remainingTotal ?? 0), 0);
   const daysWorked = logRows.filter((l) => l.startAt).length;
@@ -176,7 +237,7 @@ export default async function KhqIsrPage({
   // Per-SKU split, summed from the items JSONB in JS — a jsonb SRF join errors
   // on any non-array legacy row, same as on the dashboards.
   const bySegment = new Map<string, number>();
-  for (const v of visitRows) {
+  for (const v of itemRows) {
     const items = (v.items ?? []) as VisitItem[];
     if (!Array.isArray(items)) continue;
     for (const it of items) {
@@ -192,9 +253,9 @@ export default async function KhqIsrPage({
     achieved: soldAgainstPickup(packets, pickup),
     onJob: daysWorked > 0 ? minutesLabel(onJobMinutes) : "—",
   };
-  const hasActivity = visitRows.length > 0 || createdRows.length > 0 || daysWorked > 0;
+  const hasActivity = visitTotal > 0 || createdTotal > 0 || daysWorked > 0;
 
-  const covered = new Set(visitRows.map((v) => v.counterId)).size;
+  const covered = visitAgg[0]?.covered ?? 0;
   const total = lifetime[0] ?? { visits: 0, packets: 0, counters: 0, days: 0 };
   const totalCreated = lifetimeCreated[0]?.n ?? 0;
 
@@ -290,9 +351,9 @@ export default async function KhqIsrPage({
                 </div>
                 <div className="flex flex-wrap gap-4">
                   <DayStat label={t("Sold")} value={day.packets} outOf={day.pickup || null} accent />
-                  <DayStat label={t("Visits")} value={visitRows.length} />
+                  <DayStat label={t("Visits")} value={visitTotal} />
                   <DayStat label={t("Covered")} value={covered} />
-                  <DayStat label={t("New")} value={createdRows.length} />
+                  <DayStat label={t("New")} value={createdTotal} />
                 </div>
               </div>
 
@@ -332,7 +393,7 @@ export default async function KhqIsrPage({
                   {t("Visits")}
                 </h6>
               </div>
-              {visitRows.length === 0 ? (
+              {visitTotal === 0 ? (
                 <p className="px-5 pb-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
                   {singleDay ? t("No visits on this day.") : t("No visits in this period.")}
                 </p>
@@ -379,6 +440,11 @@ export default async function KhqIsrPage({
                   </table>
                 </div>
               )}
+              {visitPages > 1 && (
+                <div className="px-5 pb-1 pt-2">
+                  <UrlPagination page={visitPage} totalPages={visitPages} param="vpage" />
+                </div>
+              )}
 
               {/* Counters added */}
               <div className="px-5 pt-4">
@@ -386,12 +452,13 @@ export default async function KhqIsrPage({
                   {t("New counters")}
                 </h6>
               </div>
-              {createdRows.length === 0 ? (
+              {createdTotal === 0 ? (
                 <p className="px-5 pb-5 text-[13px]" style={{ color: "var(--ink-3)" }}>
                   {singleDay ? t("No counters added on this day.") : t("No counters added in this period.")}
                 </p>
               ) : (
-                <div className="grid gap-2.5 px-5 pb-5 sm:grid-cols-2 xl:grid-cols-3">
+                // Six across, so a full page is five tidy rows of six.
+                <div className="grid gap-2.5 px-5 pb-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   {createdRows.map((c) => (
                     <div
                       key={c.id}
@@ -414,6 +481,18 @@ export default async function KhqIsrPage({
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+              {counterPages > 1 && (
+                <div className="px-5 pb-5">
+                  <ArrowPager
+                    page={counterPage}
+                    totalPages={counterPages}
+                    total={createdTotal}
+                    pageSize={COUNTERS_PER_PAGE}
+                    param="cpage"
+                    unit={t("counters")}
+                  />
                 </div>
               )}
           </section>

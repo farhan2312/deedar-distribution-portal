@@ -33,12 +33,18 @@ export type IsrRow = {
 export function IsrLeaderboard({
   rows,
   rowsVisible,
+  fill,
   date,
   emptyLabel,
   t,
 }: {
   rows: IsrRow[];
+  /** Rows to show before scrolling. Ignored when `fill` is set. */
   rowsVisible: number;
+  /** Stretch to the card's height instead of capping at `rowsVisible`, for a
+   * card whose height is set by what sits beside it rather than by its own
+   * contents. */
+  fill?: boolean;
   /** Day in view, forwarded so the detail page opens on the same date. */
   date: string;
   emptyLabel: string;
@@ -57,7 +63,19 @@ export function IsrLeaderboard({
   const soldMax = Math.max(1, ...rows.map((r) => r.packets));
 
   return (
-    <div className="overflow-y-auto" style={{ maxHeight: rowsVisible * 68 }}>
+    <div
+      // min-h-0 is what lets a flex child actually shrink and scroll; without
+      // it the list grows the card instead of scrolling inside it.
+      className={
+        fill
+          ? // Capped on a narrow screen, where the card is in normal flow and
+            // has no row height to inherit; unbounded from lg, where the card
+            // is pinned to the row and flex-1 gives the list its height.
+            "min-h-0 max-h-[26rem] flex-1 overflow-y-auto lg:max-h-none"
+          : "overflow-y-auto"
+      }
+      style={fill ? undefined : { maxHeight: rowsVisible * 68 }}
+    >
       {rows.map((r, i) => {
         const pct = soldAgainstPickup(r.packets, r.pickup);
         return (

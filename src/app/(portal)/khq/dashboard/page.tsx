@@ -7,7 +7,6 @@ import {
   counters,
   dayLogs,
   stockists,
-  schemeClaims,
   states,
   users,
   visits,
@@ -24,13 +23,10 @@ import { getT } from "@/lib/i18n/server";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { type DonutSegment } from "@/components/ui/donut";
 import {
-  cardTitle,
   computeDelta,
   CardHead,
   DonutCard,
   Kpi,
-  ScrollBoard,
-  type BoardRow,
   type KpiProps,
 } from "../../_components/dashboard-ui";
 import { RefreshButton } from "../../supervisor/_components/refresh-button";
@@ -66,21 +62,9 @@ const COMPETITOR_COLOR: Record<CompetitorPresence, string> = {
   national: "var(--danger)",
 };
 
-const STOCK_BAND_COLOR: Record<string, string> = {
-  "Out of stock": "#C7263B",
-  "Low (1–10)": "#E0A100",
-  "Mid (11–50)": "#4C8C2B",
-  "High (51+)": "#128A82",
-  "Not yet visited": "#8A8F98",
-};
-const STOCK_BAND_ORDER = ["Out of stock", "Low (1–10)", "Mid (11–50)", "High (51+)", "Not yet visited"];
-
-function bandForStock(n: number): string {
-  if (n <= 0) return "Out of stock";
-  if (n <= 10) return "Low (1–10)";
-  if (n <= 50) return "Mid (11–50)";
-  return "High (51+)";
-}
+/** Rows rendered in the attention table. It scrolls, so this is only a
+ * ceiling on payload size — the header still reports the true total. */
+const ATTENTION_ROWS = 50;
 
 function mmss(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return "—";
@@ -152,11 +136,32 @@ export default async function KhqDashboardPage({
       : sql`false`
     : undefined;
 
+  /** The same scope on the stockist roster itself.
+   *
+   * The counter and visit aggregates were already filtered by state, but the
+   * roster was not — so picking a state still listed every stockist in the
+   * company, each with the zeroes its filtered aggregates produced. The table
+   * has to be narrowed by the same rule as the numbers in it. */
+  const rosterScope = scopedStockistIds
+    ? scopedStockistIds.length
+      ? inArray(stockists.id, scopedStockistIds)
+      : sql`false`
+    : undefined;
+
   const now = nowInstant();
   const day = istDayBounds(now);
   const today = istDateString(now);
   const inRange = and(gte(visits.visitedAt, range.start), lt(visits.visitedAt, range.end), stockistScope);
-  const inPrev = and(gte(visits.visitedAt, range.prevStart), lt(visits.visitedAt, range.prevEnd), stockistScope);
+  // "All time" has nothing before it, so there is no comparison window and no
+  // query to run — `sql`false`` keeps the shape of the Promise.all without
+  // scanning anything.
+  const inPrev = range.comparison
+    ? and(
+        gte(visits.visitedAt, range.comparison.start),
+        lt(visits.visitedAt, range.comparison.end),
+        stockistScope,
+      )
+    : sql`false`;
   const inToday = and(gte(visits.visitedAt, day.start), lt(visits.visitedAt, day.end), stockistScope);
 
   // All aggregates run in parallel — sequential awaits on a dashboard multiply
@@ -173,21 +178,23 @@ export default async function KhqDashboardPage({
     periodMix,
     periodCore,
     prevCore,
-    periodByStockist,
-    periodByCnf,
     todayByIsr,
-    periodByArea,
     competitorRows,
     rankRows,
-    schemeRow,
     brandRows,
     trendRows,
     newCountersTodayRow,
     todayLogs,
   ] = await Promise.all([
     db.select().from(states),
-    db.select().from(cnfs),
-    db.select().from(stockists),
+    // C&Fs and stockists follow the state filter too, so the headline counts
+    // ("3 C&F · 12 stockists") describe what is on screen rather than the
+    // company. `allStates` stays unscoped — it fills the state picker.
+    db
+      .select()
+      .from(cnfs)
+      .where(selectedState ? eq(cnfs.stateId, selectedState.id) : undefined),
+    db.select().from(stockists).where(rosterScope),
     db
       .select({
         id: counters.id,
@@ -252,21 +259,6 @@ export default async function KhqDashboardPage({
       .innerJoin(counters, eq(counters.id, visits.counterId))
       .where(inPrev),
     db
-      .select({ stockistId: counters.stockistId, packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int` })
-      .from(visits)
-      .innerJoin(counters, eq(counters.id, visits.counterId))
-      .where(inRange)
-      .groupBy(counters.stockistId),
-    // Per-C&F packets — the company-level cut a KHQ viewer actually wants,
-    // and the one thing this dashboard can show that the C&F one can't.
-    db
-      .select({ cnfId: stockists.cnfId, packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`, n: sql<number>`count(*)::int` })
-      .from(visits)
-      .innerJoin(counters, eq(counters.id, visits.counterId))
-      .innerJoin(stockists, eq(stockists.id, counters.stockistId))
-      .where(inRange)
-      .groupBy(stockists.cnfId),
-    db
       .select({
         id: users.id,
         name: users.name,
@@ -280,13 +272,6 @@ export default async function KhqDashboardPage({
       .where(inToday)
       .groupBy(users.id, users.name),
     db
-      .select({ area: areas.name, packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int` })
-      .from(visits)
-      .innerJoin(counters, eq(counters.id, visits.counterId))
-      .innerJoin(areas, eq(areas.id, counters.areaId))
-      .where(inRange)
-      .groupBy(areas.name),
-    db
       .select({ competitor: visits.competitor, n: sql<number>`count(*)::int` })
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
@@ -298,17 +283,6 @@ export default async function KhqDashboardPage({
       .innerJoin(counters, eq(counters.id, visits.counterId))
       .where(and(inRange, sql`${visits.rank} is not null`))
       .groupBy(visits.rank),
-    db
-      .select({ value: sql<number>`coalesce(sum(${schemeClaims.value}), 0)::int` })
-      .from(schemeClaims)
-      .where(
-        and(
-          eq(schemeClaims.status, "paid"),
-          gte(schemeClaims.createdAt, range.start),
-          lt(schemeClaims.createdAt, range.end),
-          scopedStockistIds ? inArray(schemeClaims.stockistId, scopedStockistIds) : undefined,
-        ),
-      ),
     db
       .select({ brand: visits.competitorBrand, n: sql<number>`count(*)::int` })
       .from(visits)
@@ -395,21 +369,6 @@ export default async function KhqDashboardPage({
   }));
   const retailTotal = retailCounters.length;
 
-  // ── Last observed stock ────────────────────────────────────────────────
-  const bandCount = new Map<string, number>();
-  for (const c of retailCounters) {
-    const s = latestStock.get(c.id);
-    bandCount.set(
-      s == null ? "Not yet visited" : bandForStock(s),
-      (bandCount.get(s == null ? "Not yet visited" : bandForStock(s)) ?? 0) + 1,
-    );
-  }
-  const stockDonut: DonutSegment[] = STOCK_BAND_ORDER.filter((b) => (bandCount.get(b) ?? 0) > 0).map((b) => ({
-    label: b,
-    value: bandCount.get(b) ?? 0,
-    color: STOCK_BAND_COLOR[b],
-  }));
-
   // ── Counters by state ───────────────────────────────────────────────────
   const stockistToCnf = new Map(allStockists.map((d) => [d.id, d.cnfId]));
   const cnfToState = new Map(allCnfs.map((c) => [c.id, c.stateId]));
@@ -427,40 +386,41 @@ export default async function KhqDashboardPage({
     pct: Math.round((count / maxState) * 100),
   }));
 
-  // ── Depot table (today) + leaderboards (period) ────────────────────────
+  // ── Stockist table (today) ─────────────────────────────────────────────
   const perDepot = new Map(perStockistToday.map((r) => [r.stockistId, r]));
   const stockistName = new Map(allStockists.map((d) => [d.id, d.name]));
-  const stockistRows = allStockists.map((d) => {
-    const dc = allCounters.filter((c) => c.stockistId === d.id);
-    const dr = fieldReps.filter((r) => r.stockistId === d.id);
-    const a = perDepot.get(d.id);
-    return {
-      name: d.name,
-      cnf: cnfName.get(d.cnfId) ?? "—",
-      reps: dr.length,
-      counters: dc.length,
-      visits: a?.visits ?? 0,
-      packets: a?.packets ?? 0,
-      avgCounterTime: mmss(a?.avgSeconds ?? 0),
-      declining: dc.filter((c) => c.status === "declining").length,
-    };
-  });
+  // Counted in one pass over each list rather than a filter per stockist,
+  // which was a full scan of every counter once per row.
+  const countersPer = new Map<string, number>();
+  const decliningPer = new Map<string, number>();
+  for (const c of allCounters) {
+    countersPer.set(c.stockistId, (countersPer.get(c.stockistId) ?? 0) + 1);
+    if (c.status === "declining") {
+      decliningPer.set(c.stockistId, (decliningPer.get(c.stockistId) ?? 0) + 1);
+    }
+  }
+  const repsPer = new Map<string, number>();
+  for (const r of fieldReps) {
+    if (r.stockistId) repsPer.set(r.stockistId, (repsPer.get(r.stockistId) ?? 0) + 1);
+  }
 
-  const stockistBoard = periodByStockist
-    .map((r) => ({ name: stockistName.get(r.stockistId) ?? "—", packets: Number(r.packets) || 0 }))
-    .filter((r) => r.packets > 0)
-    .sort((a, b) => b.packets - a.packets);
-  const stockistMax = Math.max(1, ...stockistBoard.map((r) => r.packets));
-
-  const cnfBoard = periodByCnf
-    .map((r) => ({
-      name: cnfName.get(r.cnfId) ?? "—",
-      packets: Number(r.packets) || 0,
-      visits: Number(r.n) || 0,
-    }))
-    .filter((r) => r.packets > 0 || r.visits > 0)
-    .sort((a, b) => b.packets - a.packets);
-  const cnfMax = Math.max(1, ...cnfBoard.map((r) => r.packets));
+  const stockistRows = allStockists
+    .map((d) => {
+      const a = perDepot.get(d.id);
+      return {
+        name: d.name,
+        cnf: cnfName.get(d.cnfId) ?? "—",
+        reps: repsPer.get(d.id) ?? 0,
+        counters: countersPer.get(d.id) ?? 0,
+        visits: a?.visits ?? 0,
+        packets: a?.packets ?? 0,
+        avgCounterTime: mmss(a?.avgSeconds ?? 0),
+        declining: decliningPer.get(d.id) ?? 0,
+      };
+    })
+    // Busiest first: the table scrolls, so alphabetical order would bury
+    // today's activity behind whoever happens to start with an A.
+    .sort((a, b) => b.packets - a.packets || b.visits - a.visits || a.name.localeCompare(b.name));
 
   // Built from the ROSTER, not from today's visits, so an ISR who has sold
   // nothing today still has a row — and so is still reachable. Ranking on a
@@ -486,12 +446,6 @@ export default async function KhqDashboardPage({
     // so the quiet ISRs sit in a predictable block rather than a random one.
     .sort((a, b) => b.packets - a.packets || b.visits - a.visits || a.name.localeCompare(b.name));
 
-  const areaBoard = periodByArea
-    .map((r) => ({ name: r.area, packets: Number(r.packets) || 0 }))
-    .filter((r) => r.packets > 0)
-    .sort((a, b) => b.packets - a.packets);
-  const areaMax = Math.max(1, ...areaBoard.map((r) => r.packets));
-
   // ── Totals ──────────────────────────────────────────────────────────────
   const visitsToday = todayTotals[0]?.visits ?? 0;
   const activeRepsToday = new Set(activeRepsRows.map((r) => r.userId)).size;
@@ -500,13 +454,17 @@ export default async function KhqDashboardPage({
   const visitCount = periodCore[0]?.visits ?? 0;
   const covered = periodCore[0]?.covered ?? 0;
   const avgRank = periodCore[0]?.avgRank ?? 0;
-  const avgVisitSeconds = periodCore[0]?.avgSeconds ?? 0;
   const coveragePct = totalCounters === 0 ? 0 : Math.round((covered / totalCounters) * 100);
-  const schemePayout = schemeRow[0]?.value ?? 0;
   const newCountersToday = newCountersTodayRow[0]?.n ?? 0;
 
-  const packetsDelta = computeDelta(packets, prevCore[0]?.packets ?? 0);
-  const visitsDelta = computeDelta(visitCount, prevCore[0]?.visits ?? 0);
+  const packetsDelta = range.comparison
+    ? computeDelta(packets, prevCore[0]?.packets ?? 0)
+    : undefined;
+  const visitsDelta = range.comparison
+    ? computeDelta(visitCount, prevCore[0]?.visits ?? 0)
+    : undefined;
+  // Names the actual window — "vs last month", not a generic "vs last period".
+  const deltaLabel = range.comparison ? t(range.comparison.label) : undefined;
 
   // ── Product mix ─────────────────────────────────────────────────────────
   const soldBySegment = new Map<string, number>();
@@ -558,12 +516,33 @@ export default async function KhqDashboardPage({
   const grain = trendGrain(range.days);
   const byBucket = new Map(trendRows.map((r) => [String(r.bucket), Number(r.packets) || 0]));
 
+  /**
+   * Where the month axis stops.
+   *
+   * A year runs to its own 31 December, not to today — the chart is "the year
+   * so far" and the shape of a year is twelve months. Ending the axis at the
+   * current month made a year look like a nine-month period and silently
+   * rescaled every bar as it went on. The months still to come render as empty
+   * slots, which is the point: you can see how much of the year is left.
+   *
+   * An FY preset always starts on 1 January, so its end is that year's
+   * December.
+   */
+  const axisEnd =
+    range.period === "fy" || range.period === "lastfy"
+      ? `${range.from.slice(0, 4)}-12-31`
+      : range.to;
+
   const trendBars: TrendBar[] = [];
   if (grain === "month") {
     let cursor = `${range.from.slice(0, 7)}-01`;
-    while (cursor.slice(0, 7) <= range.to.slice(0, 7)) {
+    while (cursor.slice(0, 7) <= axisEnd.slice(0, 7)) {
       const key = cursor.slice(0, 7);
       const monthIdx = Number(key.slice(5, 7)) - 1;
+      // A month that hasn't happened yet has nothing to drill into: clicking it
+      // would clamp to today and quietly change the period to something the
+      // click never asked for.
+      const future = key > today.slice(0, 7);
       trendBars.push({
         // Translated here rather than only in the axis component — the labels
         // were rendering raw English beside a Hindi UI.
@@ -571,8 +550,8 @@ export default async function KhqDashboardPage({
         value: byBucket.get(key) ?? 0,
         // Clicking a month narrows the range to that month.
         drillMonth: monthIdx + 1,
-        drillFrom: `${key}-01`,
-        drillTo: monthEndOf(key),
+        drillFrom: future ? undefined : `${key}-01`,
+        drillTo: future ? undefined : monthEndOf(key),
         isCurrent: key === today.slice(0, 7),
       });
       cursor = shiftDays(monthEndOf(key), 1);
@@ -591,7 +570,7 @@ export default async function KhqDashboardPage({
   const peakBucket = Math.max(0, ...trendBars.map((b) => b.value));
 
   // ── Counters needing attention ──────────────────────────────────────────
-  const attention = allCounters
+  const flagged = allCounters
     .map((c) => ({
       id: c.id,
       name: c.name,
@@ -603,21 +582,29 @@ export default async function KhqDashboardPage({
     }))
     .filter((c) => c.status === "declining" || c.days == null || c.days >= 14)
     // Never-visited first, then longest-since-visit.
-    .sort((a, b) => (b.days ?? 99999) - (a.days ?? 99999))
-    .slice(0, 12);
+    .sort((a, b) => (b.days ?? 99999) - (a.days ?? 99999));
+  // Counted before the cap: the badge answers "how bad is it", and reading it
+  // off the truncated list made the number stop at the cap and stay there.
+  const attentionTotal = flagged.length;
+  const attention = flagged.slice(0, ATTENTION_ROWS);
 
   const rangeNote = range.note ? t(range.note) : "";
 
+  /**
+   * Seven cards, grouped rather than merely listed: the selected period first,
+   * then the three that are always about right now regardless of the filter.
+   * At four columns that lands as a period row and a today row, which is why
+   * the last row being short reads as a break instead of a gap.
+   */
   const kpis: KpiProps[] = [
-    { icon: "box", tint: "#7B2FA0", label: t("Packets sold"), value: packets.toLocaleString("en-IN"), delta: packetsDelta, deltaLabel: t("vs last period") },
-    { icon: "route", tint: "#2E9E5A", label: t("Visits"), value: visitCount.toLocaleString("en-IN"), delta: visitsDelta, deltaLabel: t("vs last period") },
+    // The selected period.
+    { icon: "box", tint: "#7B2FA0", label: t("Packets sold"), value: packets.toLocaleString("en-IN"), delta: packetsDelta, deltaLabel },
+    { icon: "route", tint: "#2E9E5A", label: t("Visits"), value: visitCount.toLocaleString("en-IN"), delta: visitsDelta, deltaLabel },
     { icon: "store", tint: "#128A82", label: t("Coverage"), value: `${coveragePct}%`, sub: `${covered}/${totalCounters} ${t("counters")}` },
-    { icon: "store", tint: "var(--accent)", label: t("New counters today"), value: newCountersToday.toLocaleString("en-IN"), sub: t("added to the network") },
     { icon: "star", tint: "#B9812E", label: t("Avg Deedar rank"), value: avgRank > 0 ? avgRank.toFixed(1) : "—", sub: t("shelf position") },
-    { icon: "clock", tint: "#8A6FBF", label: t("Avg visit time"), value: mmss(avgVisitSeconds), sub: t("time on counter") },
-    { icon: "rupee", tint: "#4C8C2B", label: t("Scheme payouts"), value: `₹${schemePayout.toLocaleString("en-IN")}`, sub: t("settled via UPI") },
-    { icon: "globe", tint: "#2E5FA3", label: t("Network"), value: totalCounters.toLocaleString("en-IN"), sub: `${allCnfs.length} ${t("C&F")} · ${allStockists.length} ${t("stockists")}` },
+    // Today, whatever the period says.
     { icon: "trendUp", tint: "#128A82", label: t("Visits today"), value: visitsToday, sub: `${activeRepsToday}/${fieldReps.length} ${t("reps active")}` },
+    { icon: "store", tint: "var(--accent)", label: t("New counters today"), value: newCountersToday.toLocaleString("en-IN"), sub: t("added to the network") },
     { icon: "alert", tint: "#C7263B", label: t("Declining counters"), value: decliningCount, sub: t("flagged for revisit"), tone: "bad" },
   ];
 
@@ -668,42 +655,50 @@ export default async function KhqDashboardPage({
         <span>{totalCounters} {t("counters")}</span>
       </div>
 
-      {/* KPI grid */}
-      <div className="mb-5 grid grid-cols-2 gap-3.5 md:grid-cols-3 xl:grid-cols-5">
+      {/* KPI grid — four across rather than five. Ten cards needed five
+          columns to fit two rows; seven in five columns would leave three
+          empty cells, and four columns gives every card room for its label
+          without truncating. */}
+      <div className="mb-5 grid grid-cols-2 gap-3.5 md:grid-cols-3 xl:grid-cols-4">
         {kpis.map((k) => (
           <Kpi key={k.label} {...k} t={t} />
         ))}
       </div>
 
-      {/* Trend + counter health */}
-      <div className="mb-5 grid items-stretch gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <section className="card flex flex-col p-5">
-          <CardHead
-            icon="box"
-            tint="#7B2FA0"
-            title={t("Sales trend")}
-            sub={
-              grain === "month"
-                ? `${t("Packets sold by month")} · ${range.label}`
-                : `${t("Packets sold by day")} · ${range.label}`
-            }
-            right={
-              <div className="flex flex-none items-center gap-3">
-                <div className="text-right">
-                  <div className="text-[18px] font-bold leading-none" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-                    {peakBucket.toLocaleString("en-IN")}
-                  </div>
-                  <div className="mt-1 text-[11px]" style={{ color: "var(--ink-3)" }}>
-                    {grain === "month" ? t("peak month") : t("peak day")}
-                  </div>
+      {/* Sales trend, full width. Sharing the row with a donut left roughly
+          60% of the page for the bars, which is where a year of months turned
+          into slivers — every bucket now gets the whole page to spread across. */}
+      <section className="card mb-5 flex flex-col p-5">
+        <CardHead
+          icon="box"
+          tint="#7B2FA0"
+          title={t("Sales trend")}
+          sub={
+            grain === "month"
+              ? `${t("Packets sold by month")} · ${range.label}`
+              : `${t("Packets sold by day")} · ${range.label}`
+          }
+          right={
+            <div className="flex flex-none items-center gap-3">
+              <div className="text-right">
+                <div className="text-[18px] font-bold leading-none" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+                  {peakBucket.toLocaleString("en-IN")}
                 </div>
-                {range.period !== "fy" && <BackToDefault label={t("← Back to this FY")} />}
+                <div className="mt-1 text-[11px]" style={{ color: "var(--ink-3)" }}>
+                  {grain === "month" ? t("peak month") : t("peak day")}
+                </div>
               </div>
-            }
-          />
-          <SalesTrend bars={trendBars} drillable={grain === "month"} />
-        </section>
+              {range.period !== "fy" && <BackToDefault label={t("← Back to this FY")} />}
+            </div>
+          }
+        />
+        <SalesTrend bars={trendBars} drillable={grain === "month"} />
+      </section>
 
+      {/* Four donuts. Counter health joins the other three now that the trend
+          has its own row — it is the same kind of card, and four across is a
+          tidier row than a stray one above three. */}
+      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <DonutCard
           icon="heart"
           tint="var(--success)"
@@ -716,10 +711,6 @@ export default async function KhqDashboardPage({
           empty={totalCounters === 0 ? t("No counters yet.") : undefined}
           t={t}
         />
-      </div>
-
-      {/* Three donuts */}
-      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <DonutCard
           icon="pieChart"
           tint="#128A82"
@@ -759,30 +750,51 @@ export default async function KhqDashboardPage({
         />
       </div>
 
-      {/* C&F leaderboard + shelf rank */}
-      <div className="mb-5 grid items-stretch gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <section className="card flex flex-col p-5">
-          <CardHead icon="globe" tint="#2E5FA3" title={t("C&F leaderboard")} sub={t("Packets sold this period")} />
-          {cnfBoard.length === 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>{t("No sales in this period.")}</p>
-          ) : (
-            <div className="flex flex-col gap-2.5">
-              {cnfBoard.map((c, i) => (
-                <div key={c.name} className="flex items-center gap-2.5">
-                  <span className="w-[130px] truncate text-[13px]" style={{ color: "var(--ink-1)" }}>{c.name}</span>
-                  <div className="flex-1">
-                    <ProgressBar pct={Math.round((c.packets / cnfMax) * 100)} height={13} color={i === 0 ? "var(--success)" : "var(--accent)"} />
-                  </div>
-                  <span className="w-24 flex-none text-right text-[12px]" style={{ color: "var(--ink-3)" }}>
-                    <b className="tabular-nums" style={{ color: "var(--ink-1)" }}>{c.packets.toLocaleString("en-IN")}</b>
-                    {" · "}{c.visits}{" "}{t("visits")}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* The ISR list beside the three period cards.
+          The three on the right decide the height; the leaderboard takes it and
+          scrolls. Getting that to hold needs the card out of the grid's row
+          sizing entirely — an `auto` row is sized by its items' MAX-content, so
+          a 33-name list demanded ~2200px and dragged the whole row with it.
+          Neither `min-h-0` nor `overflow-hidden` helps: both bound the
+          minimum, not the max-content contribution. Absolute inside a relative
+          cell contributes nothing to sizing, and `inset-0` then pins the card
+          to exactly the height the right-hand stack produced. Static below
+          `lg`, where everything is one column anyway. */}
+      <div className="mb-5 grid items-stretch gap-4 lg:grid-cols-2">
+        <div className="relative">
+        <section className="card flex min-h-0 flex-col overflow-hidden p-0 lg:absolute lg:inset-0">
+          <div
+            className="flex flex-none items-center justify-between gap-3 border-b px-5 py-4"
+            style={{ borderColor: "var(--hairline-soft)" }}
+          >
+            <CardHead
+              icon="users"
+              tint="var(--accent)"
+              title={t("Packets sold today by ISR")}
+              sub={t("Tap an ISR for that day's detail")}
+            />
+            {isrBoard.length > 0 && (
+              <span
+                className="chip flex-none"
+                style={{ background: "var(--bg-soft)", color: "var(--ink-3)", borderColor: "transparent" }}
+              >
+                {isrBoard.length}
+              </span>
+            )}
+          </div>
+          <IsrLeaderboard
+            rows={isrBoard}
+            rowsVisible={5}
+            fill
+            date={today}
+            emptyLabel={t("No ISR activity today.")}
+            t={t}
+          />
         </section>
+        </div>
 
+        {/* gap-4 matches the grid's own gap, so the seams line up. */}
+        <div className="flex flex-col gap-4">
         <section className="card flex flex-col p-5">
           <CardHead icon="star" tint="#B9812E" title={t("Deedar shelf rank")} sub={t("Visits, by shelf position")} />
           {rankTotal === 0 ? (
@@ -806,85 +818,7 @@ export default async function KhqDashboardPage({
             </div>
           )}
         </section>
-      </div>
 
-      {/* Depot + rep leaderboards */}
-      <div className="mb-5 grid gap-4 lg:grid-cols-2">
-        <ScrollBoard
-          icon="trophy"
-          tint="#B9812E"
-          title={t("Stockist leaderboard")}
-          sub={t("Packets sold this period")}
-          empty={t("No sales in this period.")}
-          rows={stockistBoard.map<BoardRow>((d) => ({
-            key: d.name,
-            name: d.name,
-            value: d.packets.toLocaleString("en-IN"),
-            pct: Math.round((d.packets / stockistMax) * 100),
-          }))}
-        />
-        <section className="card flex flex-col overflow-hidden p-0">
-          <div
-            className="flex flex-none items-center justify-between gap-3 border-b px-5 py-4"
-            style={{ borderColor: "var(--hairline-soft)" }}
-          >
-            <CardHead
-              icon="users"
-              tint="var(--accent)"
-              title={t("Packets sold today by ISR")}
-              sub={t("Tap an ISR for that day's detail")}
-            />
-            {isrBoard.length > 0 && (
-              <span
-                className="chip flex-none"
-                style={{ background: "var(--bg-soft)", color: "var(--ink-3)", borderColor: "transparent" }}
-              >
-                {isrBoard.length}
-              </span>
-            )}
-          </div>
-          <IsrLeaderboard
-            rows={isrBoard}
-            rowsVisible={5}
-            date={today}
-            emptyLabel={t("No ISR activity today.")}
-            t={t}
-          />
-        </section>
-      </div>
-
-      {/* Area leaderboard + stock health */}
-      <div className="mb-5 grid gap-4 lg:grid-cols-2">
-        <ScrollBoard
-          icon="pin"
-          tint="#128A82"
-          title={t("Top areas")}
-          sub={t("Packets sold this period")}
-          empty={t("No area activity in this period.")}
-          rows={areaBoard.map<BoardRow>((a) => ({
-            key: a.name,
-            name: a.name,
-            value: a.packets.toLocaleString("en-IN"),
-            pct: Math.round((a.packets / areaMax) * 100),
-          }))}
-        />
-        <DonutCard
-          icon="box"
-          tint="#128A82"
-          title={t("Last observed stock")}
-          sub={t("Counters by last visit's stock level")}
-          segments={stockDonut}
-          total={retailTotal}
-          centerValue={retailTotal.toLocaleString("en-IN")}
-          centerLabel={t("counters")}
-          empty={retailTotal === 0 ? t("No retail counters in scope yet.") : undefined}
-          translateLabels
-          t={t}
-        />
-      </div>
-
-      {/* State footprint + top brands */}
-      <div className="mb-5 grid items-stretch gap-4 lg:grid-cols-2">
         <section className="card flex flex-col p-5">
           <CardHead
             icon="globe"
@@ -930,6 +864,7 @@ export default async function KhqDashboardPage({
             </div>
           )}
         </section>
+        </div>
       </div>
 
       {/* Counters needing attention */}
@@ -941,9 +876,11 @@ export default async function KhqDashboardPage({
             title={t("Counters needing attention")}
             sub={t("Declining, or not visited in 14+ days")}
           />
-          {attention.length > 0 && (
+          {attentionTotal > 0 && (
             <span className="chip flex-none" style={{ background: "rgba(199,38,59,.1)", color: "var(--danger)", borderColor: "transparent" }}>
-              {attention.length}
+              {attentionTotal > ATTENTION_ROWS
+                ? `${attention.length} ${t("of")} ${attentionTotal}`
+                : attentionTotal}
             </span>
           )}
         </div>
@@ -952,7 +889,7 @@ export default async function KhqDashboardPage({
             {t("Nothing to flag — every counter is healthy and recently visited.")}
           </p>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap table-scroll">
             <table className="table">
               <thead>
                 <tr>
@@ -994,10 +931,31 @@ export default async function KhqDashboardPage({
         )}
       </section>
 
-      {/* Depot performance table — deliberately TODAY, not the selected period:
-          this is the live ops table; the leaderboards above cover the period. */}
-      <h6 className="mb-3" style={cardTitle}>{t("Stockist performance comparison")} · {t("today")}</h6>
-      <div className="table-wrap">
+      {/* Stockist performance — deliberately TODAY, not the selected period:
+          this is the live ops table. Carded like the one above so the two read
+          as a pair, and scrolling so a hundred stockists take the same space
+          on the page as a dozen. */}
+      <section className="card overflow-hidden p-0">
+        <div
+          className="flex items-center justify-between gap-3 border-b px-5 py-4"
+          style={{ borderColor: "var(--hairline-soft)" }}
+        >
+          <CardHead
+            icon="store"
+            tint="#128A82"
+            title={t("Stockist performance")}
+            sub={t("Today — busiest first")}
+          />
+          {stockistRows.length > 0 && (
+            <span
+              className="chip flex-none"
+              style={{ background: "var(--bg-soft)", color: "var(--ink-3)", borderColor: "transparent" }}
+            >
+              {stockistRows.length}
+            </span>
+          )}
+        </div>
+        <div className="table-wrap table-scroll">
         <table className="table">
           <thead>
             <tr>
@@ -1027,7 +985,8 @@ export default async function KhqDashboardPage({
             )}
           </tbody>
         </table>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }

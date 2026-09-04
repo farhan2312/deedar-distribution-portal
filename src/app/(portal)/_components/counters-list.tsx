@@ -1,10 +1,11 @@
 "use client";
 
-import { useOptimistic, useState, useTransition, type FormEvent } from "react";
+import { useOptimistic, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { counterStatusEnum } from "@/db/schema";
 import { useT } from "@/lib/i18n/provider";
 import { Pagination } from "@/components/ui/pagination";
+import { SearchInput } from "@/components/ui/search-input";
 
 type CounterStatus = (typeof counterStatusEnum.enumValues)[number];
 
@@ -76,8 +77,6 @@ export function CountersListClient({
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
 
-  // Only the search box is local: it must not navigate on every keystroke.
-  const [q, setQ] = useState(filters.q);
   // The dropdowns light up on click and defer to the server's answer on
   // settle, so choosing a filter never appears to snap back.
   const [shown, showOptimistic] = useOptimistic({
@@ -96,11 +95,6 @@ export function CountersListClient({
     if (!keepPage) next.delete("page");
     const query = next.toString();
     router.push(query ? `${pathname}?${query}` : pathname);
-  }
-
-  function applySearch(e: FormEvent) {
-    e.preventDefault();
-    startTransition(() => push({ q: q.trim() || null }));
   }
 
   function selectStockist(next: string) {
@@ -133,19 +127,13 @@ export function CountersListClient({
 
       {/* Filters */}
       <div className="card mb-4 flex flex-wrap items-center gap-2 p-3.5">
-        <form onSubmit={applySearch} className="flex items-center gap-2">
-          <input
-            className="inp"
-            style={{ padding: "6px 10px", fontSize: 12, minWidth: 200 }}
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t("Search by name or mobile…")}
-          />
-          <button type="submit" className="btn btn-secondary btn-sm">
-            {t("Search")}
-          </button>
-        </form>
+        <SearchInput
+          param="q"
+          initial={filters.q}
+          resetParam="page"
+          style={{ padding: "6px 10px", fontSize: 12, minWidth: 200 }}
+          placeholder={t("Search by name or mobile…")}
+        />
         {stockistOptions.length > 1 && (
           <select
             className="inp transition-opacity"

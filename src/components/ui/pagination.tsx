@@ -46,7 +46,9 @@ export function Pagination({
 }) {
   const items = pageWindow(page, totalPages);
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
+    // Right-aligned, like the arrow pager: the controls sit at the end of
+    // the list they belong to rather than floating under its middle.
+    <div className="mt-4 flex flex-wrap items-center justify-end gap-1.5">
       <button
         type="button"
         className="btn btn-secondary btn-sm"

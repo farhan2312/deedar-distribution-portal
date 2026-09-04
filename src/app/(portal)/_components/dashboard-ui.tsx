@@ -117,7 +117,11 @@ export function DeltaPill({
   if (d.pct === null) {
     return (
       <span className="text-[10.5px]" style={{ color: "var(--ink-3)" }}>
-        — {d.isNew ? t("new") : t("no change")}
+        {/* No percentage is possible when the previous window is zero.
+            "new" read like a badge on the metric itself — two cards side by
+            side both saying "— new" looked like a glitch rather than a
+            statement about the comparison. */}
+        — {d.isNew ? t("no prior data") : t("no change")}
       </span>
     );
   }

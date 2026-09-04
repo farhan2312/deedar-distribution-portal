@@ -328,6 +328,37 @@ summary::-webkit-details-marker {
     background: var(--bg-soft);
   }
 
+  /* ---- Clickable table row ----
+     A <tr> carrying role="link" and a tabindex still draws no focus ring of
+     its own, and an outline on a row is clipped by the cells in some engines.
+     So the keyboard cue is the same wash hover uses plus an accent edge —
+     which also tells a mouse user the whole row is the target, not the name. */
+  .table tbody tr[role="link"]:focus-visible {
+    outline: none;
+    background: var(--bg-soft);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  /* ---- Scrollable table ----
+     Applied alongside `.table-wrap`. A dashboard table has to occupy a
+     predictable slice of the page however the data grows, so the body scrolls
+     inside a fixed box instead of pushing everything below it off screen.
+
+     `position: sticky` goes on the cells, not the row: a <tr> is not a
+     positioned box in every engine, so sticking the row leaves the header
+     scrolling away in Safari. The cells carry their own background because a
+     sticky element is transparent by default and rows would show through. */
+  .table-scroll {
+    max-height: 26rem;
+    overflow-y: auto;
+  }
+  .table-scroll .table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg-soft);
+  }
+
   /* ---- Clickable list row ----
      The list equivalent of `.table tbody tr:hover`, for places where rows are
      links rather than table rows (the SO rep leaderboard). Same --bg-soft wash

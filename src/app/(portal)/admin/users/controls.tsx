@@ -20,6 +20,7 @@ import {
 } from "@/lib/admin/actions";
 import { useT } from "@/lib/i18n/provider";
 import { Pagination } from "@/components/ui/pagination";
+import { SearchInput } from "@/components/ui/search-input";
 import { ConfirmDelete } from "@/components/ui/confirm-delete";
 
 /**
@@ -556,8 +557,6 @@ export function UsersPanel({
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
 
-  // Only the search box is local — it must not navigate on every keystroke.
-  const [q, setQ] = useState(filters.q);
   // The C&F select lights up on click and defers to the server on settle.
   const [shownCnf, showCnf] = useOptimistic(filters.cnfId ?? "all");
 
@@ -611,25 +610,21 @@ export function UsersPanel({
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <form
-            className="relative w-full sm:w-72"
-            onSubmit={(e) => {
-              e.preventDefault();
-              startTransition(() => push({ q: q.trim() || null }));
-            }}
-          >
-            <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          {/* The magnifier keeps its place inside the field; the input's own
+              left padding leaves room for it. */}
+          <span className="relative w-full sm:w-72">
+            <svg className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
             </svg>
-            <input
-              className="inp"
+            <SearchInput
+              param="q"
+              initial={filters.q}
+              resetParam="page"
+              className="inp w-full"
               style={{ paddingLeft: 36 }}
-              type="search"
-              value={q}
               placeholder={t("Search by name or mobile…")}
-              onChange={(e) => setQ(e.target.value)}
             />
-          </form>
+          </span>
         </div>
       </div>
 

@@ -64,8 +64,10 @@ export function SalesTrend({
   return (
     <div className="mt-3">
       {/* Fixed height so bars have something to grow against; items-end so they
-          rise from a common baseline. */}
-      <div className="flex h-[150px] items-end gap-[3px]">
+          rise from a common baseline. Taller on a wide screen: the card spans
+          the full page now, and 150px against ~1500px of width reads as a
+          strip rather than a chart. */}
+      <div className="flex h-[150px] items-end gap-[3px] lg:h-[200px]">
         {bars.map((b, i) => {
           const pct = (b.value / max) * 100;
           const label = `${b.label}: ${b.value.toLocaleString("en-IN")} ${t("packets")}`;
@@ -78,8 +80,14 @@ export function SalesTrend({
                 style={{
                   height: `${Math.max(pct, 1.5)}%`,
                   background: b.isCurrent ? "var(--accent)" : "var(--accent-tint)",
-                  border: b.isCurrent ? "none" : "1px solid var(--accent)",
-                  borderBottom: "none",
+                  // Three longhands rather than `border` + `borderBottom: none`.
+                  // React applies a shorthand and its longhands in no
+                  // guaranteed order on a re-render, so the "none" could be
+                  // overwritten by the shorthand and put a line back along the
+                  // axis. A past bar has an outline; the current one is solid.
+                  borderTop: b.isCurrent ? "none" : "1px solid var(--accent)",
+                  borderLeft: b.isCurrent ? "none" : "1px solid var(--accent)",
+                  borderRight: b.isCurrent ? "none" : "1px solid var(--accent)",
                   opacity: b.value === 0 ? 0.35 : 1,
                 }}
               />

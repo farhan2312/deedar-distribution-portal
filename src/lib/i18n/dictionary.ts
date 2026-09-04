@@ -1334,6 +1334,29 @@ const HI: Record<string, string> = {
   // Live map
   "Full screen": "फ़ुल स्क्रीन",
   "Exit full screen": "फ़ुल स्क्रीन से बाहर",
+  // Dashboard delta comparisons
+  "vs last month": "पिछले महीने की तुलना में",
+  "vs last FY": "पिछले वित्त वर्ष की तुलना में",
+  "vs the FY before": "उससे पिछले वित्त वर्ष की तुलना में",
+  "vs the day before": "उससे पिछले दिन की तुलना में",
+  "vs previous period": "पिछली अवधि की तुलना में",
+  // Counter detail page (Reports drill-through)
+  "← Back to reports": "← रिपोर्ट पर वापस",
+  "Every visit recorded at this counter": "इस काउंटर पर दर्ज हर विज़िट",
+  "No visits recorded at this counter yet.": "इस काउंटर पर अभी कोई विज़िट दर्ज नहीं है।",
+  "Days visited": "विज़िट के दिन",
+  "ISRs": "आईएसआर",
+  "Never": "कभी नहीं",
+  "d ago": "दिन पहले",
+  "Not captured": "दर्ज नहीं",
+  "Added by": "जोड़ा गया",
+  "Added on": "जोड़ने की तारीख़",
+  "First visit": "पहली विज़िट",
+  "None seen": "कोई नहीं दिखा",
+  "Nothing sold here yet.": "यहाँ अभी कुछ नहीं बिका।",
+  "Across every visit to this counter": "इस काउंटर की हर विज़िट में",
+  // Reports: clickable counter row
+  "open counter": "काउंटर खोलें",
 };
 
 export function translate(lang: Lang, key: string): string {

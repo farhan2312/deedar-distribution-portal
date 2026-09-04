@@ -76,13 +76,15 @@ export function daysBetween(a: string, b: string): number {
 }
 
 /**
- * The calendar year an Indian financial year starts in. FY runs 1 Apr → 31
- * Mar, so January 2027 belongs to the FY that started in April 2026.
+ * The year an "FY" covers.
+ *
+ * This business runs its financial year as the calendar year — January to
+ * December — not India's April–March, so the year is simply the one in the
+ * date. Kept as a named function rather than an inline slice so the definition
+ * lives in one place if that ever changes.
  */
-export function fyStartYear(dateStr: string): number {
-  const year = Number(dateStr.slice(0, 4));
-  const month = Number(dateStr.slice(5, 7));
-  return month >= 4 ? year : year - 1;
+export function fyYear(dateStr: string): number {
+  return Number(dateStr.slice(0, 4));
 }
 
 /**
@@ -94,7 +96,7 @@ export function fyStartYear(dateStr: string): number {
  *
  * Every preset except "Last FY" ends today — they answer "how are we doing",
  * which is a question about now. Last FY is a closed book, so it ends on its
- * own 31 March even when that is in the future relative to a mid-FY today.
+ * own 31 December even when that is in the future relative to a mid-year today.
  */
 export function periodBounds(
   key: PeriodKey,
@@ -116,13 +118,82 @@ export function periodBounds(
     case "90d":
       return { from: shiftDays(today, -89), to: today };
     case "fy":
-      return { from: `${fyStartYear(today)}-04-01`, to: today };
+      return { from: `${fyYear(today)}-01-01`, to: today };
     case "lastfy": {
-      const y = fyStartYear(today) - 1;
-      return { from: `${y}-04-01`, to: `${y + 1}-03-31` };
+      const y = fyYear(today) - 1;
+      return { from: `${y}-01-01`, to: `${y}-12-31` };
     }
     case "all":
       return { from: earliest && earliest < today ? earliest : today, to: today };
+  }
+}
+
+/** First day of the calendar month `dateStr` falls in. */
+function monthStart(dateStr: string): string {
+  return `${dateStr.slice(0, 7)}-01`;
+}
+
+export type Comparison = {
+  from: string;
+  to: string;
+  /** English i18n key naming what the delta is measured against. */
+  label: string;
+};
+
+/**
+ * The window a period is compared against.
+ *
+ * Most presets compare with the equal-length window immediately before them —
+ * that is the only honest comparison for a rolling range like "30 days".
+ *
+ * The calendar presets are the exception, and they were wrong before. "This
+ * month" measured against the four days before the 1st, which is neither last
+ * month nor any period a business recognises; it now measures against the whole
+ * of last month, and "This FY" against the whole of last FY. That means an
+ * incomplete period is compared with a complete one — four days of September
+ * against all of August will read as a collapse — which is the honest shape of
+ * "how are we doing against last month" and is what the label now says.
+ *
+ * "All time" returns null: it has no prior period by definition, so the card
+ * shows no comparison at all rather than a caption explaining its absence.
+ */
+export function comparisonFor(
+  period: PeriodKey | null,
+  from: string,
+  to: string,
+): Comparison | null {
+  switch (period) {
+    case "all":
+      return null;
+
+    case "month": {
+      const lastOfPrev = shiftDays(monthStart(from), -1);
+      return { from: monthStart(lastOfPrev), to: lastOfPrev, label: "vs last month" };
+    }
+
+    case "fy":
+    case "lastfy": {
+      const y = fyYear(from) - 1;
+      return {
+        from: `${y}-01-01`,
+        to: `${y}-12-31`,
+        label: period === "fy" ? "vs last FY" : "vs the FY before",
+      };
+    }
+
+    case "today":
+      return { from: shiftDays(from, -1), to: shiftDays(from, -1), label: "vs yesterday" };
+
+    case "yesterday":
+      return { from: shiftDays(from, -1), to: shiftDays(from, -1), label: "vs the day before" };
+
+    default: {
+      // 30d, 90d and any hand-picked range: the same span, ending the day
+      // before this one starts.
+      const days = daysBetween(from, to);
+      const prevTo = shiftDays(from, -1);
+      return { from: shiftDays(prevTo, -(days - 1)), to: prevTo, label: "vs previous period" };
+    }
   }
 }
 
