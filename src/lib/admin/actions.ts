@@ -22,6 +22,7 @@ import {
 import { getCurrentUser } from "@/lib/auth/dal";
 import { hashPassword } from "@/lib/auth/password";
 import { deleteFailure, insertFailure, type WriteResult } from "@/lib/db-errors";
+import { recordAudit, diffFields } from "@/lib/audit/record";
 import { requireAdmin } from "./guard";
 
 // ── Hierarchy: State → C&F HQ → Depot → Area ────────────────────────────
@@ -193,11 +194,19 @@ export async function addState(formData: FormData): Promise<HierarchyResult> {
   const name = String(formData.get("name") ?? "").trim();
   const country = String(formData.get("country") ?? "").trim() || "India";
   if (!name) return { ok: false, error: "Enter a state name." };
+  let created: { id: string } | undefined;
   try {
-    await db.insert(states).values({ name, country });
+    [created] = await db.insert(states).values({ name, country }).returning({ id: states.id });
   } catch (e) {
     return insertFailure(e, "state");
   }
+  await recordAudit({
+    action: "create",
+    module: "hierarchy",
+    entityId: created?.id,
+    entityLabel: name,
+    summary: `Added state ${name} (${country})`,
+  });
   revalidatePath("/admin/hierarchy");
   return { ok: true };
 }
@@ -220,11 +229,19 @@ export async function addCnf(stateId: string, formData: FormData): Promise<Hiera
     return { ok: false, error: `That state already has a C&F HQ (${taken.name}) — only one is allowed.` };
   }
 
+  let created: { id: string } | undefined;
   try {
-    await db.insert(cnfs).values({ name, stateId });
+    [created] = await db.insert(cnfs).values({ name, stateId }).returning({ id: cnfs.id });
   } catch (e) {
     return insertFailure(e, "C&F HQ");
   }
+  await recordAudit({
+    action: "create",
+    module: "hierarchy",
+    entityId: created?.id,
+    entityLabel: name,
+    summary: `Added C&F HQ ${name}`,
+  });
   revalidatePath("/admin/hierarchy");
   return { ok: true };
 }
@@ -277,16 +294,27 @@ export async function addStockist(cnfId: string, formData: FormData): Promise<Hi
     return { ok: false, error: `A ${KIND_NOUN[kind]} has no parent.` };
   }
 
+  let created: { id: string } | undefined;
   try {
-    await db.insert(stockists).values({
-      name,
-      cnfId,
-      kind,
-      parentId: kind === "sub_dealer" ? parentId : null,
-    });
+    [created] = await db
+      .insert(stockists)
+      .values({
+        name,
+        cnfId,
+        kind,
+        parentId: kind === "sub_dealer" ? parentId : null,
+      })
+      .returning({ id: stockists.id });
   } catch (e) {
     return insertFailure(e, KIND_NOUN[kind]);
   }
+  await recordAudit({
+    action: "create",
+    module: "stockists",
+    entityId: created?.id,
+    entityLabel: name,
+    summary: `Added ${KIND_NOUN[kind]} ${name}`,
+  });
   revalidatePath("/admin/hierarchy");
   return { ok: true };
 }
@@ -296,17 +324,40 @@ export async function addArea(stockistId: string, formData: FormData): Promise<H
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Enter an area name." };
   if (!stockistId) return { ok: false, error: "Missing depot." };
+  let created: { id: string } | undefined;
   try {
-    await db.insert(areas).values({ name, stockistId });
+    [created] = await db.insert(areas).values({ name, stockistId }).returning({ id: areas.id });
   } catch (e) {
     return insertFailure(e, "area");
   }
+  await recordAudit({
+    action: "create",
+    module: "areas",
+    entityId: created?.id,
+    entityLabel: name,
+    summary: `Added area ${name}`,
+  });
   revalidatePath("/admin/hierarchy");
   return { ok: true };
 }
 
+/** "3 stockists, 12 areas, 47 counters, 210 visits" — the part of a delete
+ * that cannot be undone, spelled out in the log rather than left to memory. */
+function impactLine(i: DeleteImpact): string {
+  const parts = [
+    i.cnfs > 0 && `${i.cnfs} C&F`,
+    i.stockists > 0 && `${i.stockists} stockists`,
+    i.areas > 0 && `${i.areas} areas`,
+    i.counters > 0 && `${i.counters} counters`,
+    i.visits > 0 && `${i.visits} visits`,
+  ].filter(Boolean);
+  return parts.length ? `removed ${parts.join(", ")}` : "nothing under it";
+}
+
 export async function deleteState(id: string): Promise<HierarchyResult> {
   await requireAdmin();
+  const [doomed] = await db.select({ name: states.name }).from(states).where(eq(states.id, id)).limit(1);
+  const impact = await getDeleteImpact("state", id);
   try {
     await db.transaction(async (tx) => {
       const cnfRows = await tx.select({ id: cnfs.id }).from(cnfs).where(eq(cnfs.stateId, id));
@@ -324,12 +375,21 @@ export async function deleteState(id: string): Promise<HierarchyResult> {
   } catch (e) {
     return deleteFailure(e, "state");
   }
+  await recordAudit({
+    action: "delete",
+    module: "hierarchy",
+    entityId: id,
+    entityLabel: doomed?.name ?? null,
+    summary: `Deleted state ${doomed?.name ?? ""} — ${impactLine(impact)}`.trim(),
+  });
   revalidatePath("/admin/hierarchy");
   return { ok: true };
 }
 
 export async function deleteCnf(id: string): Promise<HierarchyResult> {
   await requireAdmin();
+  const [doomed] = await db.select({ name: cnfs.name }).from(cnfs).where(eq(cnfs.id, id)).limit(1);
+  const impact = await getDeleteImpact("cnf", id);
   try {
     await db.transaction(async (tx) => {
       const stockistRows = await tx.select({ id: stockists.id }).from(stockists).where(eq(stockists.cnfId, id));
@@ -339,6 +399,13 @@ export async function deleteCnf(id: string): Promise<HierarchyResult> {
   } catch (e) {
     return deleteFailure(e, "C&F HQ");
   }
+  await recordAudit({
+    action: "delete",
+    module: "hierarchy",
+    entityId: id,
+    entityLabel: doomed?.name ?? null,
+    summary: `Deleted C&F HQ ${doomed?.name ?? ""} — ${impactLine(impact)}`.trim(),
+  });
   revalidatePath("/admin/hierarchy");
   return { ok: true };
 }
@@ -347,6 +414,12 @@ export async function deleteCnf(id: string): Promise<HierarchyResult> {
  * along with everything beneath them. */
 export async function deleteStockist(id: string): Promise<HierarchyResult> {
   await requireAdmin();
+  const [doomed] = await db
+    .select({ name: stockists.name, kind: stockists.kind })
+    .from(stockists)
+    .where(eq(stockists.id, id))
+    .limit(1);
+  const impact = await getDeleteImpact("depot", id);
   try {
     await db.transaction(async (tx) => {
       await purgeDepots(tx, [id]);
@@ -354,12 +427,21 @@ export async function deleteStockist(id: string): Promise<HierarchyResult> {
   } catch (e) {
     return deleteFailure(e, "stockist");
   }
+  await recordAudit({
+    action: "delete",
+    module: "stockists",
+    entityId: id,
+    entityLabel: doomed?.name ?? null,
+    summary: `Deleted ${doomed ? KIND_NOUN[doomed.kind] : "stockist"} ${doomed?.name ?? ""} — ${impactLine(impact)}`.trim(),
+  });
   revalidatePath("/admin/hierarchy");
   return { ok: true };
 }
 
 export async function deleteArea(id: string): Promise<HierarchyResult> {
   await requireAdmin();
+  const [doomed] = await db.select({ name: areas.name }).from(areas).where(eq(areas.id, id)).limit(1);
+  const impact = await getDeleteImpact("area", id);
   try {
     await db.transaction(async (tx) => {
       // Counters RESTRICT the area, so they go first; their visits/beat rows
@@ -370,6 +452,13 @@ export async function deleteArea(id: string): Promise<HierarchyResult> {
   } catch (e) {
     return deleteFailure(e, "area");
   }
+  await recordAudit({
+    action: "delete",
+    module: "areas",
+    entityId: id,
+    entityLabel: doomed?.name ?? null,
+    summary: `Deleted area ${doomed?.name ?? ""} — ${impactLine(impact)}`.trim(),
+  });
   revalidatePath("/admin/hierarchy");
   return { ok: true };
 }
@@ -400,6 +489,13 @@ export async function addUser(formData: FormData): Promise<AddUserResult> {
     return { ok: false, message: `A user with mobile ${phone} already exists.` };
   }
 
+  await recordAudit({
+    action: "create",
+    module: "users",
+    entityId: inserted[0].id,
+    entityLabel: name,
+    summary: `Added user ${name} (${phone}) with no roles`,
+  });
   revalidatePath("/admin/users");
   return { ok: true, message: `${name} added — password is their mobile number until first login. Assign access below.` };
 }
@@ -428,7 +524,28 @@ export async function updateUser(userId: string, formData: FormData): Promise<Us
     return { ok: false, message: `Another user already uses mobile ${phone}.` };
   }
 
+  const [before] = await db
+    .select({ name: users.name, phone: users.phone })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
   await db.update(users).set({ name, phone, updatedAt: new Date() }).where(eq(users.id, userId));
+
+  const changes = diffFields(before ?? {}, { name, phone }, { name: "Name", phone: "Mobile" });
+  await recordAudit({
+    action: "update",
+    module: "users",
+    entityId: userId,
+    entityLabel: name,
+    // The mobile IS the login id, so a change to it is a change to how this
+    // person signs in — worth saying outright rather than leaving in the diff.
+    summary:
+      changes.some((c) => c.field === "Mobile")
+        ? `Mobile changed — sign-in id is now ${phone}`
+        : `Updated ${changes.length} field${changes.length === 1 ? "" : "s"}`,
+    changes,
+  });
   revalidatePath("/admin/users");
   return { ok: true, message: `${name} updated.` };
 }
@@ -467,6 +584,13 @@ export async function resetUserPassword(userId: string): Promise<UserEditResult>
       and(eq(passwordResetRequests.phone, user.phone), eq(passwordResetRequests.status, "pending")),
     );
 
+  await recordAudit({
+    action: "password_reset",
+    module: "access",
+    entityId: user.id,
+    entityLabel: user.name,
+    summary: `Password reset to mobile number; must change at next login`,
+  });
   revalidatePath("/admin/users");
   return {
     ok: true,
@@ -478,17 +602,41 @@ export async function resetUserPassword(userId: string): Promise<UserEditResult>
  * recognises, or one already sorted out in person. */
 export async function dismissPasswordReset(requestId: string) {
   const admin = await requireAdmin();
+  const [req] = await db
+    .select({ phone: passwordResetRequests.phone })
+    .from(passwordResetRequests)
+    .where(eq(passwordResetRequests.id, requestId))
+    .limit(1);
   await db
     .update(passwordResetRequests)
     .set({ status: "dismissed", resolvedByUserId: admin.id, resolvedAt: new Date() })
     .where(eq(passwordResetRequests.id, requestId));
+  await recordAudit({
+    action: "reject",
+    module: "access",
+    entityId: requestId,
+    entityLabel: req?.phone ?? null,
+    summary: `Dismissed password reset request for ${req?.phone ?? "unknown number"}`,
+  });
   revalidatePath("/admin/users");
 }
 
 export async function removeUser(userId: string) {
   const admin = await requireAdmin();
   if (admin.id === userId) return; // can't remove yourself
+  const [doomed] = await db
+    .select({ name: users.name, phone: users.phone, roles: users.accessRoles })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
   await db.delete(users).where(eq(users.id, userId));
+  await recordAudit({
+    action: "delete",
+    module: "users",
+    entityId: userId,
+    entityLabel: doomed?.name ?? null,
+    summary: `Deleted user ${doomed?.name ?? ""} (${doomed?.phone ?? "?"}) — roles: ${doomed?.roles.join(", ") || "none"}`,
+  });
   revalidatePath("/admin/users");
 }
 
@@ -500,10 +648,23 @@ export async function removeUser(userId: string) {
 export async function setUserActive(userId: string, active: boolean) {
   const admin = await requireAdmin();
   if (admin.id === userId) return; // can't deactivate yourself
+  const [target] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
   await db
     .update(users)
     .set({ isActive: active, updatedAt: new Date() })
     .where(eq(users.id, userId));
+  await recordAudit({
+    action: "update",
+    module: "access",
+    entityId: userId,
+    entityLabel: target?.name ?? null,
+    summary: active ? "Account reactivated" : "Account deactivated — cannot sign in",
+    changes: [{ field: "Active", from: String(!active), to: String(active) }],
+  });
   revalidatePath("/admin/users");
 }
 
@@ -541,7 +702,39 @@ export async function toggleAccessRole(userId: string, role: AccessRole) {
     }
   }
 
+  await recordAudit({
+    action: "update",
+    module: "access",
+    entityId: userId,
+    entityLabel: user.name,
+    summary: `${isActive ? "Removed" : "Granted"} the ${role} role`,
+    changes: [
+      { field: "Roles", from: user.accessRoles.join(", ") || null, to: nextRoles.join(", ") || null },
+    ],
+  });
   revalidatePath("/admin/users");
+}
+
+/**
+ * Name and current mapping for an audit line about a user.
+ *
+ * Read before the write, because the whole point of the row is the "from"
+ * side — after the update there is nothing left to compare against.
+ */
+async function actorTarget(userId: string) {
+  const [u] = await db
+    .select({ name: users.name, phone: users.phone })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return u ?? null;
+}
+
+/** Stockist name for a log line, or null if it has since been removed. */
+async function stockistName(id: string | null): Promise<string | null> {
+  if (!id) return null;
+  const [s] = await db.select({ name: stockists.name }).from(stockists).where(eq(stockists.id, id)).limit(1);
+  return s?.name ?? null;
 }
 
 /** Single-scope: field, depot and dealer share one stockist per user. */
@@ -561,10 +754,27 @@ export async function setUserDepot(userId: string, formData: FormData) {
     .limit(1);
   if (before?.stockistId === stockistId) return;
 
+  const target = await actorTarget(userId);
+  const [fromName, toName] = await Promise.all([
+    stockistName(before?.stockistId ?? null),
+    stockistName(stockistId),
+  ]);
+
   await db.update(users).set({ stockistId, updatedAt: new Date() }).where(eq(users.id, userId));
   // Stockist genuinely changed — the previously-picked areas belonged to the
   // old one and are not valid under the new one.
   await db.delete(userAreas).where(eq(userAreas.userId, userId));
+
+  await recordAudit({
+    action: "update",
+    module: "access",
+    entityId: userId,
+    entityLabel: target?.name ?? null,
+    // The area wipe is a consequence of the move, not a separate decision —
+    // saying so here stops it looking like ticks vanished on their own.
+    summary: `Moved to ${toName ?? "a stockist"}; area assignments cleared`,
+    changes: [{ field: "Stockist", from: fromName, to: toName }],
+  });
   revalidatePath("/admin/users");
 }
 
@@ -573,7 +783,29 @@ export async function setUserCnf(userId: string, formData: FormData) {
   await requireAdmin();
   const cnfId = String(formData.get("cnfId") ?? "");
   if (!cnfId) return;
+
+  const [before] = await db
+    .select({ cnfId: users.cnfId, name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (before?.cnfId === cnfId) return;
+
+  const names = await db
+    .select({ id: cnfs.id, name: cnfs.name })
+    .from(cnfs)
+    .where(inArray(cnfs.id, [cnfId, before?.cnfId].filter(Boolean) as string[]));
+  const nameOf = (id: string | null | undefined) => names.find((c) => c.id === id)?.name ?? null;
+
   await db.update(users).set({ cnfId, updatedAt: new Date() }).where(eq(users.id, userId));
+  await recordAudit({
+    action: "update",
+    module: "access",
+    entityId: userId,
+    entityLabel: before?.name ?? null,
+    summary: `Moved to C&F ${nameOf(cnfId) ?? "—"}`,
+    changes: [{ field: "C&F HQ", from: nameOf(before?.cnfId), to: nameOf(cnfId) }],
+  });
   revalidatePath("/admin/users");
 }
 
@@ -581,10 +813,36 @@ export async function setUserCnf(userId: string, formData: FormData) {
 export async function setUserReportsTo(userId: string, formData: FormData) {
   await requireAdmin();
   const reportsToUserId = String(formData.get("reportsToUserId") ?? "") || null;
+
+  const [before] = await db
+    .select({ name: users.name, reportsToUserId: users.reportsToUserId })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (before?.reportsToUserId === reportsToUserId) return;
+
+  const ids = [reportsToUserId, before?.reportsToUserId].filter(Boolean) as string[];
+  const supers = ids.length
+    ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, ids))
+    : [];
+  const nameOf = (id: string | null | undefined) => supers.find((u) => u.id === id)?.name ?? null;
+
   await db
     .update(users)
     .set({ reportsToUserId, updatedAt: new Date() })
     .where(eq(users.id, userId));
+  await recordAudit({
+    action: "update",
+    module: "access",
+    entityId: userId,
+    entityLabel: before?.name ?? null,
+    summary: reportsToUserId
+      ? `Now reports to ${nameOf(reportsToUserId) ?? "—"}`
+      : "Reporting line cleared",
+    changes: [
+      { field: "Reports to", from: nameOf(before?.reportsToUserId), to: nameOf(reportsToUserId) },
+    ],
+  });
   revalidatePath("/admin/users");
 }
 
@@ -639,6 +897,14 @@ export async function setUserAreasForStockist(
       .where(and(eq(userAreas.userId, userId), inArray(userAreas.areaId, ids)));
   }
 
+  const [target, owner] = await Promise.all([actorTarget(userId), stockistName(stockistId)]);
+  await recordAudit({
+    action: "update",
+    module: "access",
+    entityId: userId,
+    entityLabel: target?.name ?? null,
+    summary: `${select ? "Assigned" : "Removed"} all ${ids.length} areas of ${owner ?? "a stockist"}`,
+  });
   revalidatePath("/admin/users");
 }
 
@@ -656,7 +922,7 @@ export async function toggleUserArea(userId: string, areaId: string) {
   if (!rep?.stockistId) return;
 
   const [area] = await db
-    .select({ stockistId: areas.stockistId })
+    .select({ stockistId: areas.stockistId, name: areas.name })
     .from(areas)
     .where(eq(areas.id, areaId))
     .limit(1);
@@ -676,13 +942,23 @@ export async function toggleUserArea(userId: string, areaId: string) {
     .from(userAreas)
     .where(and(eq(userAreas.userId, userId), eq(userAreas.areaId, areaId)))
     .limit(1);
-  if (existing.length > 0) {
+  const had = existing.length > 0;
+  if (had) {
     await db
       .delete(userAreas)
       .where(and(eq(userAreas.userId, userId), eq(userAreas.areaId, areaId)));
   } else {
     await db.insert(userAreas).values({ userId, areaId });
   }
+
+  const target = await actorTarget(userId);
+  await recordAudit({
+    action: "update",
+    module: "areas",
+    entityId: userId,
+    entityLabel: target?.name ?? null,
+    summary: `${had ? "Removed" : "Assigned"} area ${area.name}`,
+  });
   revalidatePath("/admin/users");
 }
 
@@ -711,24 +987,48 @@ export async function approveAccessRequest(requestId: string) {
     .onConflictDoNothing({ target: users.phone })
     .returning({ id: users.id });
 
+  const approved = inserted.length > 0;
   await db
     .update(accessRequests)
     .set({
-      status: inserted.length > 0 ? "approved" : "rejected",
+      status: approved ? "approved" : "rejected",
       reviewedByUserId: admin.id,
       reviewedAt: new Date(),
     })
     .where(eq(accessRequests.id, requestId));
 
+  await recordAudit({
+    action: approved ? "approve" : "reject",
+    module: "access",
+    // The new account when one was made, so the log links to the thing that
+    // now exists rather than the request that is finished with.
+    entityId: approved ? inserted[0].id : requestId,
+    entityLabel: request.name,
+    summary: approved
+      ? `Approved access for ${request.name} (${request.phone}) as ${request.requestedRole}`
+      : `Could not approve ${request.name} — mobile ${request.phone} already has an account`,
+  });
   revalidatePath("/admin/users");
 }
 
 export async function rejectAccessRequest(requestId: string) {
   const admin = await requireAdmin();
+  const [request] = await db
+    .select({ name: accessRequests.name, phone: accessRequests.phone })
+    .from(accessRequests)
+    .where(eq(accessRequests.id, requestId))
+    .limit(1);
   await db
     .update(accessRequests)
     .set({ status: "rejected", reviewedByUserId: admin.id, reviewedAt: new Date() })
     .where(and(eq(accessRequests.id, requestId), eq(accessRequests.status, "pending")));
+  await recordAudit({
+    action: "reject",
+    module: "access",
+    entityId: requestId,
+    entityLabel: request?.name ?? null,
+    summary: `Rejected access request from ${request?.name ?? "unknown"} (${request?.phone ?? "?"})`,
+  });
   revalidatePath("/admin/users");
 }
 
@@ -740,12 +1040,22 @@ export async function toggleUserDepot(userId: string, stockistId: string) {
     .from(userStockists)
     .where(and(eq(userStockists.userId, userId), eq(userStockists.stockistId, stockistId)))
     .limit(1);
-  if (existing.length > 0) {
+  const had = existing.length > 0;
+  if (had) {
     await db
       .delete(userStockists)
       .where(and(eq(userStockists.userId, userId), eq(userStockists.stockistId, stockistId)));
   } else {
     await db.insert(userStockists).values({ userId, stockistId });
   }
+
+  const [target, owner] = await Promise.all([actorTarget(userId), stockistName(stockistId)]);
+  await recordAudit({
+    action: "update",
+    module: "stockists",
+    entityId: userId,
+    entityLabel: target?.name ?? null,
+    summary: `${had ? "No longer supervises" : "Now supervises"} ${owner ?? "a stockist"}`,
+  });
   revalidatePath("/admin/users");
 }

@@ -580,6 +580,84 @@ export const rateLimits = pgTable(
   (t) => [primaryKey({ columns: [t.key, t.windowStart] })],
 );
 
+// ── Audit log ─────────────────────────────────────────────────────────
+
+/** What happened. Kept coarse on purpose: a filter with forty options is a
+ * filter nobody uses, and the summary line carries the specifics. */
+export const auditActionEnum = pgEnum("audit_action", [
+  "create",
+  "update",
+  "delete",
+  "login",
+  "login_failed",
+  "logout",
+  "password_reset",
+  "approve",
+  "reject",
+]);
+
+/** Which part of the app the event belongs to — the "module" column. */
+export const auditModuleEnum = pgEnum("audit_module", [
+  "auth",
+  "users",
+  "access",
+  "hierarchy",
+  "stockists",
+  "areas",
+  "bugs",
+]);
+
+/**
+ * Every change worth answering "who did that, and when" about.
+ *
+ * The actor's name and phone are copied in rather than only referenced. A log
+ * whose rows go blank when an account is deleted is precisely useless — the
+ * deletion is the event you most want to read later — so `actorUserId` is a
+ * convenience for filtering and the denormalised columns are the record.
+ *
+ * Rows are never updated and never deleted by the app.
+ */
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorName: varchar("actor_name", { length: 120 }),
+    actorPhone: varchar("actor_phone", { length: 10 }),
+    action: auditActionEnum("action").notNull(),
+    module: auditModuleEnum("module").notNull(),
+    /** The record acted on. Not a foreign key: it points into eight different
+     * tables, and the row has to survive its target being deleted. */
+    entityId: uuid("entity_id"),
+    /** Human name of that record at the time — "Rahul Sharma", "Indergarh". */
+    entityLabel: varchar("entity_label", { length: 200 }),
+    /** One line for the table: "Role changed to Sales Officer". */
+    summary: varchar("summary", { length: 300 }),
+    /** Field-level detail, `[{ field, from, to }]`, for the changes popover. */
+    changes: jsonb("changes").$type<AuditChange[]>(),
+    /** The caller's address in full: the client, then every proxy hop that
+     * declared itself, comma-separated. 45 chars holds one IPv6 address and
+     * nothing more, which is why the chain used to be cut down to its first
+     * entry — the widened column is what lets the log keep all of it. */
+    ip: varchar("ip", { length: 200 }),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // The log is read newest-first, always. Everything else filters within that.
+    index("audit_logs_created_idx").on(t.createdAt),
+    index("audit_logs_actor_idx").on(t.actorUserId, t.createdAt),
+    index("audit_logs_module_action_idx").on(t.module, t.action),
+  ],
+);
+
+/** One field's before/after. `from` is null on a create. */
+export type AuditChange = { field: string; from: string | null; to: string | null };
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type AuditAction = (typeof auditActionEnum.enumValues)[number];
+export type AuditModule = (typeof auditModuleEnum.enumValues)[number];
+
 export type DepotStock = typeof stockistStock.$inferSelect;
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type SchemeClaim = typeof schemeClaims.$inferSelect;

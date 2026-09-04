@@ -43,6 +43,7 @@ export type NavIcon =
   | "alert"
   | "box"
   | "bug"
+  | "shield"
   | "clipboard";
 
 export type NavItem = {
@@ -266,6 +267,12 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Scheme codes",
         icon: "tag",
         blurb: "Unique, one-time-redeemable codes printed on packs/cartons.",
+      },
+      {
+        href: "/admin/audit",
+        label: "Audit Log",
+        icon: "shield",
+        blurb: "Who changed what, and when — every sign-in and every admin change.",
       },
       {
         href: "/admin/bugs",

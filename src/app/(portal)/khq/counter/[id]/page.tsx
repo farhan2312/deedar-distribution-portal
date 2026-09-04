@@ -122,7 +122,10 @@ export default async function KhqCounterPage({
         packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
         reps: sql<number>`count(distinct ${visits.userId})::int`,
         avgRank: sql<number>`coalesce(avg(${visits.rank}), 0)::float`,
-        firstAt: sql<Date | null>`min(${visits.visitedAt})`,
+        // See the note in lib/audit/data.ts: without the column's mapper this
+        // comes back as a string, and `formatISTDate` then renders it as
+        // "Invalid Date" rather than failing loudly.
+        firstAt: sql<Date | null>`min(${visits.visitedAt})`.mapWith(visits.visitedAt),
         days: sql<number>`count(distinct (${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date)::int`,
       })
       .from(visits)

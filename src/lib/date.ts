@@ -5,6 +5,28 @@
 const IST_TZ = "Asia/Kolkata";
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
+/**
+ * Coerce whatever a caller has into a Date, or null.
+ *
+ * Both formatters take strings because two kinds reach them: a bare
+ * "YYYY-MM-DD" calendar day (a `date` column, which drizzle returns as a
+ * string by design), and a full timestamp string — which is what a raw `sql`
+ * expression yields when it has no column mapper to rebuild the Date.
+ *
+ * The bare day is pinned to IST midnight so it lands on the day the caller
+ * means; anything else is parsed as the instant it already is. An unparseable
+ * value returns null so the caller prints a dash instead of "Invalid Date",
+ * which reads like real data and hides the bug.
+ */
+function toDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00+05:30`)
+    : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 /** Current IST calendar day as "YYYY-MM-DD" (used as day_logs.log_date). */
 export function istDateString(instant: Date = new Date()): string {
   return new Date(instant.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
@@ -22,9 +44,10 @@ export function istDayBounds(instant: Date = new Date()): { start: Date; end: Da
 }
 
 /** "09:12 AM" in IST. */
-export function formatISTTime(instant: Date | null | undefined): string {
-  if (!instant) return "—";
-  return instant.toLocaleTimeString("en-US", {
+export function formatISTTime(instant: Date | string | null | undefined): string {
+  const d = toDate(instant);
+  if (!d) return "—";
+  return d.toLocaleTimeString("en-US", {
     timeZone: IST_TZ,
     hour: "2-digit",
     minute: "2-digit",
@@ -34,8 +57,8 @@ export function formatISTTime(instant: Date | null | undefined): string {
 
 /** "Thu, 8 Aug 2026" in IST. */
 export function formatISTDate(value: Date | string | null | undefined): string {
-  if (!value) return "—";
-  const d = typeof value === "string" ? new Date(`${value}T00:00:00+05:30`) : value;
+  const d = toDate(value);
+  if (!d) return "—";
   return d.toLocaleDateString("en-US", {
     timeZone: IST_TZ,
     weekday: "short",

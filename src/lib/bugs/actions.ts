@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
+import { recordAudit } from "@/lib/audit/record";
 import {
   bugReports,
   bugSeverityEnum,
@@ -74,10 +75,23 @@ export async function setBugStatus(id: string, status: BugStatus): Promise<Resul
   if (!bugStatusEnum.enumValues.includes(status)) {
     return { ok: false, error: "Unknown status." };
   }
+  const [before] = await db
+    .select({ title: bugReports.title, status: bugReports.status })
+    .from(bugReports)
+    .where(eq(bugReports.id, id))
+    .limit(1);
   await db
     .update(bugReports)
     .set({ status, updatedAt: new Date() })
     .where(eq(bugReports.id, id));
+  await recordAudit({
+    action: "update",
+    module: "bugs",
+    entityId: id,
+    entityLabel: before?.title ?? null,
+    summary: `Moved to ${status.replace("_", " ")}`,
+    changes: before ? [{ field: "Status", from: before.status, to: status }] : null,
+  });
   revalidatePath("/admin/bugs");
   return { ok: true };
 }

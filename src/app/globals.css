@@ -51,6 +51,35 @@
     "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Menlo", monospace;
 
+/* ---------- CHARTS ----------
+     Two single-hue ramps and one two-colour series pair, each checked with the
+     data-viz validator against this mode's surface (#ffffff): lightness inside
+     the band, chroma above the "reads as grey" floor, every pair separated
+     under simulated colour blindness, and the pale end still visible against
+     the card. Dark mode re-steps them below rather than flipping them, because
+     a light ramp on #1E1E1E fails the same checks.
+
+     The ramps are ORDINAL: a donut slice takes its step from what it IS (the
+     action, the device), never from how big it is, so filtering the chart
+     cannot repaint the slices that remain. */
+  --chart-blue-1: #93b3df;
+  --chart-blue-2: #6e9ad8;
+  --chart-blue-3: #4a7cc4;
+  --chart-blue-4: #2e5fa3;
+  --chart-blue-5: #1e4272;
+  --chart-violet-1: #b3a3dc;
+  --chart-violet-2: #9078cb;
+  --chart-violet-3: #6e52b8;
+  --chart-violet-4: #523c93;
+  --chart-violet-5: #38286b;
+  /* Logins vs failed logins: one pair, two hues, never a rank. */
+  --chart-line: #2e5fa3;
+  --chart-alert: #c7263b;
+  /* Empty heatmap cells and the "Other" slice — deliberately colourless, so a
+     nothing-happened cell reads as a slot rather than a low value. */
+  --chart-empty: #eef1f6;
+  --chart-other: #98a2b3;
+
   /* ---------- RADII ---------- */
   --r-xs: 8px;
   --r-sm: 12px;
@@ -81,6 +110,23 @@
   --ink-1: #ececec;
   --ink-2: #a8a8a8;
   --ink-3: #7a7a7a;
+
+  /* ---------- CHARTS — re-stepped for #1E1E1E, not flipped ---------- */
+  --chart-blue-1: #2f5c8c;
+  --chart-blue-2: #3a6fa8;
+  --chart-blue-3: #5b8fd6;
+  --chart-blue-4: #8fb4e6;
+  --chart-blue-5: #c2d6f2;
+  --chart-violet-1: #5a4699;
+  --chart-violet-2: #7357bc;
+  --chart-violet-3: #8f73d2;
+  --chart-violet-4: #ae96e1;
+  --chart-violet-5: #cfc2ef;
+  --chart-line: #5b8fd6;
+  --chart-alert: #e9556b;
+  --chart-empty: rgba(255, 255, 255, 0.06);
+  --chart-other: #8a8a8a;
+
 
   /* Dark UI separates by shadow far less than light UI; keep them deep
      and subtle rather than removing them, so elevation still reads. */

@@ -189,8 +189,28 @@ const ICONS: Record<NavIcon, (props: IconProps) => React.ReactElement> = {
   alert: Alert,
   box: Box,
   bug: Bug,
+  shield: Shield,
   clipboard: Clipboard,
 };
+
+/** Shield with a tick — the audit log is the record that says the system is
+ * behaving, not a warning that it isn't. */
+function Shield({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
 
 export function NavIconView({ icon, className }: { icon: NavIcon; className?: string }) {
   const Icon = ICONS[icon];
