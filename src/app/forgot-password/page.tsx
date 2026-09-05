@@ -11,10 +11,11 @@ import { LanguageToggle } from "@/components/language-toggle";
  * for an admin to action from Users & Access.
  *
  * There is no email or SMS channel in this app, so there is no reset link to
- * send; the admin recognising the person is the verification step. The
- * confirmation is worded so it reads the same whether or not the number is
- * registered, matching what the action does — otherwise this page becomes a way
- * to test which mobile numbers have accounts.
+ * send; the admin recognising the person is the verification step.
+ *
+ * A number with no account is told so, in the error slot under the field — see
+ * the note on `requestPasswordReset` for why that answer was chosen over a
+ * confirmation that reveals nothing.
  */
 export default function ForgotPasswordPage() {
   const t = useT();

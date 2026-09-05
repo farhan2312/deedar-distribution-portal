@@ -1441,6 +1441,10 @@ const HI: Record<string, string> = {
   // Field live map: beat list actions
   "Show on map": "मानचित्र पर दिखाएँ",
   "Open counter": "काउंटर खोलें",
+  // Password reset request limits
+  "A reset was already requested for this number today. Please contact your admin.": "इस नंबर के लिए आज पहले ही रीसेट का अनुरोध किया जा चुका है। कृपया अपने एडमिन से संपर्क करें।",
+  "Too many attempts. Try again in a few minutes.": "बहुत अधिक प्रयास। कुछ मिनट बाद फिर कोशिश करें।",
+  "No user with this mobile number. Check the number, or use Request Access if you're new.": "इस मोबाइल नंबर से कोई उपयोगकर्ता नहीं है। नंबर जाँचें, या नए हैं तो Request Access का उपयोग करें।",
 };
 
 export function translate(lang: Lang, key: string): string {
