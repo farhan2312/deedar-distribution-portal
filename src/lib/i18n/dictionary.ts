@@ -1445,7 +1445,7 @@ const HI: Record<string, string> = {
   "A reset was already requested for this number today. Please contact your admin.": "इस नंबर के लिए आज पहले ही रीसेट का अनुरोध किया जा चुका है। कृपया अपने एडमिन से संपर्क करें।",
   "Too many attempts. Try again in a few minutes.": "बहुत अधिक प्रयास। कुछ मिनट बाद फिर कोशिश करें।",
   "No user with this mobile number. Check the number, or use Request Access if you're new.": "इस मोबाइल नंबर से कोई उपयोगकर्ता नहीं है। नंबर जाँचें, या नए हैं तो Request Access का उपयोग करें।",
-  "Location is off, so your Sales Officer can't see you on the map. Turn it on in your browser settings — your day has still started.": "लोकेशन बंद है, इसलिए आपके सेल्स ऑफिसर आपको मैप पर नहीं देख पाएँगे। ब्राउज़र सेटिंग्स में इसे चालू करें — आपका दिन शुरू हो चुका है।",
+  "You won't see yourself or counter distances on the Live map": "लाइव मैप पर आप न खुद दिखेंगे, न काउंटर की दूरी दिखेगी",
 };
 
 export function translate(lang: Lang, key: string): string {

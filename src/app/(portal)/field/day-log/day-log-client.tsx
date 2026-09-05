@@ -198,9 +198,7 @@ export function DayLogClient({
               style={{ background: "rgba(178,94,0,.1)", color: "var(--warning)" }}
               role="status"
             >
-              {t(
-                "Location is off, so your Sales Officer can't see you on the map. Turn it on in your browser settings — your day has still started.",
-              )}
+              {t("You won't see yourself or counter distances on the Live map")}
             </p>
           )}
 
