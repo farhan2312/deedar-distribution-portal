@@ -1438,6 +1438,9 @@ const HI: Record<string, string> = {
   "Hover a cell for the count": "गिनती देखने के लिए सेल पर कर्सर ले जाएँ",
   "Total actions": "कुल क्रियाएँ",
   "Other": "अन्य",
+  // Field live map: beat list actions
+  "Show on map": "मानचित्र पर दिखाएँ",
+  "Open counter": "काउंटर खोलें",
 };
 
 export function translate(lang: Lang, key: string): string {

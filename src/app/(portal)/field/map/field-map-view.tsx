@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { distanceMeters, type RepPosition } from "@/lib/tracking/protocol";
@@ -66,6 +66,9 @@ export function FieldMapView({
 }) {
   const t = useT();
   const { position, state } = useOwnPosition();
+  // Which counter the map is looking at. The timestamp is what makes clicking
+  // the same row twice work — see `focus` on LiveMap.
+  const [focus, setFocus] = useState<{ id: string; at: number } | null>(null);
 
   // The map already knows how to draw rep markers from a positions map, so
   // reuse it wholesale instead of writing a second Leaflet integration.
@@ -157,34 +160,65 @@ export function FieldMapView({
               <ul className="min-h-0 flex-1 overflow-y-auto">
                 {ordered.map(({ counter: c, metres }) => {
                   const s = counterStatus(c, t);
+                  const looking = focus?.id === c.id;
                   return (
                     <li key={c.id} className="border-b last:border-b-0" style={{ borderColor: "var(--hairline-soft)" }}>
-                      {/* `list-row` is the shared clickable-row style: the
-                          same wash a table row gets on hover, plus an accent
-                          edge that wipes in — the row already went somewhere
-                          on click and said nothing about it. */}
-                      <Link href={`/field/counter/${c.id}`} className="list-row block px-3.5 py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-2 w-2 flex-none rounded-full" style={{ background: s.color }} />
-                          <span className="truncate text-[13px] font-semibold" style={{ color: "var(--ink-1)" }} title={c.name}>
-                            {c.name}
-                          </span>
-                        </div>
-                        <div className="mt-1 truncate text-[11.5px]" style={{ color: "var(--ink-3)" }}>
-                          {c.type} · {c.area}
-                        </div>
-                        <div className="mt-1.5 flex items-center justify-between gap-2">
-                          <span
-                            className="rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold"
-                            style={{ background: s.badgeBg, color: s.badgeColor }}
-                          >
-                            {s.label}
-                          </span>
-                          <span className="flex-none text-[11.5px] font-semibold tabular-nums" style={{ color: "var(--accent)" }}>
-                            {metres != null ? distanceLabel(metres) : "—"}
-                          </span>
-                        </div>
-                      </Link>
+                      {/* Two targets, because the row does two different
+                          things: the body points the map at this counter, and
+                          the button beside it opens the counter to check in.
+                          One tap used to leave the map behind entirely, which
+                          made the list the only way to read it. */}
+                      <div
+                        className="list-row flex items-stretch gap-1 pr-2"
+                        style={looking ? { background: "var(--accent-tint)" } : undefined}
+                      >
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 cursor-pointer px-3.5 py-2.5 text-left"
+                          onClick={() => setFocus({ id: c.id, at: Date.now() })}
+                          aria-pressed={looking}
+                          title={t("Show on map")}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 flex-none rounded-full" style={{ background: s.color }} />
+                            <span className="truncate text-[13px] font-semibold" style={{ color: "var(--ink-1)" }} title={c.name}>
+                              {c.name}
+                            </span>
+                          </div>
+                          <div className="mt-1 truncate text-[11.5px]" style={{ color: "var(--ink-3)" }}>
+                            {c.type} · {c.area}
+                          </div>
+                          <div className="mt-1.5 flex items-center justify-between gap-2">
+                            <span
+                              className="rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold"
+                              style={{ background: s.badgeBg, color: s.badgeColor }}
+                            >
+                              {s.label}
+                            </span>
+                            <span className="flex-none text-[11.5px] font-semibold tabular-nums" style={{ color: "var(--accent)" }}>
+                              {metres != null ? distanceLabel(metres) : "—"}
+                            </span>
+                          </div>
+                        </button>
+
+                        {/* Same destination the whole row had before, and the
+                            same one the pin's "Check in" button uses. A
+                            visited counter keeps the button — that page is
+                            where the visit gets corrected — but says so. */}
+                        <Link
+                          href={`/field/counter/${c.id}`}
+                          className="my-2 flex w-9 flex-none items-center justify-center self-center rounded-xl transition-colors"
+                          style={{
+                            background: c.visited ? "var(--bg-soft)" : "var(--accent-tint)",
+                            color: c.visited ? "var(--ink-3)" : "var(--accent)",
+                            aspectRatio: "1",
+                          }}
+                          title={c.visited ? t("Open counter") : t("Check in")}
+                          aria-label={c.visited ? `${t("Open counter")}: ${c.name}` : `${t("Check in")}: ${c.name}`}
+                        >
+                          <CheckInIcon />
+                        </Link>
+                      </div>
                     </li>
                   );
                 })}
@@ -202,6 +236,7 @@ export function FieldMapView({
             // and a row lead to the same place.
             counterActionLabel={t("Check in")}
             counterActionHrefBase="/field/counter"
+            focus={focus}
           />
           <p className="mt-2 text-[12px]" style={{ color: "var(--ink-3)" }}>
             {t("Distances are straight-line from your current location, not road distance.")}
@@ -215,5 +250,28 @@ export function FieldMapView({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Check-in: a clipboard with a tick, the same gesture the beat list uses for
+ * a completed call. Drawn here rather than imported because the app has no
+ * shared icon set — each screen carries the few glyphs it needs. */
+function CheckInIcon() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 3h6a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
+      <path d="M16 5h1.5A1.5 1.5 0 0 1 19 6.5v13A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-13A1.5 1.5 0 0 1 6.5 5H8" />
+      <path d="m9 13.5 2 2 4-4.5" />
+    </svg>
   );
 }

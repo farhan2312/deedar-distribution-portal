@@ -207,6 +207,7 @@ export function LiveMap({
   positions,
   counterActionLabel,
   counterActionHrefBase,
+  focus,
 }: {
   counters: CounterPin[];
   reps: RepMeta[];
@@ -214,6 +215,14 @@ export function LiveMap({
   /** Both must be set to render a call-to-action button in counter popups. */
   counterActionLabel?: string;
   counterActionHrefBase?: string;
+  /**
+   * Fly to one counter and open its popup.
+   *
+   * Carries a timestamp as well as an id because picking the same counter
+   * twice has to work: after panning away, a second click on the row it came
+   * from must bring the map back, and an id alone would look unchanged.
+   */
+  focus?: { id: string; at: number } | null;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   // The element that goes fullscreen — the host plus the button on top of it,
@@ -222,6 +231,8 @@ export function LiveMap({
   const mapRef = useRef<L.Map | null>(null);
   const [full, setFull] = useState(false);
   const repLayerRef = useRef<Map<string, RepMarker>>(new Map());
+  // Counter markers by id, so a click in a list beside the map can reach one.
+  const counterLayerRef = useRef<Map<string, L.Marker>>(new Map());
   const fittedRef = useRef(false);
   const t = useT();
   const router = useRouter();
@@ -246,10 +257,13 @@ export function LiveMap({
         ? { label: counterActionLabel, hrefBase: counterActionHrefBase }
         : undefined;
 
+    const counterLayer = counterLayerRef.current;
+    counterLayer.clear();
     for (const c of counters) {
-      L.marker([c.lat, c.lng], { icon: dotIcon(counterColor(c), 14) })
+      const marker = L.marker([c.lat, c.lng], { icon: dotIcon(counterColor(c), 14) })
         .addTo(map)
         .bindPopup(counterPopup(c, t, action));
+      counterLayer.set(c.id, marker);
     }
 
     // Delegated so it covers every popup without re-binding per open. Routing
@@ -282,12 +296,28 @@ export function LiveMap({
       map.remove();
       mapRef.current = null;
       repLayer.clear();
+      counterLayer.clear();
     };
     // `t` deliberately omitted — see the comment above this effect. The action
     // props are plain strings, so keying on them is safe: they only change when
     // the label or destination genuinely does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [counters, counterActionLabel, counterActionHrefBase, router]);
+
+  // Fly to a counter when something outside the map asks for it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focus) return;
+    const marker = counterLayerRef.current.get(focus.id);
+    // A counter with no GPS has no marker: nothing to fly to, and silence is
+    // the right answer rather than moving the map somewhere arbitrary.
+    if (!marker) return;
+
+    // Zoom IN to the counter but never back out — a rep who has zoomed in to
+    // read the street should not be yanked out to a fixed level.
+    map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 16), { duration: 0.6 });
+    marker.openPopup();
+  }, [focus]);
 
   // Sync live rep markers whenever positions change.
   useEffect(() => {
