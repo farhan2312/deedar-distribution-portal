@@ -69,6 +69,10 @@ export function DayLogClient({
   // Which stock panel is open. Only one at a time — the two steps are
   // sequential, so there is never a reason to fill both at once.
   const [openPanel, setOpenPanel] = useState<null | "pickup" | "remaining">(null);
+  // Set only when the rep actively refuses the prompt — an unanswered dialog
+  // leaves this false, so the warning never accuses someone who simply has not
+  // decided yet.
+  const [locationDenied, setLocationDenied] = useState(false);
   const [pickupDraft, setPickupDraft] = useState<SegQty>(zeroQty);
   const [remainingDraft, setRemainingDraft] = useState<SegQty>(zeroQty);
 
@@ -82,12 +86,37 @@ export function DayLogClient({
   }, zeroQty());
 
   function onStart() {
+    // Ask for location HERE, in the click itself.
+    //
+    // Tracking begins the moment the day opens, but the thing that actually
+    // triggers the browser's permission prompt used to be the reporter's
+    // `watchPosition`, which only runs once its socket has connected. A rep on
+    // a bad line could start their day and never be asked at all. A click is a
+    // user gesture, which is the context browsers are most willing to prompt in
+    // — and on iOS, the only one they reliably will.
+    //
+    // Deliberately not awaited: the day starts whether or not location is
+    // granted. A rep with a dead GPS still has counters to visit, and blocking
+    // the clock on a permission dialog would be the app refusing to work.
+    askForLocation();
+
     const deviceId = getDeviceId();
     start(async () => {
       await startDay(deviceId, pickupDraft);
       setOpenPanel(null);
       router.refresh();
     });
+  }
+
+  /** Fires the permission prompt, and remembers a refusal so we can say so.
+   * Already granted resolves silently and warms a fix for the reporter. */
+  function askForLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      () => setLocationDenied(false),
+      (err) => setLocationDenied(err.code === err.PERMISSION_DENIED),
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 },
+    );
   }
   function onEnd() {
     start(async () => {
@@ -161,6 +190,18 @@ export function DayLogClient({
               busy={pending}
               t={t}
             />
+          )}
+
+          {locationDenied && (
+            <p
+              className="mt-2 rounded-xl px-3.5 py-2.5 text-[12.5px]"
+              style={{ background: "rgba(178,94,0,.1)", color: "var(--warning)" }}
+              role="status"
+            >
+              {t(
+                "Location is off, so your Sales Officer can't see you on the map. Turn it on in your browser settings — your day has still started.",
+              )}
+            </p>
           )}
 
           <PlanRow
