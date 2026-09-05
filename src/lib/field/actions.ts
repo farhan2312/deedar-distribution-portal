@@ -114,21 +114,26 @@ export async function createCounter(input: NewCounterInput) {
   const coords = parseCoords(input.gps);
   if (!coords) return { ok: false as const, error: GPS_REQUIRED };
 
-  await db.insert(counters).values({
-    name: input.name.trim(),
-    phone: input.phone,
-    address: input.address.trim() || null,
-    stockistId: depot.id,
-    areaId: area.id,
-    type: input.type,
-    typeOther: typeOther || null,
-    lat: coords.lat,
-    lng: coords.lng,
-    status: "active",
-    createdByUserId: user.id,
-  });
+  // The id comes back so the caller can send the rep straight into the visit
+  // for the counter they are standing in front of.
+  const [created] = await db
+    .insert(counters)
+    .values({
+      name: input.name.trim(),
+      phone: input.phone,
+      address: input.address.trim() || null,
+      stockistId: depot.id,
+      areaId: area.id,
+      type: input.type,
+      typeOther: typeOther || null,
+      lat: coords.lat,
+      lng: coords.lng,
+      status: "active",
+      createdByUserId: user.id,
+    })
+    .returning({ id: counters.id });
 
-  return { ok: true as const };
+  return { ok: true as const, counterId: created.id };
 }
 
 export type EditCounterInput = {

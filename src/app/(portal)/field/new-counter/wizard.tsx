@@ -161,7 +161,13 @@ export function NewCounterWizard(props: WizardProps) {
     // Stay disabled on success: the push + refresh are still in flight and this
     // component unmounts on navigation. Clearing `busy` here re-enabled "Submit
     // counter" mid-save, which is how a duplicate counter gets created.
-    router.push(doneHref);
+    //
+    // A rep adds a counter while standing in front of it, so the next thing
+    // they need is its visit form — not the beat list they came from, which
+    // made them find the shop again in a list they had just left. A supervisor
+    // is filling the roster from a desk and does not check in, so they go back
+    // to assign-beat.
+    router.push(isSupervisor ? doneHref : `/field/counter/${res.counterId}/visit`);
     router.refresh();
   }
 

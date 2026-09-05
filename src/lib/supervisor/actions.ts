@@ -166,7 +166,13 @@ export async function checkDuplicateForSupervisor(phone: string): Promise<Duplic
 }
 
 /** Create a counter in a depot the SO supervises (admin: any depot). */
-export async function createCounterBySupervisor(input: SupervisorCounterInput): Promise<Result> {
+/** Widens the shared `Result` with the new row's id, which the wizard needs to
+ * route a rep into the counter it just made. */
+type CreatedResult = { ok: true; counterId: string } | { ok: false; error: string };
+
+export async function createCounterBySupervisor(
+  input: SupervisorCounterInput,
+): Promise<CreatedResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "Not authorized." };
   const isAdmin = user.accessRoles.includes("admin");
@@ -206,20 +212,24 @@ export async function createCounterBySupervisor(input: SupervisorCounterInput): 
   const coords = parseCoords(input.gps);
   if (!coords) return { ok: false, error: GPS_REQUIRED };
 
-  await db.insert(counters).values({
-    name: input.name.trim(),
-    phone: input.phone,
-    address: input.address.trim() || null,
-    stockistId: depot.id,
-    areaId: area.id,
-    type: input.type,
-    typeOther: typeOther || null,
-    lat: coords.lat,
-    lng: coords.lng,
-    status: "active",
-    createdByUserId: user.id,
-  });
+  // Same shape as the field action, so one wizard can call either.
+  const [created] = await db
+    .insert(counters)
+    .values({
+      name: input.name.trim(),
+      phone: input.phone,
+      address: input.address.trim() || null,
+      stockistId: depot.id,
+      areaId: area.id,
+      type: input.type,
+      typeOther: typeOther || null,
+      lat: coords.lat,
+      lng: coords.lng,
+      status: "active",
+      createdByUserId: user.id,
+    })
+    .returning({ id: counters.id });
 
   revalidatePath("/supervisor/assign-beat");
-  return { ok: true };
+  return { ok: true, counterId: created.id };
 }
