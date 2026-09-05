@@ -1,11 +1,16 @@
 import type { CompetitorPresence, ProductSegment } from "@/db/schema";
 import { istDayBounds } from "@/lib/date";
 
+/**
+ * The SKUs, named the way the field names them: DG and DB, not "Deedar Gold"
+ * and "Deedar Blue". The enum values were already DG10/DB40 — the labels now
+ * match, so the screen and the database say the same word.
+ */
 export const PRODUCT_SEGMENTS: { value: ProductSegment; label: string }[] = [
-  { value: "DG10", label: "Deedar Gold 10g" },
-  { value: "DG20", label: "Deedar Gold 20g" },
-  { value: "DB20", label: "Deedar Blue 20g" },
-  { value: "DB40", label: "Deedar Blue 40g" },
+  { value: "DG10", label: "DG 10g" },
+  { value: "DG20", label: "DG 20g" },
+  { value: "DB20", label: "DB 20g" },
+  { value: "DB40", label: "DB 40g" },
 ];
 
 export const SEGMENT_LABEL: Record<ProductSegment, string> = Object.fromEntries(

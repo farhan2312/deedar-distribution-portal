@@ -6,8 +6,8 @@ import { endDay, startDay } from "@/lib/field/day-log-actions";
 import { SEGMENTS, clampQty, totalOf, zeroQty, type SegQty } from "@/lib/field/day-stock";
 import { SEGMENT_LABEL } from "@/lib/field/products";
 import { getDeviceId } from "@/lib/tracking/device-id";
+import { QtyInput } from "@/components/ui/qty-input";
 import { useT } from "@/lib/i18n/provider";
-import type { ProductSegment } from "@/db/schema";
 
 export type HistoryRow = {
   dateLabel: string;
@@ -428,10 +428,6 @@ function StockPanel({
 }) {
   const total = totalOf(qty);
 
-  function setSeg(seg: ProductSegment, raw: string) {
-    onChange({ ...qty, [seg]: clampQty(raw) });
-  }
-
   return (
     <div
       className="rounded-2xl p-4"
@@ -463,14 +459,10 @@ function StockPanel({
                 {t("Expected")} {expected[seg]}
               </span>
             )}
-            <input
-              className="inp text-center"
-              type="number"
-              min={0}
-              inputMode="numeric"
-              style={{ width: 72, padding: "8px 6px" }}
+            <QtyInput
               value={qty[seg]}
-              onChange={(e) => setSeg(seg, e.target.value)}
+              onChange={(n) => onChange({ ...qty, [seg]: clampQty(n) })}
+              aria-label={t(SEGMENT_LABEL[seg])}
             />
           </div>
         </div>

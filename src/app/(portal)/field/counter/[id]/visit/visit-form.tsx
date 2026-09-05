@@ -7,6 +7,7 @@ import { createVisit, updateVisit, type VisitInput } from "@/lib/field/visit-act
 import { COMPETITOR_OPTIONS, PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
 import { fillName, VISITED_BY_OTHER } from "@/lib/field/visit-messages";
 import { useT } from "@/lib/i18n/provider";
+import { QtyInput } from "@/components/ui/qty-input";
 
 const SEGMENTS: ProductSegment[] = PRODUCT_SEGMENTS.map((p) => p.value);
 type SegMap = Record<ProductSegment, number>;
@@ -81,9 +82,8 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
       [seg]: Math.max(0, prev[seg] + delta),
     }));
   }
-  function setStockValue(seg: ProductSegment, raw: string) {
-    const n = Math.max(0, Math.floor(Number(raw)) || 0);
-    setStock((prev) => ({ ...prev, [seg]: n }));
+  function setStockValue(seg: ProductSegment, n: number) {
+    setStock((prev) => ({ ...prev, [seg]: Math.max(0, Math.floor(n) || 0) }));
   }
 
   function buildInput(): VisitInput {
@@ -193,14 +193,11 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
                   onInc={() => bumpSold(seg, 1)}
                 />
                 <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t("Stock")}</span>
-                <input
-                  className="inp text-center"
-                  type="number"
-                  min={0}
-                  inputMode="numeric"
-                  style={{ width: 64, padding: "8px 6px" }}
+                <QtyInput
                   value={stock[seg]}
-                  onChange={(e) => setStockValue(seg, e.target.value)}
+                  onChange={(n) => setStockValue(seg, n)}
+                  width={64}
+                  aria-label={`${SEGMENT_LABEL[seg]} ${t("Stock")}`}
                 />
               </div>
             </div>
