@@ -8,6 +8,7 @@ import { useT } from "@/lib/i18n/provider";
 import { Pagination } from "@/components/ui/pagination";
 import { SearchInput } from "@/components/ui/search-input";
 import { PeriodFilter } from "../_components/period-filter";
+import { COUNTER_SORTS } from "@/lib/khq/report-sorts";
 import type { StockistKind } from "@/db/schema";
 import { PRODUCT_SEGMENTS } from "@/lib/field/products";
 import { exportCountersCsv, exportVisitsCsv } from "@/lib/khq/report-actions";
@@ -182,6 +183,23 @@ export function ReportsClient({
       {/* Filter row */}
       <div className="card mb-4 flex flex-wrap items-center gap-2 p-3.5">
         <MapScopePickers levels={scope.levels} />
+        {/* Counters only: the visits tab is a log, and a log reads newest
+            first or not at all. */}
+        {scope.tab === "counters" && (
+          <select
+            className="inp"
+            style={{ width: "auto", padding: "6px 10px", fontSize: 12 }}
+            value={scope.sort}
+            aria-label={t("Sort by")}
+            onChange={(e) => push({ sort: e.target.value === "new" ? null : e.target.value })}
+          >
+            {COUNTER_SORTS.map((o) => (
+              <option key={o.key} value={o.key}>
+                {t(o.label)}
+              </option>
+            ))}
+          </select>
+        )}
         <SearchInput
           param="q"
           initial={scope.filters.q}

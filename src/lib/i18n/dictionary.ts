@@ -1448,6 +1448,11 @@ const HI: Record<string, string> = {
   "You won't see yourself or counter distances on the Live map": "लाइव मैप पर आप न खुद दिखेंगे, न काउंटर की दूरी दिखेगी",
   "Sold / Pickup": "बिका / उठाया",
   "This C&F HQ has no stockists yet.": "इस C&F HQ के अंतर्गत अभी कोई स्टॉकिस्ट नहीं है।",
+  // Reports: counters-tab ordering
+  "Sort by": "क्रम",
+  "Newest first": "नए पहले",
+  "Most visits": "सबसे ज़्यादा विज़िट",
+  "Fewest visits": "सबसे कम विज़िट",
 };
 
 export function translate(lang: Lang, key: string): string {

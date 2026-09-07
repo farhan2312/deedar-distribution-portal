@@ -14,6 +14,7 @@ import { istDateString } from "@/lib/date";
 export type PeriodKey =
   | "today"
   | "yesterday"
+  | "7d"
   | "month"
   | "30d"
   | "90d"
@@ -34,6 +35,7 @@ export type Preset = { key: PeriodKey; label: string };
 export const PERIOD_PRESETS: readonly Preset[] = [
   { key: "today", label: "Today" },
   { key: "yesterday", label: "Yesterday" },
+  { key: "7d", label: "Last 7 days" },
   { key: "month", label: "This month" },
   { key: "30d", label: "30 days" },
   { key: "90d", label: "90 days" },
@@ -41,18 +43,6 @@ export const PERIOD_PRESETS: readonly Preset[] = [
   { key: "lastfy", label: "Last FY" },
   { key: "all", label: "All time" },
 ];
-
-/**
- * The default pill row: spans only, no single days.
- *
- * A company-wide dashboard or a report is read in aggregate — "Today" there is
- * a nearly empty page, and it crowds out the windows people actually pick. The
- * ISR detail page passes the full list instead, because one person's single
- * day is exactly the question that page answers.
- */
-export const SPAN_PRESETS: readonly Preset[] = PERIOD_PRESETS.filter(
-  (p) => p.key !== "today" && p.key !== "yesterday",
-);
 
 export function isPeriodKey(s: string | undefined | null): s is PeriodKey {
   return !!s && PERIOD_PRESETS.some((p) => p.key === s);
@@ -110,6 +100,9 @@ export function periodBounds(
       const d = shiftDays(today, -1);
       return { from: d, to: d };
     }
+    // Inclusive of today, so "Last 7 days" is today plus the six before it.
+    case "7d":
+      return { from: shiftDays(today, -6), to: today };
     case "month":
       return { from: `${today.slice(0, 7)}-01`, to: today };
     // Inclusive of today, so "30 days" really is thirty rows on a daily trend.
@@ -188,7 +181,7 @@ export function comparisonFor(
       return { from: shiftDays(from, -1), to: shiftDays(from, -1), label: "vs the day before" };
 
     default: {
-      // 30d, 90d and any hand-picked range: the same span, ending the day
+      // 7d, 30d, 90d and any hand-picked range: the same span, ending the day
       // before this one starts.
       const days = daysBetween(from, to);
       const prevTo = shiftDays(from, -1);

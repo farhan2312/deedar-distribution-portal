@@ -57,13 +57,7 @@ export default async function SupervisorCountersPage({
     scopeStockists.length === 1 ? scopeStockists[0].name : cnf?.name ?? t("your stockists");
 
   return (
-    <>
-      {cnfs.length > 0 && (
-        <div className="mb-3 flex justify-end">
-          <CnfPicker options={cnfs} value={cnf?.id ?? "all"} />
-        </div>
-      )}
-      <CountersListClient
+    <CountersListClient
         rows={rows}
         areaOptions={list.areaOptions}
         stockistOptions={list.stockistOptions}
@@ -72,9 +66,9 @@ export default async function SupervisorCountersPage({
         page={list.page}
         totalPages={list.totalPages}
         pageSize={list.pageSize}
-        scope={scopeLabel}
-        showCheckIn={false}
-      />
-    </>
+      scope={scopeLabel}
+      showCheckIn={false}
+      scopeFilter={cnfs.length > 0 ? <CnfPicker options={cnfs} value={cnf?.id ?? "all"} /> : null}
+    />
   );
 }

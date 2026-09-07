@@ -3,7 +3,7 @@
 import { useOptimistic, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useT } from "@/lib/i18n/provider";
-import { SPAN_PRESETS, type PeriodKey, type Preset } from "@/lib/khq/periods";
+import { PERIOD_PRESETS, type PeriodKey, type Preset } from "@/lib/khq/periods";
 
 type Selection = { period: PeriodKey | null; from: string; to: string };
 
@@ -38,7 +38,7 @@ export function PeriodFilter({
   maxDate,
   /** Which pills to show. Defaults to spans only — pass the full list on a
    * screen where a single day is a sensible thing to ask for. */
-  presets = SPAN_PRESETS,
+  presets = PERIOD_PRESETS,
   /** Extra params to drop on any change — pagination, mainly, since page 7 of
    * the old window is meaningless in the new one. */
   resetParams = [],

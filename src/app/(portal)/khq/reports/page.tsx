@@ -36,7 +36,7 @@ export default async function KhqReportsPage({
   const [countersRows, countersTotal] =
     scope.tab === "counters"
       ? await Promise.all([
-          fetchCountersReport(scope.filters, pageOpts),
+          fetchCountersReport(scope.filters, pageOpts, scope.sort),
           countCountersReport(scope.filters),
         ])
       : [[], 0];

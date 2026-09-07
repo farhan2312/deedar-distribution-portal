@@ -56,6 +56,7 @@ export function CountersListClient({
   pageSize,
   scope,
   showCheckIn,
+  scopeFilter,
 }: {
   /** The current page's rows — not the whole list. */
   rows: CounterListRow[];
@@ -70,6 +71,9 @@ export function CountersListClient({
   /** Which stockist(s) the rows cover — the page title is in the top bar. */
   scope: string;
   showCheckIn: boolean;
+  /** Rendered in the filter row before the stockist select — the C&F picker on
+   * screens whose viewer may narrow that far. */
+  scopeFilter?: React.ReactNode;
 }) {
   const t = useT();
   const router = useRouter();
@@ -134,6 +138,7 @@ export function CountersListClient({
           style={{ padding: "6px 10px", fontSize: 12, minWidth: 200 }}
           placeholder={t("Search by name or mobile…")}
         />
+        {scopeFilter}
         {stockistOptions.length > 1 && (
           <select
             className="inp transition-opacity"

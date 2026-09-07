@@ -18,6 +18,9 @@ import {
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { COMPETITOR_LABEL, PRODUCT_SEGMENTS } from "@/lib/field/products";
 import { areaOptionsFor, withSubDealers } from "@/lib/portal/area-options";
+import { isCounterSort, type CounterSort } from "./report-sorts";
+
+export { COUNTER_SORTS, isCounterSort, type CounterSort } from "./report-sorts";
 import type { ScopeLevel } from "@/lib/portal/map-scope";
 import type { PeriodKey } from "./periods";
 import { resolveRange } from "./range";
@@ -40,6 +43,7 @@ export type CounterType = (typeof counterTypeEnum.enumValues)[number];
 export type ReportTab = "counters" | "visits";
 export type ReportsParams = {
   tab?: string;
+  sort?: string;  // counters tab ordering
   cnf?: string;
   depot?: string;
   area?: string;
@@ -69,6 +73,8 @@ export type ReportsScope = {
   tab: ReportTab;
   filters: ReportsFilters;
   page: number;
+  /** Counters-tab ordering, chosen in the filter row. */
+  sort: CounterSort;
   /** Levels rendered by `<MapScopePickers/>` — reused as-is. */
   levels: ScopeLevel[];
   /** Everything `<PeriodFilter/>` needs to render its own state. */
@@ -189,6 +195,7 @@ export async function resolveReportsScope(params: ReportsParams): Promise<Report
   };
 
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const sort: CounterSort = isCounterSort(params.sort) ? params.sort : "new";
 
   const levels: ScopeLevel[] = [
     { key: "cnf", label: "C&F HQ", allLabel: "All C&F", options: allCnfs, value: cnfId ?? "all" },
@@ -200,6 +207,7 @@ export async function resolveReportsScope(params: ReportsParams): Promise<Report
     tab,
     filters,
     page,
+    sort,
     levels,
     period: {
       key: range.period,
@@ -237,6 +245,7 @@ export type PageOpts = { limit: number; offset: number };
 export async function fetchCountersReport(
   f: ReportsFilters,
   opts?: PageOpts,
+  sort: CounterSort = "new",
 ): Promise<CounterReportRow[]> {
   // `creator` alias so the LEFT JOIN on the counter's author never collides
   // with any other users-table reference we might add later.
@@ -277,9 +286,16 @@ export async function fetchCountersReport(
     .innerJoin(cnfs, eq(cnfs.id, stockists.cnfId))
     .leftJoin(creator, eq(creator.id, counters.createdByUserId))
     .where(counterWhere(f))
-    // Tiebreaker: two counters created in the same transaction share a
-    // timestamp, and paging a non-total order drops and repeats rows.
-    .orderBy(desc(counters.createdAt), asc(counters.id));
+    // The id tiebreaker is not decoration: hundreds of counters share a visit
+    // count and many share a creation timestamp, and paging a non-total order
+    // drops and repeats rows between pages.
+    .orderBy(
+      ...(sort === "visits"
+        ? [desc(totalVisits), asc(counters.id)]
+        : sort === "least"
+          ? [asc(totalVisits), asc(counters.id)]
+          : [desc(counters.createdAt), asc(counters.id)]),
+    );
 
   const rows = opts ? await query.limit(opts.limit).offset(opts.offset) : await query;
 
