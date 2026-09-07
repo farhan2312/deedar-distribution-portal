@@ -11,7 +11,7 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "Deedar Drive",
+  title: "D-Drive",
   description: "Field Sales & Distribution Platform",
 };
 

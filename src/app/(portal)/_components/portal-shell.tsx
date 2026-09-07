@@ -108,7 +108,7 @@ export function PortalShell({ userName, phone, roleLabel, accessRoles, trackingA
               className="text-[15px] font-bold leading-tight text-white"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              Deedar Drive
+              D-Drive
             </div>
             <div className="text-[10.5px] leading-tight" style={{ color: "rgba(241,247,242,.5)" }}>
               {t("Distribution Portal")}

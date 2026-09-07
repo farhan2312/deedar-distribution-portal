@@ -56,7 +56,7 @@ export default function LoginPage() {
       <div className="relative hidden md:block md:w-[60%]">
         <Image
           src="/login-hero.png"
-          alt="Deedar Drive — Field Sales & Distribution Platform"
+          alt="D-Drive — Field Sales & Distribution Platform"
           fill
           priority
           className="object-cover"
@@ -81,7 +81,7 @@ export default function LoginPage() {
               {t("WELCOME BACK")}
             </span>
             <p className="mt-2 text-sm text-zinc-500">
-              {t("Login to continue to Deedar Drive")}
+              {t("Login to continue to D-Drive")}
             </p>
           </div>
 
@@ -158,7 +158,7 @@ export default function LoginPage() {
           <div className="my-4 h-px w-full bg-zinc-100" />
 
           <p className="text-center text-sm text-zinc-500">
-            {t("New to Deedar Drive?")}{" "}
+            {t("New to D-Drive?")}{" "}
             <Link href="/signup" className="font-semibold text-emerald-700 hover:text-emerald-800">
               {t("Request Access")}
             </Link>

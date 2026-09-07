@@ -6,14 +6,14 @@ import type { Lang } from "./config";
 const HI: Record<string, string> = {
   // ── Auth: login ──
   "WELCOME BACK": "वापसी पर स्वागत है",
-  "Login to continue to Deedar Drive": "जारी रखने के लिए Deedar Drive में लॉगिन करें",
+  "Login to continue to D-Drive": "जारी रखने के लिए D-Drive में लॉगिन करें",
   "Phone number": "मोबाइल नंबर",
   Password: "पासवर्ड",
   "Remember me": "मुझे याद रखें",
   "Forgot password?": "पासवर्ड भूल गए?",
   Login: "लॉगिन",
   "Logging in…": "लॉगिन हो रहा है…",
-  "New to Deedar Drive?": "Deedar Drive पर नए हैं?",
+  "New to D-Drive?": "D-Drive पर नए हैं?",
   "Request Access": "एक्सेस का अनुरोध करें",
   "Something went wrong.": "कुछ गड़बड़ हो गई।",
   "Could not reach the server. Please try again.": "सर्वर से संपर्क नहीं हो सका। कृपया पुनः प्रयास करें।",

@@ -42,7 +42,7 @@ export default function SignupPage() {
       <div className="relative hidden md:block md:w-[60%]">
         <Image
           src="/login-hero.png"
-          alt="Deedar Drive — Field Sales & Distribution Platform"
+          alt="D-Drive — Field Sales & Distribution Platform"
           fill
           priority
           className="object-cover"

@@ -348,13 +348,13 @@ export function breadcrumbForPath(pathname: string): { section: string; page: st
   const section = NAV_SECTIONS.find((s) => s.role === role);
 
   const best = navItemForPath(pathname);
-  if (best) return { section: section?.title ?? "Deedar Drive", page: best.label };
+  if (best) return { section: section?.title ?? "D-Drive", page: best.label };
 
   const last = pathname.split("/").filter(Boolean).filter((seg) => !isIdSegment(seg)).pop() ?? "";
   const page = last
     ? (SEGMENT_LABEL[last] ?? last.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))
     : "Dashboard";
-  return { section: section?.title ?? "Deedar Drive", page };
+  return { section: section?.title ?? "D-Drive", page };
 }
 
 /** CSS custom props that recolor a screen's --accent to the role's theme. */
