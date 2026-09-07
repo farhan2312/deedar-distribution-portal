@@ -1,16 +1,17 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
-import { getScopeStockists } from "@/lib/supervisor/team";
+import { getScopeCnfs, getScopeStockists, pickCnf } from "@/lib/supervisor/team";
 import { fetchCountersList, type CountersListParams } from "@/lib/counters/list";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { CountersListClient, type CounterListRow } from "@/app/(portal)/_components/counters-list";
+import { CnfPicker } from "../_components/cnf-picker";
 
 export default async function SupervisorCountersPage({
   searchParams,
 }: {
-  searchParams: Promise<CountersListParams>;
+  searchParams: Promise<CountersListParams & { cnf?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -19,19 +20,27 @@ export default async function SupervisorCountersPage({
     return <Notice title={t("All Counters")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
 
-  // Scope: every stockist this SO supervises (admin bypasses via getScopeStockists).
-  const scopeStockists = await getScopeStockists(user);
+  const params = await searchParams;
+  // Central Admin can narrow to one C&F HQ first; nobody else gets the level.
+  const cnfs = await getScopeCnfs(user);
+  const cnf = pickCnf(cnfs, params.cnf);
+
+  // Scope: every stockist this SO supervises (admin bypasses via
+  // getScopeStockists), narrowed to the chosen C&F. Narrowing here is all the
+  // filter needs to do — the stockist dropdown and the counter rows are both
+  // built from this list.
+  const scopeStockists = await getScopeStockists(user, cnf?.id);
   if (scopeStockists.length === 0) {
     return (
       <Notice title={t("All Counters")}>
-        {t("You don't supervise any stockists yet.")}
+        {cnf ? t("This C&F HQ has no stockists yet.") : t("You don't supervise any stockists yet.")}
       </Notice>
     );
   }
 
   const list = await fetchCountersList({
     scopeStockistIds: scopeStockists.map((d) => d.id),
-    params: await searchParams,
+    params,
   });
 
   const rows: CounterListRow[] = list.rows.map((c) => ({
@@ -45,20 +54,27 @@ export default async function SupervisorCountersPage({
 
   // One stockist names itself; several collapse to "your stockists".
   const scopeLabel =
-    scopeStockists.length === 1 ? scopeStockists[0].name : t("your stockists");
+    scopeStockists.length === 1 ? scopeStockists[0].name : cnf?.name ?? t("your stockists");
 
   return (
-    <CountersListClient
-      rows={rows}
-      areaOptions={list.areaOptions}
-      stockistOptions={list.stockistOptions}
-      filters={list.filters}
-      total={list.total}
-      page={list.page}
-      totalPages={list.totalPages}
-      pageSize={list.pageSize}
-      scope={scopeLabel}
-      showCheckIn={false}
-    />
+    <>
+      {cnfs.length > 0 && (
+        <div className="mb-3 flex justify-end">
+          <CnfPicker options={cnfs} value={cnf?.id ?? "all"} />
+        </div>
+      )}
+      <CountersListClient
+        rows={rows}
+        areaOptions={list.areaOptions}
+        stockistOptions={list.stockistOptions}
+        filters={list.filters}
+        total={list.total}
+        page={list.page}
+        totalPages={list.totalPages}
+        pageSize={list.pageSize}
+        scope={scopeLabel}
+        showCheckIn={false}
+      />
+    </>
   );
 }

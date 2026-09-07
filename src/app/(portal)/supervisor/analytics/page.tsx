@@ -6,16 +6,19 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { durationLabel, formatISTDate, istDayBounds, istDateString } from "@/lib/date";
 import {
   getCountersVisitedToday,
+  getScopeCnfs,
   getScopeStockists,
   getTeamDayLogs,
   getTeamReps,
   getVisitsToday,
+  pickCnf,
   pickStockist,
 } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
 import { getT } from "@/lib/i18n/server";
 import { Donut, type DonutSegment } from "@/components/ui/donut";
 import { Notice } from "@/components/ui/notice";
+import { CnfPicker } from "../_components/cnf-picker";
 import { DepotPicker } from "../_components/depot-picker";
 import { DayPicker } from "../_components/day-picker";
 import { RefreshButton } from "../_components/refresh-button";
@@ -66,7 +69,7 @@ function shortDayLabel(dateStr: string): string {
 export default async function SupervisorAnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ depot?: string; date?: string }>;
+  searchParams: Promise<{ cnf?: string; depot?: string; date?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -75,12 +78,15 @@ export default async function SupervisorAnalyticsPage({
     return <Notice title={t("Analytics")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
 
-  const { depot: requestedDepot, date: requestedDate } = await searchParams;
-  const stockists = await getScopeStockists(user);
+  const { cnf: requestedCnf, depot: requestedDepot, date: requestedDate } = await searchParams;
+  const cnfs = await getScopeCnfs(user);
+  const cnf = pickCnf(cnfs, requestedCnf);
+  const stockists = await getScopeStockists(user, cnf?.id);
   const depot = pickStockist(stockists, requestedDepot);
+  // Already narrowed to the chosen C&F, since `stockists` is.
   const stockistIds = depot ? [depot.id] : stockists.map((d) => d.id);
 
-  const reps = await getTeamReps(user, depot?.id);
+  const reps = await getTeamReps(user, depot?.id, cnf ? stockistIds : undefined);
   const repIds = reps.map((r) => r.id);
 
   // ── Selected day (defaults to today) and its comparison day ─────────────
@@ -269,6 +275,7 @@ export default async function SupervisorAnalyticsPage({
         <div className="flex flex-none flex-wrap items-center gap-2">
           <DayPicker value={dayStr} options={dayOptions} />
           <RefreshButton />
+          {cnfs.length > 0 && <CnfPicker options={cnfs} value={cnf?.id ?? "all"} />}
           {stockists.length > 1 && <DepotPicker options={stockists} value={depot?.id ?? "all"} />}
         </div>
       </div>

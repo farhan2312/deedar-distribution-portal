@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { AccessRole, DayLog } from "@/db/schema";
-import { areas, beatAssignments, counters, dayLogs, stockists, users, visits } from "@/db/schema";
+import { areas, beatAssignments, cnfs, counters, dayLogs, stockists, users, visits } from "@/db/schema";
 
 /** The subset of the current user needed to scope a supervisor's team. */
 export type ScopeUser = {
@@ -49,11 +49,40 @@ export function scopeStockists(user: ScopeUser): StockistOption[] {
  * The stockists in scope for a screen's depot selector. Admin is unrestricted, so
  * it gets every depot; a supervisor gets their own + supervised stockists.
  */
-export async function getScopeStockists(user: ScopeUser): Promise<StockistOption[]> {
+export async function getScopeStockists(
+  user: ScopeUser,
+  /** Central Admin only — narrows the list to one C&F HQ. Ignored for
+   * everyone else, who is already pinned at or below a single C&F. */
+  cnfId?: string | null,
+): Promise<StockistOption[]> {
   if (user.accessRoles.includes("admin")) {
-    return db.select({ id: stockists.id, name: stockists.name }).from(stockists).orderBy(asc(stockists.name));
+    return db
+      .select({ id: stockists.id, name: stockists.name })
+      .from(stockists)
+      .where(cnfId ? eq(stockists.cnfId, cnfId) : undefined)
+      .orderBy(asc(stockists.name));
   }
   return scopeStockists(user);
+}
+
+export type CnfOption = { id: string; name: string };
+
+/**
+ * C&F HQs the viewer may filter by — Central Admin only.
+ *
+ * Everyone else in the Sales Officer section already sits at or below one C&F,
+ * so the picker would be a dropdown with a single entry that changes nothing.
+ * Returning an empty list is what hides it.
+ */
+export async function getScopeCnfs(user: ScopeUser): Promise<CnfOption[]> {
+  if (!user.accessRoles.includes("admin")) return [];
+  return db.select({ id: cnfs.id, name: cnfs.name }).from(cnfs).orderBy(asc(cnfs.name));
+}
+
+/** `?cnf=` against the in-scope list. Null for "all" or an unknown id. */
+export function pickCnf(options: CnfOption[], requested: string | undefined): CnfOption | null {
+  if (!requested || requested === "all") return null;
+  return options.find((c) => c.id === requested) ?? null;
 }
 
 /**
@@ -69,12 +98,25 @@ export function pickStockist(stockists: StockistOption[], requested: string | un
  * Field reps under this supervisor: those whose `reportsToUserId` is the SO.
  * Admins see every field rep. Optionally narrowed to one depot.
  */
-export async function getTeamReps(user: ScopeUser, stockistId?: string | null): Promise<TeamRep[]> {
+export async function getTeamReps(
+  user: ScopeUser,
+  stockistId?: string | null,
+  /** Broader narrowing when no single depot is chosen — the stockists of a
+   * chosen C&F. Ignored once `stockistId` names one of them. */
+  stockistIds?: string[] | null,
+): Promise<TeamRep[]> {
   const isAdmin = user.accessRoles.includes("admin");
   const base = isAdmin
     ? sql`'field' = ANY(${users.accessRoles}::text[])`
     : eq(users.reportsToUserId, user.id);
-  const where = stockistId ? and(base, eq(users.stockistId, stockistId)) : base;
+  const where = stockistId
+    ? and(base, eq(users.stockistId, stockistId))
+    : stockistIds
+      // An empty list means the C&F has no stockists: match nobody rather than
+      // falling through to "everyone", which is what `inArray(x, [])` would
+      // otherwise invite a reader to assume.
+      ? and(base, stockistIds.length > 0 ? inArray(users.stockistId, stockistIds) : sql`false`)
+      : base;
 
   const rows = await db
     .select({

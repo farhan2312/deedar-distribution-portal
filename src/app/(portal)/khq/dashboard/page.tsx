@@ -31,6 +31,7 @@ import {
 } from "../../_components/dashboard-ui";
 import { RefreshButton } from "../../supervisor/_components/refresh-button";
 import { IsrLeaderboard } from "../_components/isr-leaderboard";
+import { StateBreakdown, type StateSeries } from "../_components/state-breakdown";
 import { StatePicker } from "../_components/state-picker";
 import { PeriodFilter } from "../_components/period-filter";
 import { SalesTrend, type TrendBar } from "../_components/sales-trend";
@@ -177,6 +178,8 @@ export default async function KhqDashboardPage({
     activeRepsRows,
     periodMix,
     periodCore,
+    packetsPerStockist,
+    stockistBuckets,
     prevCore,
     todayByIsr,
     competitorRows,
@@ -250,6 +253,39 @@ export default async function KhqDashboardPage({
       .from(visits)
       .innerJoin(counters, eq(counters.id, visits.counterId))
       .where(inRange),
+    // Packets per stockist for the period — rolled up to states in JS via the
+    // stockist → C&F → state maps this page already builds, rather than a
+    // three-join GROUP BY that would have to be kept in step with them.
+    db
+      .select({
+        stockistId: counters.stockistId,
+        packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
+      })
+      .from(visits)
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .where(inRange)
+      .groupBy(counters.stockistId),
+    // The same buckets the trend above uses, split by stockist, so one
+    // stockist's months can be drawn without a second definition of what a
+    // bucket is. A dozen stockists over twelve months is ~150 rows.
+    db
+      .select({
+        stockistId: counters.stockistId,
+        bucket:
+          trendGrain(range.days) === "month"
+            ? sql<string>`to_char(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM')`
+            : sql<string>`(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date::text`,
+        packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
+      })
+      .from(visits)
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .where(inRange)
+      .groupBy(
+        counters.stockistId,
+        trendGrain(range.days) === "month"
+          ? sql`to_char(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM')`
+          : sql`(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date`,
+      ),
     db
       .select({
         visits: sql<number>`count(*)::int`,
@@ -385,6 +421,12 @@ export default async function KhqDashboardPage({
     count,
     pct: Math.round((count / maxState) * 100),
   }));
+
+  // ── State → stockist breakdown ─────────────────────────────────────────
+  // Every stockist in scope appears, including ones that sold nothing this
+  // period: a zero row is the answer to "who is not selling", and dropping it
+  // would quietly turn this into a chart of winners only.
+  const packetsPerStockistMap = new Map(packetsPerStockist.map((r) => [r.stockistId, r.packets]));
 
   // ── Stockist table (today) ─────────────────────────────────────────────
   const perDepot = new Map(perStockistToday.map((r) => [r.stockistId, r]));
@@ -544,6 +586,7 @@ export default async function KhqDashboardPage({
       // click never asked for.
       const future = key > today.slice(0, 7);
       trendBars.push({
+        key,
         // Translated here rather than only in the axis component — the labels
         // were rendering raw English beside a Hindi UI.
         label: t(MONTH_SHORT[monthIdx]),
@@ -560,6 +603,7 @@ export default async function KhqDashboardPage({
     for (let i = 0; i < range.days; i++) {
       const date = shiftDays(range.from, i);
       trendBars.push({
+        key: date,
         label: String(Number(date.slice(8, 10))),
         value: byBucket.get(date) ?? 0,
         drillMonth: null,
@@ -607,6 +651,41 @@ export default async function KhqDashboardPage({
     { icon: "store", tint: "var(--accent)", label: t("New counters today"), value: newCountersToday.toLocaleString("en-IN"), sub: t("added to the network") },
     { icon: "alert", tint: "#C7263B", label: t("Declining counters"), value: decliningCount, sub: t("flagged for revisit"), tone: "bad" },
   ];
+
+  const stateSeries: StateSeries[] = (() => {
+    // Bucket rows → one lookup per stockist, so the chart can read a month
+    // without scanning the whole result for every bar.
+    const seriesFor = new Map<string, Record<string, number>>();
+    for (const r of stockistBuckets) {
+      const key = r.stockistId;
+      let series = seriesFor.get(key);
+      if (!series) {
+        series = {};
+        seriesFor.set(key, series);
+      }
+      series[String(r.bucket)] = Number(r.packets) || 0;
+    }
+
+    const byState = new Map<string, StateSeries>();
+    for (const d of allStockists) {
+      const sid = cnfToState.get(d.cnfId ?? "") ?? "";
+      if (!sid) continue;
+      let group = byState.get(sid);
+      if (!group) {
+        group = { id: sid, name: stateName.get(sid) ?? "—", packets: 0, stockists: [] };
+        byState.set(sid, group);
+      }
+      const packets = packetsPerStockistMap.get(d.id) ?? 0;
+      group.packets += packets;
+      group.stockists.push({
+        id: d.id,
+        name: d.name,
+        packets,
+        byBucket: seriesFor.get(d.id) ?? {},
+      });
+    }
+    return [...byState.values()];
+  })();
 
   return (
     <div>
@@ -693,6 +772,19 @@ export default async function KhqDashboardPage({
           }
         />
         <SalesTrend bars={trendBars} drillable={grain === "month"} />
+      </section>
+
+      {/* The same question as the trend above, asked of the org chart: state →
+          stockist → that stockist's own months. Full width because the third
+          chart is a year of bars. */}
+      <section className="card mb-5 flex flex-col p-5">
+        <CardHead
+          icon="globe"
+          tint="#2E5FA3"
+          title={t("By state and stockist")}
+          sub={`${t("Packets sold")} · ${range.label}`}
+        />
+        <StateBreakdown states={stateSeries} trendBars={trendBars} drillable={grain === "month"} />
       </section>
 
       {/* Four donuts. Counter health joins the other three now that the trend

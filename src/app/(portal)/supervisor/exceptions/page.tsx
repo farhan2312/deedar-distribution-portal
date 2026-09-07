@@ -4,17 +4,18 @@ import { db } from "@/db";
 import { dayLogs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { durationLabel, formatISTDate, formatISTTime, istDateString } from "@/lib/date";
-import { getScopeStockists, getTeamReps, pickStockist } from "@/lib/supervisor/team";
+import { getScopeCnfs, getScopeStockists, getTeamReps, pickCnf, pickStockist } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
+import { CnfPicker } from "../_components/cnf-picker";
 import { DepotPicker } from "../_components/depot-picker";
 import { ExceptionsClient, type ExceptionRow } from "./exceptions-client";
 
 export default async function SupervisorExceptionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ depot?: string }>;
+  searchParams: Promise<{ cnf?: string; depot?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -23,11 +24,13 @@ export default async function SupervisorExceptionsPage({
     return <Notice title={t("Exceptions")}>{t("You don't have Sales Officer access.")}</Notice>;
   }
 
-  const { depot: requestedDepot } = await searchParams;
-  const stockists = await getScopeStockists(user);
+  const { cnf: requestedCnf, depot: requestedDepot } = await searchParams;
+  const cnfs = await getScopeCnfs(user);
+  const cnf = pickCnf(cnfs, requestedCnf);
+  const stockists = await getScopeStockists(user, cnf?.id);
   const depot = pickStockist(stockists, requestedDepot);
 
-  const reps = await getTeamReps(user, depot?.id);
+  const reps = await getTeamReps(user, depot?.id, cnf ? stockists.map((s) => s.id) : undefined);
   const repIds = reps.map((r) => r.id);
   const repName = new Map(reps.map((r) => [r.id, r.name]));
   const today = istDateString();
@@ -56,9 +59,10 @@ export default async function SupervisorExceptionsPage({
   return (
     <div>
       {/* The title is in the top bar; only the picker needs a row of its own. */}
-      {stockists.length > 1 && (
-        <div className="mb-4 flex justify-end">
-          <DepotPicker options={stockists} value={depot?.id ?? "all"} />
+      {(cnfs.length > 0 || stockists.length > 1) && (
+        <div className="mb-4 flex flex-wrap justify-end gap-2">
+          {cnfs.length > 0 && <CnfPicker options={cnfs} value={cnf?.id ?? "all"} />}
+          {stockists.length > 1 && <DepotPicker options={stockists} value={depot?.id ?? "all"} />}
         </div>
       )}
 

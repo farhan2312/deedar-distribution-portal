@@ -4,6 +4,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useT } from "@/lib/i18n/provider";
 
 export type TrendBar = {
+  /** The bucket this bar counts: "2026-08" in year mode, "2026-08-14" in month
+   * mode. Carried so another chart can read the same buckets. */
+  key: string;
   /** X-axis label — a short month name in year mode, a day-of-month in month mode. */
   label: string;
   value: number;
