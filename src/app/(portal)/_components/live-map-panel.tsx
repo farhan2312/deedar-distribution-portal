@@ -26,7 +26,16 @@ const STATE_STYLE = {
   error: { label: "Offline", bg: "rgba(199,38,59,.1)", color: "#C7263B" },
 } as const;
 
-export function LiveMapPanel({ counters, reps }: { counters: CounterPin[]; reps: RepMeta[] }) {
+export function LiveMapPanel({
+  counters,
+  reps,
+  focus,
+}: {
+  counters: CounterPin[];
+  reps: RepMeta[];
+  /** Set by the roster beside the map — see `LiveMap`'s `focus`. */
+  focus?: { kind: "counter" | "rep"; id: string; at: number; point?: { lat: number; lng: number } | null } | null;
+}) {
   const t = useT();
   const { positions, state } = useLivePositions();
   const st = STATE_STYLE[state];
@@ -60,7 +69,7 @@ export function LiveMapPanel({ counters, reps }: { counters: CounterPin[]; reps:
         </span>
       </div>
 
-      <LiveMap counters={counters} reps={reps} positions={positions} />
+      <LiveMap counters={counters} reps={reps} positions={positions} focus={focus} />
 
       <p className="mt-2 text-[12px]" style={{ color: "var(--ink-3)" }}>
         {t("Rep markers update in realtime over WebSocket while they're clocked in.")}{" "}

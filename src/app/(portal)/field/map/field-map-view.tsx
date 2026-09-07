@@ -68,7 +68,7 @@ export function FieldMapView({
   const { position, state } = useOwnPosition();
   // Which counter the map is looking at. The timestamp is what makes clicking
   // the same row twice work — see `focus` on LiveMap.
-  const [focus, setFocus] = useState<{ id: string; at: number } | null>(null);
+  const [focus, setFocus] = useState<{ kind: "counter"; id: string; at: number } | null>(null);
 
   // The map already knows how to draw rep markers from a positions map, so
   // reuse it wholesale instead of writing a second Leaflet integration.
@@ -175,7 +175,7 @@ export function FieldMapView({
                         <button
                           type="button"
                           className="min-w-0 flex-1 cursor-pointer px-3.5 py-2.5 text-left"
-                          onClick={() => setFocus({ id: c.id, at: Date.now() })}
+                          onClick={() => setFocus({ kind: "counter", id: c.id, at: Date.now() })}
                           aria-pressed={looking}
                           title={t("Show on map")}
                         >

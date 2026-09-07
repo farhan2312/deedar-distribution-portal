@@ -1446,6 +1446,7 @@ const HI: Record<string, string> = {
   "Too many attempts. Try again in a few minutes.": "बहुत अधिक प्रयास। कुछ मिनट बाद फिर कोशिश करें।",
   "No user with this mobile number. Check the number, or use Request Access if you're new.": "इस मोबाइल नंबर से कोई उपयोगकर्ता नहीं है। नंबर जाँचें, या नए हैं तो Request Access का उपयोग करें।",
   "You won't see yourself or counter distances on the Live map": "लाइव मैप पर आप न खुद दिखेंगे, न काउंटर की दूरी दिखेगी",
+  "Sold / Pickup": "बिका / उठाया",
 };
 
 export function translate(lang: Lang, key: string): string {

@@ -1,7 +1,9 @@
 import { LegendDot } from "@/components/ui/legend-dot";
 import { getT } from "@/lib/i18n/server";
-import { LiveMapPanel } from "./live-map-panel";
+import { pickupBarColor, soldAgainstPickup } from "@/lib/field/day-stock";
 import { COUNTER_COLORS, REP_LIVE_COLOR } from "./map-colors";
+import { TeamLive } from "./team-live";
+import { STATUS_STYLE, repStatus, type RepStatus, type TeamRepRow } from "./team-status";
 import type { CounterPin, RepMeta } from "./live-map";
 
 /**
@@ -12,37 +14,9 @@ import type { CounterPin, RepMeta } from "./live-map";
  * above it. Pages compute the data; this owns the presentation so the two
  * can't drift.
  */
-export type RepStatus = "done" | "active" | "idle" | "off";
-
-export const STATUS_STYLE: Record<RepStatus, { label: string; bg: string; color: string }> = {
-  done: { label: "Day closed", bg: "rgba(140,180,201,.2)", color: "#3E6B85" },
-  active: { label: "On counter", bg: "rgba(30,158,90,.12)", color: "#1E9E5A" },
-  idle: { label: "Idle", bg: "rgba(224,177,92,.2)", color: "#B25E00" },
-  off: { label: "Not started", bg: "var(--bg-soft)", color: "var(--ink-3)" },
-};
-
-export function repStatus(
-  startAt: Date | null,
-  endAt: Date | null,
-  visitedToday: boolean,
-): RepStatus {
-  if (endAt) return "done";
-  if (!startAt) return "off";
-  return visitedToday ? "active" : "idle";
-}
-
-export type TeamRepRow = {
-  id: string;
-  name: string;
-  status: RepStatus;
-  /** Where they were last seen — area of their most recent visit, or depot. */
-  area: string;
-  visits: number;
-  counters: number;
-  lastLabel: string;
-  onJob: string;
-  started: boolean;
-};
+// Re-exported so both map pages can keep importing everything they need for a
+// roster row from one place.
+export { STATUS_STYLE, repStatus, type RepStatus, type TeamRepRow };
 
 export async function TeamMapView({
   scopeLabel,
@@ -87,76 +61,12 @@ export async function TeamMapView({
         NO height of its own, so the row is sized purely by the map and the
         list scrolls internally instead of stretching the layout.
       */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(200px,240px)_1fr]">
-        <div className="relative h-[300px] lg:h-auto">
-          <div className="card absolute inset-0 flex flex-col overflow-hidden p-0">
-            <div
-              className="flex flex-none items-center gap-2 border-b px-3.5 py-3"
-              style={{ borderColor: "var(--hairline-soft)" }}
-            >
-              <h4 className="text-[13.5px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-                {t("Team today")}
-              </h4>
-              <span
-                className="chip"
-                style={{ background: "var(--bg-soft)", color: "var(--ink-2)", borderColor: "transparent" }}
-              >
-                {repRows.length}
-              </span>
-            </div>
-
-            {repRows.length === 0 ? (
-              <p className="px-3.5 py-4 text-[12.5px]" style={{ color: "var(--ink-3)" }}>{emptyMessage}</p>
-            ) : (
-              <ul className="min-h-0 flex-1 overflow-y-auto">
-                {repRows.map((r) => {
-                  const st = STATUS_STYLE[r.status];
-                  return (
-                    <li
-                      key={r.id}
-                      // A wash on hover, but not the accent edge `list-row`
-                      // adds: these rows go nowhere on click, and the edge is
-                      // this app's way of saying a row is a link.
-                      className="border-b px-3.5 py-2.5 transition-colors last:border-b-0 hover:bg-[var(--bg-soft)]"
-                      style={{ borderColor: "var(--hairline-soft)" }}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span className="h-2 w-2 flex-none rounded-full" style={{ background: st.color }} />
-                        <span
-                          className="truncate text-[13px] font-semibold"
-                          style={{ color: "var(--ink-1)" }}
-                          title={r.name}
-                        >
-                          {r.name}
-                        </span>
-                      </div>
-                      <div className="mt-1 truncate text-[11.5px]" style={{ color: "var(--ink-3)" }} title={r.area}>
-                        {r.area}
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span
-                          className="rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold"
-                          style={{ background: st.bg, color: st.color }}
-                        >
-                          {t(st.label)}
-                        </span>
-                        {/* Spelled out — a bare "0/0" doesn't say what it counts. */}
-                        <span className="text-[11px]" style={{ color: "var(--ink-3)" }}>
-                          {r.visits} {t("visits")} · {r.counters} {t("Counters").toLowerCase()}
-                        </span>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </div>
-
-        <div className="min-w-0">
-          <LiveMapPanel counters={mapCounters} reps={mapReps} />
-        </div>
-      </div>
+      <TeamLive
+        repRows={repRows}
+        mapCounters={mapCounters}
+        mapReps={mapReps}
+        emptyMessage={emptyMessage}
+      />
 
       {/* Live team table */}
       <h6 className="mt-7 mb-3 text-[15px] font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
@@ -166,7 +76,7 @@ export async function TeamMapView({
         <table className="table">
           <thead>
             <tr>
-              {["Salesman", "Status", "Visits", "Last seen", "Counter hrs"].map((h) => (
+              {["Salesman", "Status", "Visits", "Sold / Pickup", "Last seen", "Counter hrs"].map((h) => (
                 <th key={h}>{t(h)}</th>
               ))}
             </tr>
@@ -174,7 +84,7 @@ export async function TeamMapView({
           <tbody>
             {repRows.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ color: "var(--ink-3)" }}>{emptyMessage}</td>
+                <td colSpan={6} style={{ color: "var(--ink-3)" }}>{emptyMessage}</td>
               </tr>
             ) : (
               repRows.map((r) => {
@@ -188,6 +98,14 @@ export async function TeamMapView({
                       </span>
                     </td>
                     <td>{r.visits}</td>
+                    {/* Sold against what they carried out this morning. The
+                        percentage is graded by the same ramp the leaderboards
+                        use, so "good" looks the same wherever it appears. A rep
+                        who has not started has no target to measure against —
+                        that is a different thing from 0%. */}
+                    <td className="whitespace-nowrap tabular-nums">
+                      {r.started ? <SoldAgainst sold={r.sold} pickup={r.pickup} /> : "—"}
+                    </td>
                     <td>{r.lastLabel}</td>
                     <td>{r.started ? r.onJob : "—"}</td>
                   </tr>
@@ -198,6 +116,22 @@ export async function TeamMapView({
         </table>
       </div>
     </div>
+  );
+}
+
+/** "84 / 120 · 70%", the percentage coloured by how the day is going. */
+function SoldAgainst({ sold, pickup }: { sold: number; pickup: number }) {
+  const pct = soldAgainstPickup(sold, pickup);
+  return (
+    <>
+      <b style={{ color: "var(--ink-1)" }}>{sold}</b>
+      <span style={{ color: "var(--ink-3)" }}> / {pickup}</span>
+      {pct != null && (
+        <span className="ml-1.5 font-semibold" style={{ color: pickupBarColor(pct) }}>
+          {pct}%
+        </span>
+      )}
+    </>
   );
 }
 

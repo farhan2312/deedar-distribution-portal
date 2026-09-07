@@ -216,13 +216,23 @@ export function LiveMap({
   counterActionLabel?: string;
   counterActionHrefBase?: string;
   /**
-   * Fly to one counter and open its popup.
+   * Fly to one marker and open its popup.
    *
-   * Carries a timestamp as well as an id because picking the same counter
-   * twice has to work: after panning away, a second click on the row it came
-   * from must bring the map back, and an id alone would look unchanged.
+   * Carries a timestamp as well as an id because picking the same thing twice
+   * has to work: after panning away, a second click on the row it came from
+   * must bring the map back, and an id alone would look unchanged.
+   *
+   * `point` is the fallback for a rep with no live marker — someone who has
+   * not started, or whose phone has not reported yet. Their last visit is the
+   * closest honest answer to "where is he", so the map goes there instead of
+   * ignoring the click.
    */
-  focus?: { id: string; at: number } | null;
+  focus?: {
+    kind: "counter" | "rep";
+    id: string;
+    at: number;
+    point?: { lat: number; lng: number } | null;
+  } | null;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   // The element that goes fullscreen — the host plus the button on top of it,
@@ -304,19 +314,29 @@ export function LiveMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [counters, counterActionLabel, counterActionHrefBase, router]);
 
-  // Fly to a counter when something outside the map asks for it.
+  // Fly to a marker when something outside the map asks for it.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !focus) return;
-    const marker = counterLayerRef.current.get(focus.id);
-    // A counter with no GPS has no marker: nothing to fly to, and silence is
-    // the right answer rather than moving the map somewhere arbitrary.
-    if (!marker) return;
 
-    // Zoom IN to the counter but never back out — a rep who has zoomed in to
-    // read the street should not be yanked out to a fixed level.
-    map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 16), { duration: 0.6 });
-    marker.openPopup();
+    const marker =
+      focus.kind === "rep"
+        ? repLayerRef.current.get(focus.id)?.marker
+        : counterLayerRef.current.get(focus.id);
+
+    // Zoom IN but never back out — someone who has zoomed in to read the
+    // street should not be yanked out to a fixed level.
+    const zoom = Math.max(map.getZoom(), 16);
+
+    if (marker) {
+      map.flyTo(marker.getLatLng(), zoom, { duration: 0.6 });
+      marker.openPopup();
+      return;
+    }
+    // No marker: a rep who is not reporting, or a counter with no GPS. The
+    // caller may know roughly where they were; otherwise stay put rather than
+    // moving the map somewhere arbitrary.
+    if (focus.point) map.flyTo([focus.point.lat, focus.point.lng], zoom, { duration: 0.6 });
   }, [focus]);
 
   // Sync live rep markers whenever positions change.

@@ -115,6 +115,12 @@ export default async function HqLiveMapPage({
       lastLabel: last ? `${last.counterName} · ${formatISTTime(last.visitedAt)}` : "—",
       onJob: durationLabel(log?.startAt ?? null, log?.endAt ?? new Date()),
       started: !!log?.startAt,
+      sold: v?.sold ?? 0,
+      // Straight off the day log: what they carried out this morning.
+      pickup: log?.pickupTotal ?? 0,
+      // Where the map goes when this rep has no live marker to fly to.
+      lastLat: last?.lat != null ? Number(last.lat) : null,
+      lastLng: last?.lng != null ? Number(last.lng) : null,
     };
   });
 

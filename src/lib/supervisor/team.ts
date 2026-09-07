@@ -25,6 +25,8 @@ export type TeamRep = {
 export type VisitsToday = {
   count: number;
   counters: number; // distinct counters visited today
+  /** Packets sold across today's visits — the "sold" half of sold/pickup. */
+  sold: number;
   last: {
     counterId: string;
     counterName: string;
@@ -117,6 +119,7 @@ export async function getVisitsToday(
     .select({
       userId: visits.userId,
       visitedAt: visits.visitedAt,
+      sold: visits.sold,
       counterId: visits.counterId,
       counterName: counters.name,
       area: areas.name,
@@ -136,11 +139,12 @@ export async function getVisitsToday(
   for (const r of rows) {
     let agg = out.get(r.userId);
     if (!agg) {
-      agg = { count: 0, counters: 0, last: null };
+      agg = { count: 0, counters: 0, sold: 0, last: null };
       out.set(r.userId, agg);
       seenCounters.set(r.userId, new Set());
     }
     agg.count += 1;
+    agg.sold += r.sold ?? 0;
     seenCounters.get(r.userId)!.add(r.counterId);
     // rows are newest-first, so the first row per user is the latest visit.
     if (!agg.last) {
