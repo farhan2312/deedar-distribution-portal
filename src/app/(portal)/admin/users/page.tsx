@@ -12,8 +12,10 @@ import { dismissPasswordReset } from "@/lib/admin/actions";
 import { requireAdmin } from "@/lib/admin/guard";
 import {
   fetchAssignmentsFor,
+  fetchDeactivatedUsers,
   fetchSupervisorOptions,
   fetchUsersPage,
+  type DeactivatedUser,
   type UsersListParams,
 } from "@/lib/admin/users-list";
 import { formatISTDate, formatISTTime } from "@/lib/date";
@@ -44,6 +46,12 @@ const ROLE_COLS: { role: AccessRole; label: string }[] = [
   { role: "khq", label: "Kanpur HQ" },
   { role: "admin", label: "Admin" },
 ];
+
+/** Deactivated rows visible before the panel scrolls, and the height of one.
+ * Half a row is left showing, which is what tells a reader there is more below
+ * without a caption saying so. */
+const DEACTIVATED_VISIBLE = 5;
+const DEACTIVATED_ROW_HEIGHT = 53;
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -90,10 +98,13 @@ export default async function AdminUsersPage({
   ]);
   // Users are paged, searched and C&F-filtered in SQL. The join tables are
   // then read for this page's 25 users only, rather than in full.
-  const list = await fetchUsersPage(
-    params,
-    allCnfs.map((c) => c.id),
-  );
+  const cnfIds = allCnfs.map((c) => c.id);
+  const [list, deactivated] = await Promise.all([
+    fetchUsersPage(params, cnfIds),
+    // Same search and C&F filter as the table above: a disabled account has
+    // nowhere else to appear, so the search has to reach it here.
+    fetchDeactivatedUsers(params, cnfIds),
+  ]);
   const pageUsers = list.rows;
   const { areasByUser: userAreaSet, stockistsByUser: userDepotSet } =
     await fetchAssignmentsFor(pageUsers.map((u) => u.id));
@@ -231,31 +242,20 @@ export default async function AdminUsersPage({
                 const roleSet = new Set(u.accessRoles);
                 const areaGroups = u.stockistId ? areaGroupsFor(u.stockistId) : [];
                 return (
-                  <tr
-                    key={u.id}
-                    // Muted via a background tint, NOT row opacity — opacity on
-                    // the row would cap the action buttons' contrast too, which
-                    // is exactly what made the Activate button look dead.
-                    style={u.isActive ? undefined : { background: "var(--bg-soft)" }}
-                  >
+                  // Every row here can sign in — the deactivated ones live in
+                  // their own panel below.
+                  <tr key={u.id}>
                     <td>
                       <div className="flex items-center gap-3">
-                        <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full text-[13px] font-bold" style={{ background: "var(--accent-tint)", color: u.isActive ? "var(--accent)" : "var(--ink-3)" }}>
+                        <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full text-[13px] font-bold" style={{ background: "var(--accent-tint)", color: "var(--accent)" }}>
                           {initials(u.name)}
                         </span>
                         <div>
-                          <div className="font-semibold whitespace-nowrap" style={{ color: u.isActive ? "var(--ink-1)" : "var(--ink-3)" }}>{u.name}</div>
-                          {u.isActive ? (
-                            <span className="mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(30,158,90,.12)", color: "#1E9E5A" }}>
-                              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#1E9E5A" }} />
-                              {t("Active")}
-                            </span>
-                          ) : (
-                            <span className="mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "var(--bg-soft)", color: "var(--ink-3)" }}>
-                              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--ink-3)" }} />
-                              {t("Deactivated")}
-                            </span>
-                          )}
+                          <div className="font-semibold whitespace-nowrap" style={{ color: "var(--ink-1)" }}>{u.name}</div>
+                          <span className="mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(30,158,90,.12)", color: "#1E9E5A" }}>
+                            <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#1E9E5A" }} />
+                            {t("Active")}
+                          </span>
                           {/* Under the name rather than in a column of its own:
                               the table already carries seven role checkboxes,
                               and this is provenance you check occasionally, not
@@ -364,7 +364,7 @@ export default async function AdminUsersPage({
                       <div className="flex items-center justify-center gap-2">
                         {u.id !== admin.id ? (
                           <>
-                            <ActiveToggle userId={u.id} active={u.isActive} />
+                            <ActiveToggle userId={u.id} active />
                             <DeleteUserButton userId={u.id} userName={u.name} />
                           </>
                         ) : (
@@ -382,7 +382,135 @@ export default async function AdminUsersPage({
           </table>
         </div>
       </UsersPanel>
+
+      <DeactivatedPanel
+        rows={deactivated.rows}
+        total={deactivated.total}
+        query={list.filters.q}
+        t={t}
+      />
     </div>
+  );
+}
+
+/**
+ * Accounts that cannot sign in, kept out of the working list above.
+ *
+ * Four columns and one button, because that is the whole of what you do with a
+ * disabled account: see who it was, and let them back in. No role checkboxes,
+ * no mapping, no password reset — none of it applies to someone who cannot
+ * reach a login screen.
+ *
+ * There is deliberately no Delete here. An admin deactivates rather than
+ * deletes precisely BECAUSE the account has history worth keeping, so offering
+ * the irreversible button next to it invites the one mistake this panel exists
+ * to prevent. Deleting is still possible — activate the account and it returns
+ * to the list above, where Delete comes with its impact warning.
+ */
+function DeactivatedPanel({
+  rows,
+  total,
+  query,
+  t,
+}: {
+  rows: DeactivatedUser[];
+  total: number;
+  query: string;
+  t: (k: string) => string;
+}) {
+  // Nothing to say when nobody is deactivated — and when a search matches none
+  // of them, the absence is the answer.
+  if (total === 0) return null;
+
+  const scrolls = rows.length > DEACTIVATED_VISIBLE;
+  const th: React.CSSProperties = {
+    // The tr's background does not travel with a sticky cell, so each header
+    // cell carries its own — otherwise rows scroll through the header.
+    position: "sticky",
+    top: 0,
+    zIndex: 1,
+    background: "var(--bg-soft)",
+  };
+
+  return (
+    <section className="card mt-6 overflow-hidden p-0">
+      <div className="flex flex-wrap items-center gap-3.5 border-b p-5" style={{ borderColor: "var(--hairline-soft)" }}>
+        <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl" style={{ background: "var(--bg-soft)" }}>
+          <UsersIcon className="h-5 w-5" style={{ color: "var(--ink-3)" }} />
+        </span>
+        <div>
+          <div className="text-[17px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+            {t("Deactivated")} ({total})
+          </div>
+          <div className="text-[13px]" style={{ color: "var(--ink-3)" }}>
+            {query
+              ? t("Matching your search. These accounts cannot sign in.")
+              : t("These accounts cannot sign in. Their visits, day logs and counters stay in the system.")}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="overflow-x-auto"
+        style={
+          scrolls
+            ? { maxHeight: DEACTIVATED_ROW_HEIGHT * (DEACTIVATED_VISIBLE + 0.5), overflowY: "auto" }
+            : undefined
+        }
+      >
+        <table className="table">
+          <thead>
+            <tr>
+              <th style={th}>{t("User")}</th>
+              <th style={th}>{t("Mobile")}</th>
+              <th style={th}>{t("Role")}</th>
+              <th style={th} />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((u) => (
+              <tr key={u.id}>
+                <td>
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full text-[12px] font-bold" style={{ background: "var(--bg-soft)", color: "var(--ink-3)" }}>
+                      {initials(u.name)}
+                    </span>
+                    <span className="font-semibold whitespace-nowrap" style={{ color: "var(--ink-2)" }}>{u.name}</span>
+                  </div>
+                </td>
+                <td className="whitespace-nowrap tabular-nums" style={{ color: "var(--ink-2)" }}>{u.phone}</td>
+                <td>
+                  <span className="flex flex-wrap gap-1">
+                    {u.accessRoles.length === 0 ? (
+                      <span style={{ color: "var(--ink-3)" }}>—</span>
+                    ) : (
+                      u.accessRoles.map((role) => (
+                        <span
+                          key={role}
+                          className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                          style={{ background: "var(--bg-soft)", color: "var(--ink-2)", letterSpacing: ".04em" }}
+                        >
+                          {t(ROLE_COLS.find((c) => c.role === role)?.label ?? role)}
+                        </span>
+                      ))
+                    )}
+                  </span>
+                </td>
+                <td className="text-right">
+                  <ActiveToggle userId={u.id} active={false} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {total > rows.length && (
+        <div className="border-t px-5 py-3 text-[12px]" style={{ borderColor: "var(--hairline-soft)", color: "var(--ink-3)" }}>
+          {t("Showing the first")} {rows.length} {t("of")} {total} — {t("search by name or mobile to find a specific account.")}
+        </div>
+      )}
+    </section>
   );
 }
 

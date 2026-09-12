@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, eq, getTableColumns, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { stockists, userAreas, userStockists, users } from "@/db/schema";
+import { stockists, userAreas, userStockists, users, type AccessRole } from "@/db/schema";
 
 /**
  * One page of Users & Access, resolved in SQL.
@@ -19,6 +19,15 @@ import { stockists, userAreas, userStockists, users } from "@/db/schema";
 export const USERS_PAGE_SIZE = 25;
 
 export type UsersListParams = { q?: string; cnf?: string; page?: string };
+
+/** The short row the deactivated panel renders: who they were, and nothing
+ * that only applies to an account which can still sign in. */
+export type DeactivatedUser = {
+  id: string;
+  name: string;
+  phone: string;
+  accessRoles: AccessRole[];
+};
 
 /** A user row plus the name of whoever added them — null for accounts that
  * predate the column, and for a creator who has since been deleted. */
@@ -58,11 +67,16 @@ function inCnf(cnfId: string): SQL {
   )!;
 }
 
-export async function fetchUsersPage(
-  params: UsersListParams,
-  /** Valid C&F ids, so a stale `?cnf=` is dropped rather than hiding everyone. */
-  cnfIds: string[],
-): Promise<UsersPage> {
+/**
+ * The C&F and search predicates, shared by the two lists on the page.
+ *
+ * Both have to answer the same search: the deactivated panel is the only place
+ * a disabled account appears now, so a search that reached only the main table
+ * would report "no such user" for someone who is right there in the database —
+ * and the next thing the admin does is re-add a mobile number that is already
+ * taken, which fails with an error naming nothing.
+ */
+function userFilters(params: UsersListParams, cnfIds: string[]) {
   const cnfId = cnfIds.includes(params.cnf ?? "") ? (params.cnf as string) : null;
   const q = (params.q ?? "").trim();
 
@@ -72,7 +86,54 @@ export async function fetchUsersPage(
     const like = `%${q}%`;
     parts.push(or(ilike(users.name, like), ilike(users.phone, like))!);
   }
-  const filter = parts.length ? and(...parts) : undefined;
+  return { cnfId, q, parts };
+}
+
+/**
+ * Deactivated accounts, for the panel under the main table.
+ *
+ * Not paged: this is a short list by nature, and the panel scrolls inside a
+ * fixed height rather than growing the page. It is capped all the same, so a
+ * company with years of ex-staff cannot turn one render into a thousand rows.
+ */
+export async function fetchDeactivatedUsers(
+  params: UsersListParams,
+  cnfIds: string[],
+): Promise<{ rows: DeactivatedUser[]; total: number }> {
+  const { parts } = userFilters(params, cnfIds);
+  const filter = and(eq(users.isActive, false), ...parts);
+
+  const [[{ n: total }], rows] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(users).where(filter),
+    db
+      .select({
+        id: users.id,
+        name: users.name,
+        phone: users.phone,
+        accessRoles: users.accessRoles,
+      })
+      .from(users)
+      .where(filter)
+      .orderBy(asc(users.name), asc(users.id))
+      .limit(DEACTIVATED_CAP),
+  ]);
+
+  return { rows: rows as DeactivatedUser[], total };
+}
+
+/** Most rows the deactivated panel will render at once. */
+export const DEACTIVATED_CAP = 100;
+
+export async function fetchUsersPage(
+  params: UsersListParams,
+  /** Valid C&F ids, so a stale `?cnf=` is dropped rather than hiding everyone. */
+  cnfIds: string[],
+): Promise<UsersPage> {
+  const { cnfId, q, parts } = userFilters(params, cnfIds);
+  // Deactivated accounts have their own panel. Keeping them here too would
+  // spend slots in a 25-row page on people who cannot sign in, and offer role
+  // checkboxes and a password reset that do nothing for them.
+  const filter = and(eq(users.isActive, true), ...parts);
 
   const [[counts], [{ n: total }]] = await Promise.all([
     db

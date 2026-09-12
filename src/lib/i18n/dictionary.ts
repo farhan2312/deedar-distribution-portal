@@ -1061,6 +1061,13 @@ const HI: Record<string, string> = {
   User: "उपयोगकर्ता",
   Mapping: "मैपिंग",
   Deactivated: "निष्क्रिय",
+  "These accounts cannot sign in. Their visits, day logs and counters stay in the system.":
+    "ये खाते साइन इन नहीं कर सकते। उनकी विज़िट, दैनिक लॉग और काउंटर सिस्टम में बने रहते हैं।",
+  "Matching your search. These accounts cannot sign in.":
+    "आपकी खोज से मेल खाते हैं। ये खाते साइन इन नहीं कर सकते।",
+  "Showing the first": "पहले दिखा रहे हैं",
+  "search by name or mobile to find a specific account.":
+    "किसी खाते को खोजने के लिए नाम या मोबाइल से खोजें।",
   "Full access — every section. No depot / C&F / area needed.":
     "पूरी पहुँच — हर सेक्शन। डिपो / C&F / क्षेत्र की आवश्यकता नहीं।",
   "Depot (Field ISR)": "डिपो (फील्ड ISR)",
