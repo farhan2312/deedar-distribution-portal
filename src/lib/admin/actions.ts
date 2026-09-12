@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, count, eq, inArray, type SQL } from "drizzle-orm";
+import { and, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
   areas,
+  beatAssignments,
+  dayLogs,
   passwordResetRequests,
   cnfs,
   counters,
@@ -57,6 +59,17 @@ export type DeleteImpact = {
   counters: number;
   /** Visit history attached to those counters — the part that can't be re-created. */
   visits: number;
+  /** Packets those visits recorded — what disappears from every sales figure. */
+  packets?: number;
+  /** Deleting a person also takes their own working records with them. */
+  dayLogs?: number;
+  beats?: number;
+  /**
+   * What SURVIVES the delete. Listed because the cascade is not obvious from
+   * the outside: a rep's counters stay, their visits do not, and an admin
+   * about to press Delete deserves both halves of that.
+   */
+  keeps?: { n: number; label: string }[];
 };
 
 export type HierarchyKind = "state" | "cnf" | "depot" | "area";
@@ -992,6 +1005,49 @@ export async function toggleUserArea(userId: string, areaId: string) {
     summary: `${had ? "Removed" : "Assigned"} area ${area.name}`,
   });
   revalidatePath("/admin/users");
+}
+
+/**
+ * What deleting one user destroys, and what it leaves behind.
+ *
+ * Their visits and day logs cascade away with the row — that is sales history
+ * which cannot be re-created, so it is counted here and shown before the
+ * admin commits. Counters they added and reps who report to them survive with
+ * the link cleared, which is worth saying out loud: those are the two things
+ * an admin is most likely to assume go with the person.
+ */
+export async function getUserDeleteImpact(userId: string): Promise<DeleteImpact> {
+  await requireAdmin();
+  const empty: DeleteImpact = { cnfs: 0, stockists: 0, areas: 0, counters: 0, visits: 0 };
+  if (!userId) return empty;
+
+  const [visitRow] = await db
+    .select({
+      n: count(),
+      packets: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
+    })
+    .from(visits)
+    .where(eq(visits.userId, userId));
+
+  const [logs, beats, madeCounters, reports] = await Promise.all([
+    countWhere(dayLogs, eq(dayLogs.userId, userId)),
+    countWhere(beatAssignments, eq(beatAssignments.repUserId, userId)),
+    countWhere(counters, eq(counters.createdByUserId, userId)),
+    countWhere(users, eq(users.reportsToUserId, userId)),
+  ]);
+
+  const keeps: { n: number; label: string }[] = [];
+  if (madeCounters > 0) keeps.push({ n: madeCounters, label: "counters they added" });
+  if (reports > 0) keeps.push({ n: reports, label: "reps reporting to them" });
+
+  return {
+    ...empty,
+    visits: visitRow?.n ?? 0,
+    packets: visitRow?.packets ?? 0,
+    dayLogs: logs,
+    beats,
+    keeps,
+  };
 }
 
 /** Multi-scope: supervisor → which stockists they oversee. */

@@ -239,8 +239,14 @@ function ImpactWarning({ impact, itemLabel }: { impact: DeleteImpact; itemLabel:
   add(impact.stockists, "stockist", "stockists");
   add(impact.areas, "area", "areas");
   add(impact.counters, "counter", "counters");
+  // Only a person has these: their own working record, as opposed to the
+  // territory rows a hierarchy delete takes with it.
+  add(impact.dayLogs ?? 0, "day log", "day logs");
+  add(impact.beats ?? 0, "beat assignment", "beat assignments");
 
-  if (rows.length === 0 && impact.visits === 0) {
+  const keeps = impact.keeps?.filter((k) => k.n > 0) ?? [];
+
+  if (rows.length === 0 && impact.visits === 0 && keeps.length === 0) {
     return (
       <p className="mt-3 text-[12.5px]" style={{ color: "var(--ink-3)" }}>
         Nothing else is attached to this {itemLabel}.
@@ -263,8 +269,17 @@ function ImpactWarning({ impact, itemLabel }: { impact: DeleteImpact; itemLabel:
       )}
       {impact.visits > 0 && (
         <div className="mt-1 text-[12px] font-semibold" style={{ color: "var(--danger)" }}>
-          {impact.visits} visit{impact.visits === 1 ? "" : "s"} of field history will be lost
-          permanently.
+          {impact.visits} visit{impact.visits === 1 ? "" : "s"}
+          {impact.packets ? ` carrying ${impact.packets.toLocaleString("en-IN")} packets` : ""} of
+          field history will be lost permanently.
+        </div>
+      )}
+      {/* The other half of the answer. Without it an admin has to guess
+          whether the counters this person added die with them — they do not. */}
+      {keeps.length > 0 && (
+        <div className="mt-2 border-t pt-2 text-[12px]" style={{ borderColor: "rgba(224,177,92,.4)", color: "var(--ink-2)" }}>
+          <span className="font-semibold">Kept:</span>{" "}
+          {keeps.map((k) => `${k.n} ${k.label}`).join(" · ")}
         </div>
       )}
     </div>

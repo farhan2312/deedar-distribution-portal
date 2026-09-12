@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AccessRole, StockistKind } from "@/db/schema";
 import {
   addUser,
+  getUserDeleteImpact,
   removeUser,
   resetUserPassword,
   setUserActive,
@@ -510,6 +511,7 @@ export function DeleteUserButton({ userId, userName }: { userId: string; userNam
       itemLabel={t("user")}
       itemName={userName}
       trigger="icon"
+      loadImpact={() => getUserDeleteImpact(userId)}
       warning={t("This also permanently deletes all their visits and day logs. To keep their history, deactivate them instead.")}
     />
   );
