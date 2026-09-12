@@ -41,7 +41,15 @@ export async function changeOwnPassword(input: ChangePasswordInput): Promise<Res
   const passwordHash = await hashPassword(input.newPassword);
   await db
     .update(users)
-    .set({ passwordHash, mustChangePassword: false, updatedAt: new Date() })
+    // Editor is the user themselves — the one edit on an account that its
+    // owner makes, and recording it keeps "who touched this last" honest
+    // rather than leaving an admin's name on a change they did not make.
+    .set({
+      passwordHash,
+      mustChangePassword: false,
+      updatedAt: new Date(),
+      updatedByUserId: user.id,
+    })
     .where(eq(users.id, user.id));
 
   return { ok: true };

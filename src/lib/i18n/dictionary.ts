@@ -13,25 +13,12 @@ const HI: Record<string, string> = {
   "Forgot password?": "पासवर्ड भूल गए?",
   Login: "लॉगिन",
   "Logging in…": "लॉगिन हो रहा है…",
-  "New to D-Drive?": "D-Drive पर नए हैं?",
-  "Request Access": "एक्सेस का अनुरोध करें",
   "Something went wrong.": "कुछ गड़बड़ हो गई।",
   "Could not reach the server. Please try again.": "सर्वर से संपर्क नहीं हो सका। कृपया पुनः प्रयास करें।",
 
   // ── Auth: signup ──
-  "REQUEST ACCESS": "एक्सेस का अनुरोध",
-  "Ask Central Admin to set up your account": "अपना खाता बनवाने के लिए सेंट्रल एडमिन से अनुरोध करें",
   "Full name": "पूरा नाम",
-  "Confirm password": "पासवर्ड की पुष्टि करें",
-  "Role you're requesting": "आप जो भूमिका माँग रहे हैं",
-  "Send request": "अनुरोध भेजें",
   "Sending…": "भेजा जा रहा है…",
-  "Request sent!": "अनुरोध भेज दिया गया!",
-  "Central Admin will review it. Once approved, log in with your mobile number and the password you just set.":
-    "सेंट्रल एडमिन इसकी समीक्षा करेंगे। स्वीकृत होने पर, अपने मोबाइल नंबर और अभी सेट किए गए पासवर्ड से लॉगिन करें।",
-  "Back to login →": "लॉगिन पर वापस →",
-  "Already have an account?": "पहले से खाता है?",
-  "Log in": "लॉगिन करें",
 
   // ── Sidebar: section titles ──
   "Field Salesman ISR": "फील्ड सेल्समैन ISR",
@@ -1453,6 +1440,9 @@ const HI: Record<string, string> = {
   "Newest first": "नए पहले",
   "Most visits": "सबसे ज़्यादा विज़िट",
   "Fewest visits": "सबसे कम विज़िट",
+  // Users & Access: who added an account
+  "Added": "जोड़ा गया",
+  "by": "द्वारा",
 };
 
 export function translate(lang: Lang, key: string): string {

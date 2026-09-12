@@ -21,9 +21,10 @@ export const ROLE_LABEL: Record<AccessRole, string> = {
   admin: "Central Admin",
 };
 
-/** Roles a self-service "Request Access" signup may request — admin is
- * granted by an existing admin only, never self-requested. */
-export const SIGNUP_ROLES: AccessRole[] = ["field", "supervisor", "depot", "dealer", "hq", "khq"];
+/** Every role an admin can grant from Users & Access. Admin is deliberately
+ * absent: it is granted by editing an existing admin's roles, not from a
+ * dropdown that anyone reviewing a new user would reach for by accident. */
+export const ASSIGNABLE_ROLES: AccessRole[] = ["field", "supervisor", "depot", "dealer", "hq", "khq"];
 
 /** The most senior role to show as a single label (profile menu, etc.) when a
  * user holds several — admin outranks everything else. */

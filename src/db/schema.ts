@@ -135,6 +135,20 @@ export const users = pgTable("users", {
   // on their next request, but all their data (visits, counters) is preserved.
   // The reversible alternative to deletion — see `setUserActive`.
   isActive: boolean("is_active").notNull().default(true),
+  /** The admin who added this account. Null for the accounts that predate the
+   * column, and for anyone whose creator has since been deleted — "set null"
+   * rather than cascade, because losing the admin must not delete the staff
+   * they hired. */
+  createdByUserId: uuid("created_by_user_id").references((): AnyPgColumn => users.id, {
+    onDelete: "set null",
+  }),
+  /** Who last changed this account — their details, their roles, or their
+   * scope mappings. Recorded for accountability, not shown on screen; the
+   * audit log holds the full history of WHAT changed, this answers "who
+   * touched this account last" without reading it. */
+  updatedByUserId: uuid("updated_by_user_id").references((): AnyPgColumn => users.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -70,7 +70,6 @@ export const INTENTS: Intent[] = [
   { id: "visits_company_today", roles: ["hq", "khq"], group: "Company", label: "How many visits company-wide today?" },
   { id: "declining_counters", roles: ["hq", "khq"], group: "Company", label: "How many declining counters?" },
   { id: "top_depot_today", roles: ["hq", "khq"], group: "Company", label: "Which stockist did the most visits today?" },
-  { id: "pending_access_requests", roles: ["admin"], group: "Company", label: "How many users are awaiting approval?" },
   { id: "open_bug_reports", roles: ["admin"], group: "Company", label: "How many bug reports are open?" },
 ];
 

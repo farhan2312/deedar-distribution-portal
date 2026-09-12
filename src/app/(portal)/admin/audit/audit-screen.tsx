@@ -1163,9 +1163,14 @@ function ActivityTable({
                         <span className="flex items-center gap-2">
                           <Avatar name={r.actorName} />
                           <span className="min-w-0">
-                            <span className="block truncate font-semibold">{r.actorName ?? "—"}</span>
+                            {/* A failed sign-in on a number with no account has
+                                no name to show — the number IS the identity, so
+                                it leads rather than sitting under a dash. */}
+                            <span className="block truncate font-semibold">
+                              {r.actorName ?? r.actorPhone ?? "—"}
+                            </span>
                             <span className="block text-[11px] tabular-nums" style={{ color: "var(--ink-3)" }}>
-                              {r.actorPhone ?? ""}
+                              {r.actorName ? (r.actorPhone ?? "") : ""}
                             </span>
                           </span>
                         </span>

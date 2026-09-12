@@ -1,5 +1,6 @@
 import "server-only";
-import { and, asc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { stockists, userAreas, userStockists, users } from "@/db/schema";
 
@@ -19,8 +20,12 @@ export const USERS_PAGE_SIZE = 25;
 
 export type UsersListParams = { q?: string; cnf?: string; page?: string };
 
+/** A user row plus the name of whoever added them — null for accounts that
+ * predate the column, and for a creator who has since been deleted. */
+export type UserRow = typeof users.$inferSelect & { createdByName: string | null };
+
 export type UsersPage = {
-  rows: (typeof users.$inferSelect)[];
+  rows: UserRow[];
   /** Users matching the filters, across every page. */
   total: number;
   page: number;
@@ -84,9 +89,12 @@ export async function fetchUsersPage(
   const requested = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const page = Math.min(requested, totalPages);
 
+  // Self-join for the creator's name: one query instead of a lookup per row.
+  const creator = alias(users, "created_by");
   const rows = await db
-    .select()
+    .select({ ...getTableColumns(users), createdByName: creator.name })
     .from(users)
+    .leftJoin(creator, eq(creator.id, users.createdByUserId))
     .where(filter)
     // Names are not unique, and LIMIT/OFFSET over a non-total order drops and
     // repeats rows across page boundaries — the id makes the sort total.

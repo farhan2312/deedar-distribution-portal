@@ -2,7 +2,6 @@ import "server-only";
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  accessRequests,
   beatAssignments,
   counters,
   dayLogs,
@@ -484,19 +483,6 @@ async function topDepotToday(user: AnswerUser, t: T): Promise<IntentAnswer> {
   };
 }
 
-async function pendingAccessRequests(_user: AnswerUser, t: T): Promise<IntentAnswer> {
-  const [row] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(accessRequests)
-    .where(eq(accessRequests.status, "pending"));
-
-  const n = row?.n ?? 0;
-  return {
-    text: n === 0 ? t("No pending requests.") : `${n} ${t(n === 1 ? "request is awaiting approval." : "requests are awaiting approval.")}`,
-    link: { href: "/admin/users", label: t("Open Users & access") },
-  };
-}
-
 async function openBugReports(user: AnswerUser, t: T): Promise<IntentAnswer> {
   // Same reader the top-bar bell uses, so the number always agrees with the
   // badge the admin is already looking at.
@@ -534,7 +520,6 @@ const RUNNERS: Record<string, (user: AnswerUser, t: T) => Promise<IntentAnswer>>
   my_stock_low: myStockLow,
   my_counters: myCounters,
   top_depot_today: topDepotToday,
-  pending_access_requests: pendingAccessRequests,
   open_bug_reports: openBugReports,
 };
 

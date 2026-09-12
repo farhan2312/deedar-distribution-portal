@@ -1,8 +1,6 @@
-import { alias } from "drizzle-orm/pg-core";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  accessRequests,
   areas,
   cnfs,
   stockists,
@@ -10,7 +8,7 @@ import {
   users,
   type AccessRole,
 } from "@/db/schema";
-import { approveAccessRequest, dismissPasswordReset, rejectAccessRequest } from "@/lib/admin/actions";
+import { dismissPasswordReset } from "@/lib/admin/actions";
 import { requireAdmin } from "@/lib/admin/guard";
 import {
   fetchAssignmentsFor,
@@ -18,7 +16,6 @@ import {
   fetchUsersPage,
   type UsersListParams,
 } from "@/lib/admin/users-list";
-import { ROLE_LABEL } from "@/lib/auth/roles";
 import { formatISTDate, formatISTTime } from "@/lib/date";
 import { getT } from "@/lib/i18n/server";
 import {
@@ -37,11 +34,7 @@ import {
   UsersPanel,
 } from "./controls";
 
-const REQUEST_STATUS_STYLE: Record<string, { label: string; bg: string; color: string }> = {
-  approved: { label: "Approved", bg: "rgba(30,158,90,.12)", color: "#1E9E5A" },
-  rejected: { label: "Rejected", bg: "rgba(199,38,59,.1)", color: "#C7263B" },
-};
-
+/** The role checkbox columns, in the order they appear in the users table. */
 const ROLE_COLS: { role: AccessRole; label: string }[] = [
   { role: "field", label: "Field ISR" },
   { role: "supervisor", label: "Sales Officer" },
@@ -66,13 +59,11 @@ export default async function AdminUsersPage({
   const t = await getT();
   const params = await searchParams;
 
-  const reviewer = alias(users, "reviewer");
   const [
     allStockists,
     allCnfs,
     allAreas,
     supervisorOptions,
-    requestRows,
     resetRows,
   ] = await Promise.all([
     db.select().from(stockists).orderBy(asc(stockists.name)),
@@ -81,20 +72,6 @@ export default async function AdminUsersPage({
     // The whole roster, not just this page — a rep on page 1 can report to a
     // supervisor on page 3.
     fetchSupervisorOptions(),
-    db
-      .select({
-        id: accessRequests.id,
-        name: accessRequests.name,
-        phone: accessRequests.phone,
-        requestedRole: accessRequests.requestedRole,
-        status: accessRequests.status,
-        createdAt: accessRequests.createdAt,
-        reviewedAt: accessRequests.reviewedAt,
-        reviewerName: reviewer.name,
-      })
-      .from(accessRequests)
-      .leftJoin(reviewer, eq(reviewer.id, accessRequests.reviewedByUserId))
-      .orderBy(desc(accessRequests.createdAt)),
     // Open "I forgot my password" requests. Left-joined to users so a number
     // that matches no account still shows — that is worth an admin's eye, not
     // something to hide.
@@ -120,9 +97,6 @@ export default async function AdminUsersPage({
   const pageUsers = list.rows;
   const { areasByUser: userAreaSet, stockistsByUser: userDepotSet } =
     await fetchAssignmentsFor(pageUsers.map((u) => u.id));
-
-  const pendingRequests = requestRows.filter((r) => r.status === "pending");
-  const decidedRequests = requestRows.filter((r) => r.status !== "pending");
 
   // Depots grouped by their C&F. A user's depot(s) belong to exactly one C&F
   // (a Sales Officer supervises stockists under a single C&F), so the picker is a
@@ -170,13 +144,6 @@ export default async function AdminUsersPage({
           value={list.totalUsers}
           sub={`${list.activeUsers} ${t("active")}`}
         />
-        <StatCard
-          icon={<ClockIcon className="h-5 w-5" style={{ color: pendingRequests.length > 0 ? "#B25E00" : "var(--ink-3)" }} />}
-          iconBg={pendingRequests.length > 0 ? "rgba(224,177,92,.2)" : "var(--bg-soft)"}
-          label={t("Pending requests")}
-          value={pendingRequests.length}
-          sub={t("Awaiting approval")}
-        />
       </div>
 
       {/* Add user + Access requests */}
@@ -186,53 +153,10 @@ export default async function AdminUsersPage({
           <AddUserForm />
         </div>
 
+        {/* Password reset requests — raised from the login page's "Forgot
+            password?" link. There is no email or SMS channel in this app, so an
+            admin actioning it here IS the verification step. */}
         <div className="card p-6">
-          <SectionHead
-            icon={<ClockIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />}
-            title={`${t("Access requests — Pending")} (${pendingRequests.length})`}
-          />
-          <p className="mb-4 text-[12.5px] leading-relaxed" style={{ color: "var(--ink-3)" }}>
-            {t('Submitted via "Request Access" on the login page. Approve to create their account with the requested role and password they set; map depot/C&F/reports-to below afterward.')}
-          </p>
-          {pendingRequests.length === 0 ? (
-            <div className="flex items-center gap-3 rounded-2xl border p-5" style={{ borderColor: "rgba(30,158,90,.25)", background: "rgba(30,158,90,.06)" }}>
-              <span className="flex h-11 w-11 flex-none items-center justify-center rounded-full" style={{ background: "rgba(30,158,90,.15)" }}>
-                <CheckIcon className="h-5 w-5" style={{ color: "#1E9E5A" }} />
-              </span>
-              <div>
-                <div className="text-[14px] font-semibold" style={{ color: "#1E9E5A" }}>{t("No pending requests.")}</div>
-                <div className="text-[13px]" style={{ color: "var(--ink-2)" }}>{t("You're all caught up!")}</div>
-              </div>
-            </div>
-          ) : (
-            <ul className="flex flex-col gap-2.5">
-              {pendingRequests.map((r) => (
-                <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: "var(--hairline)" }}>
-                  <div>
-                    <div className="text-[13.5px] font-semibold" style={{ color: "var(--ink-1)" }}>{r.name}</div>
-                    <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-                      {r.phone} · {t(ROLE_LABEL[r.requestedRole])} · {formatISTDate(r.createdAt)}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 whitespace-nowrap">
-                    <form action={approveAccessRequest.bind(null, r.id)} className="inline">
-                      <button className="btn btn-primary btn-sm" type="submit">{t("Approve")}</button>
-                    </form>
-                    <form action={rejectAccessRequest.bind(null, r.id)} className="inline">
-                      <button className="link link-danger" type="submit">{t("Reject")}</button>
-                    </form>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-
-      {/* Password reset requests — raised from the login page's "Forgot
-          password?" link. There is no email or SMS channel in this app, so an
-          admin actioning it here IS the verification step. */}
-      <div className="card mb-6 p-6">
         <SectionHead
           icon={
             <KeyIcon
@@ -278,50 +202,8 @@ export default async function AdminUsersPage({
             ))}
           </ul>
         )}
+        </div>
       </div>
-
-      {decidedRequests.length > 0 && (
-        <details className="mb-6">
-          <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>
-            {t("Access requests — decided")} ({decidedRequests.length})
-          </summary>
-          <div className="table-wrap mt-3">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>{t("Name")}</th>
-                  <th>{t("Mobile")}</th>
-                  <th>{t("Requested role")}</th>
-                  <th>{t("Status")}</th>
-                  <th>{t("Reviewed by")}</th>
-                  <th>{t("Reviewed")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {decidedRequests.map((r) => {
-                  const st = REQUEST_STATUS_STYLE[r.status];
-                  return (
-                    <tr key={r.id}>
-                      <td className="whitespace-nowrap">{r.name}</td>
-                      <td className="whitespace-nowrap">{r.phone}</td>
-                      <td>{t(ROLE_LABEL[r.requestedRole])}</td>
-                      <td>
-                        <span className="chip" style={{ background: st.bg, color: st.color, borderColor: "transparent" }}>
-                          {t(st.label)}
-                        </span>
-                      </td>
-                      <td>{r.reviewerName ?? "—"}</td>
-                      <td className="whitespace-nowrap">
-                        {r.reviewedAt ? `${formatISTDate(r.reviewedAt)} · ${formatISTTime(r.reviewedAt)}` : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      )}
 
       <UsersPanel
         cnfOptions={cnfOptions}
@@ -374,6 +256,14 @@ export default async function AdminUsersPage({
                               {t("Deactivated")}
                             </span>
                           )}
+                          {/* Under the name rather than in a column of its own:
+                              the table already carries seven role checkboxes,
+                              and this is provenance you check occasionally, not
+                              a field you scan down. */}
+                          <div className="mt-1 text-[11px]" style={{ color: "var(--ink-3)" }}>
+                            {t("Added")} {formatISTDate(u.createdAt)}
+                            {u.createdByName ? ` · ${t("by")} ${u.createdByName}` : ""}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -555,22 +445,6 @@ function KeyIcon({ className, style }: { className?: string; style?: React.CSSPr
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="8" cy="15" r="4" /><path d="m10.8 12.2 8.2-8.2M17 6l2 2M14 9l2 2" />
-    </svg>
-  );
-}
-
-function ClockIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-    </svg>
-  );
-}
-
-function CheckIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 6 9 17l-5-5" />
     </svg>
   );
 }

@@ -154,15 +154,6 @@ export default function LoginPage() {
               <ArrowRightIcon className="h-4 w-4" />
             </button>
           </form>
-
-          <div className="my-4 h-px w-full bg-zinc-100" />
-
-          <p className="text-center text-sm text-zinc-500">
-            {t("New to D-Drive?")}{" "}
-            <Link href="/signup" className="font-semibold text-emerald-700 hover:text-emerald-800">
-              {t("Request Access")}
-            </Link>
-          </p>
         </div>
       </div>
     </div>

@@ -5,7 +5,6 @@ import { and, count, eq, inArray, type SQL } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
-  accessRequests,
   areas,
   passwordResetRequests,
   cnfs,
@@ -468,7 +467,7 @@ export async function deleteArea(id: string): Promise<HierarchyResult> {
 export type AddUserResult = { ok: true; message: string } | { ok: false; message: string };
 
 export async function addUser(formData: FormData): Promise<AddUserResult> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   if (!name || !/^\d{10}$/.test(phone)) {
@@ -480,7 +479,14 @@ export async function addUser(formData: FormData): Promise<AddUserResult> {
   const passwordHash = await hashPassword(phone);
   const inserted = await db
     .insert(users)
-    .values({ name, phone, passwordHash, accessRoles: [], mustChangePassword: true })
+    .values({
+      name,
+      phone,
+      passwordHash,
+      accessRoles: [],
+      mustChangePassword: true,
+      createdByUserId: admin.id,
+    })
     .onConflictDoNothing({ target: users.phone })
     .returning({ id: users.id });
 
@@ -508,7 +514,7 @@ export type UserEditResult = { ok: true; message: string } | { ok: false; messag
 /** Edit a user's name and mobile number. The mobile is also their login id, so
  * changing it changes how they sign in — and it must stay unique. */
 export async function updateUser(userId: string, formData: FormData): Promise<UserEditResult> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   if (!name || !/^\d{10}$/.test(phone)) {
@@ -530,7 +536,10 @@ export async function updateUser(userId: string, formData: FormData): Promise<Us
     .where(eq(users.id, userId))
     .limit(1);
 
-  await db.update(users).set({ name, phone, updatedAt: new Date() }).where(eq(users.id, userId));
+  await db
+    .update(users)
+    .set({ name, phone, updatedAt: new Date(), updatedByUserId: admin.id })
+    .where(eq(users.id, userId));
 
   const changes = diffFields(before ?? {}, { name, phone }, { name: "Name", phone: "Mobile" });
   await recordAudit({
@@ -573,6 +582,7 @@ export async function resetUserPassword(userId: string): Promise<UserEditResult>
       passwordHash: await hashPassword(user.phone),
       mustChangePassword: true,
       updatedAt: new Date(),
+      updatedByUserId: admin.id,
     })
     .where(eq(users.id, user.id));
 
@@ -655,7 +665,7 @@ export async function setUserActive(userId: string, active: boolean) {
     .limit(1);
   await db
     .update(users)
-    .set({ isActive: active, updatedAt: new Date() })
+    .set({ isActive: active, updatedAt: new Date(), updatedByUserId: admin.id })
     .where(eq(users.id, userId));
   await recordAudit({
     action: "update",
@@ -669,7 +679,7 @@ export async function setUserActive(userId: string, active: boolean) {
 }
 
 export async function toggleAccessRole(userId: string, role: AccessRole) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) return;
 
@@ -680,7 +690,7 @@ export async function toggleAccessRole(userId: string, role: AccessRole) {
 
   await db
     .update(users)
-    .set({ accessRoles: nextRoles, updatedAt: new Date() })
+    .set({ accessRoles: nextRoles, updatedAt: new Date(), updatedByUserId: admin.id })
     .where(eq(users.id, userId));
 
   if (isActive) {
@@ -716,6 +726,20 @@ export async function toggleAccessRole(userId: string, role: AccessRole) {
 }
 
 /**
+ * Mark who last edited this account.
+ *
+ * The mapping actions below write only to `user_areas` / `user_stockists`,
+ * so without this an admin could change someone's whole territory and the
+ * users row would still name whoever edited it last week.
+ */
+async function stampEditor(userId: string, adminId: string) {
+  await db
+    .update(users)
+    .set({ updatedAt: new Date(), updatedByUserId: adminId })
+    .where(eq(users.id, userId));
+}
+
+/**
  * Name and current mapping for an audit line about a user.
  *
  * Read before the write, because the whole point of the row is the "from"
@@ -739,7 +763,7 @@ async function stockistName(id: string | null): Promise<string | null> {
 
 /** Single-scope: field, depot and dealer share one stockist per user. */
 export async function setUserDepot(userId: string, formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const stockistId = String(formData.get("depotId") ?? "");
   if (!stockistId) return;
 
@@ -760,7 +784,10 @@ export async function setUserDepot(userId: string, formData: FormData) {
     stockistName(stockistId),
   ]);
 
-  await db.update(users).set({ stockistId, updatedAt: new Date() }).where(eq(users.id, userId));
+  await db
+    .update(users)
+    .set({ stockistId, updatedAt: new Date(), updatedByUserId: admin.id })
+    .where(eq(users.id, userId));
   // Stockist genuinely changed — the previously-picked areas belonged to the
   // old one and are not valid under the new one.
   await db.delete(userAreas).where(eq(userAreas.userId, userId));
@@ -780,7 +807,7 @@ export async function setUserDepot(userId: string, formData: FormData) {
 
 /** Single-scope: hq → which C&F HQ this rep belongs to. */
 export async function setUserCnf(userId: string, formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const cnfId = String(formData.get("cnfId") ?? "");
   if (!cnfId) return;
 
@@ -797,7 +824,10 @@ export async function setUserCnf(userId: string, formData: FormData) {
     .where(inArray(cnfs.id, [cnfId, before?.cnfId].filter(Boolean) as string[]));
   const nameOf = (id: string | null | undefined) => names.find((c) => c.id === id)?.name ?? null;
 
-  await db.update(users).set({ cnfId, updatedAt: new Date() }).where(eq(users.id, userId));
+  await db
+    .update(users)
+    .set({ cnfId, updatedAt: new Date(), updatedByUserId: admin.id })
+    .where(eq(users.id, userId));
   await recordAudit({
     action: "update",
     module: "access",
@@ -811,7 +841,7 @@ export async function setUserCnf(userId: string, formData: FormData) {
 
 /** Field rep → which Supervisor (SO) they report to. */
 export async function setUserReportsTo(userId: string, formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const reportsToUserId = String(formData.get("reportsToUserId") ?? "") || null;
 
   const [before] = await db
@@ -829,7 +859,7 @@ export async function setUserReportsTo(userId: string, formData: FormData) {
 
   await db
     .update(users)
-    .set({ reportsToUserId, updatedAt: new Date() })
+    .set({ reportsToUserId, updatedAt: new Date(), updatedByUserId: admin.id })
     .where(eq(users.id, userId));
   await recordAudit({
     action: "update",
@@ -859,7 +889,7 @@ export async function setUserAreasForStockist(
   stockistId: string,
   select: boolean,
 ) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const [rep] = await db
     .select({ stockistId: users.stockistId })
@@ -897,6 +927,7 @@ export async function setUserAreasForStockist(
       .where(and(eq(userAreas.userId, userId), inArray(userAreas.areaId, ids)));
   }
 
+  await stampEditor(userId, admin.id);
   const [target, owner] = await Promise.all([actorTarget(userId), stockistName(stockistId)]);
   await recordAudit({
     action: "update",
@@ -909,7 +940,7 @@ export async function setUserAreasForStockist(
 }
 
 export async function toggleUserArea(userId: string, areaId: string) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   // The area has to be inside the rep's stockist family: their own stockist,
   // or — when that is a dealer — one of its sub-dealers. Checked here and not
@@ -951,6 +982,7 @@ export async function toggleUserArea(userId: string, areaId: string) {
     await db.insert(userAreas).values({ userId, areaId });
   }
 
+  await stampEditor(userId, admin.id);
   const target = await actorTarget(userId);
   await recordAudit({
     action: "update",
@@ -962,79 +994,9 @@ export async function toggleUserArea(userId: string, areaId: string) {
   revalidatePath("/admin/users");
 }
 
-// ── Access requests (public "Request Access" signup) ────────────────────
-
-/** Approve a pending request — creates the real `users` row and hands them
- * the requested role. If the phone got taken between request and review
- * (e.g. an admin added them manually), the request is auto-rejected instead. */
-export async function approveAccessRequest(requestId: string) {
-  const admin = await requireAdmin();
-  const [request] = await db
-    .select()
-    .from(accessRequests)
-    .where(and(eq(accessRequests.id, requestId), eq(accessRequests.status, "pending")))
-    .limit(1);
-  if (!request) return;
-
-  const inserted = await db
-    .insert(users)
-    .values({
-      name: request.name,
-      phone: request.phone,
-      passwordHash: request.passwordHash,
-      accessRoles: [request.requestedRole],
-    })
-    .onConflictDoNothing({ target: users.phone })
-    .returning({ id: users.id });
-
-  const approved = inserted.length > 0;
-  await db
-    .update(accessRequests)
-    .set({
-      status: approved ? "approved" : "rejected",
-      reviewedByUserId: admin.id,
-      reviewedAt: new Date(),
-    })
-    .where(eq(accessRequests.id, requestId));
-
-  await recordAudit({
-    action: approved ? "approve" : "reject",
-    module: "access",
-    // The new account when one was made, so the log links to the thing that
-    // now exists rather than the request that is finished with.
-    entityId: approved ? inserted[0].id : requestId,
-    entityLabel: request.name,
-    summary: approved
-      ? `Approved access for ${request.name} (${request.phone}) as ${request.requestedRole}`
-      : `Could not approve ${request.name} — mobile ${request.phone} already has an account`,
-  });
-  revalidatePath("/admin/users");
-}
-
-export async function rejectAccessRequest(requestId: string) {
-  const admin = await requireAdmin();
-  const [request] = await db
-    .select({ name: accessRequests.name, phone: accessRequests.phone })
-    .from(accessRequests)
-    .where(eq(accessRequests.id, requestId))
-    .limit(1);
-  await db
-    .update(accessRequests)
-    .set({ status: "rejected", reviewedByUserId: admin.id, reviewedAt: new Date() })
-    .where(and(eq(accessRequests.id, requestId), eq(accessRequests.status, "pending")));
-  await recordAudit({
-    action: "reject",
-    module: "access",
-    entityId: requestId,
-    entityLabel: request?.name ?? null,
-    summary: `Rejected access request from ${request?.name ?? "unknown"} (${request?.phone ?? "?"})`,
-  });
-  revalidatePath("/admin/users");
-}
-
 /** Multi-scope: supervisor → which stockists they oversee. */
 export async function toggleUserDepot(userId: string, stockistId: string) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const existing = await db
     .select()
     .from(userStockists)
@@ -1049,6 +1011,7 @@ export async function toggleUserDepot(userId: string, stockistId: string) {
     await db.insert(userStockists).values({ userId, stockistId });
   }
 
+  await stampEditor(userId, admin.id);
   const [target, owner] = await Promise.all([actorTarget(userId), stockistName(stockistId)]);
   await recordAudit({
     action: "update",
