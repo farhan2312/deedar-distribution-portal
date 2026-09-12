@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { passwordResetRequests, users } from "@/db/schema";
+import { recordAudit } from "@/lib/audit/record";
 import { istDateString } from "@/lib/date";
 import { checkRateLimit, clientIp } from "@/lib/security/rate-limit";
 
@@ -82,7 +83,7 @@ export async function requestPasswordReset(phone: string): Promise<ResetRequestR
   }
 
   const [user] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, name: users.name })
     .from(users)
     .where(eq(users.phone, digits))
     .limit(1);
@@ -94,7 +95,7 @@ export async function requestPasswordReset(phone: string): Promise<ResetRequestR
   if (!user) {
     return {
       ok: false,
-      error: "No user with this mobile number. Check the number, or use Request Access if you're new.",
+      error: "No user with this mobile number. Check the number, or ask your admin to add you.",
     };
   }
 
@@ -115,6 +116,19 @@ export async function requestPasswordReset(phone: string): Promise<ResetRequestR
       .values({ phone: digits, userId: user.id })
       // Covers the race the check above can lose.
       .onConflictDoNothing();
+
+    // No session exists here, so the actor is named from the account the
+    // number belongs to — same shape as a failed login. Only a request that
+    // actually queued is logged: a repeat while one is still pending changes
+    // nothing, and the log should not imply that it did.
+    await recordAudit({
+      action: "password_reset",
+      module: "auth",
+      entityId: user.id,
+      entityLabel: user.name,
+      summary: "Requested a password reset",
+      actor: { id: user.id, name: user.name, phone: digits },
+    });
   }
 
   return { ok: true };

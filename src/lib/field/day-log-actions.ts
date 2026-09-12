@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { dayLogs } from "@/db/schema";
+import { recordAudit } from "@/lib/audit/record";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { istDateString } from "@/lib/date";
@@ -46,16 +47,27 @@ export async function startDay(deviceId?: string, pickup?: SegQty) {
 
   if (existing?.startAt) return { ok: true as const }; // already started, owner unchanged
 
+  let logId = existing?.id ?? null;
   if (existing) {
     await db
       .update(dayLogs)
       .set({ startAt: now, trackingDeviceId, pickupItems, pickupTotal, updatedAt: now })
       .where(eq(dayLogs.id, existing.id));
   } else {
-    await db
+    const [created] = await db
       .insert(dayLogs)
-      .values({ userId: user.id, logDate, startAt: now, trackingDeviceId, pickupItems, pickupTotal });
+      .values({ userId: user.id, logDate, startAt: now, trackingDeviceId, pickupItems, pickupTotal })
+      .returning({ id: dayLogs.id });
+    logId = created?.id ?? null;
   }
+
+  await recordAudit({
+    action: "create",
+    module: "daylogs",
+    entityId: logId,
+    entityLabel: logDate,
+    summary: pickupTotal > 0 ? `Started the day — picked up ${pickupTotal} packets` : "Started the day",
+  });
 
   revalidatePath("/field/day-log");
   revalidatePath("/field/beat");
@@ -90,6 +102,15 @@ export async function endDay(remaining?: SegQty) {
       updatedAt: now,
     })
     .where(eq(dayLogs.id, existing.id));
+
+  const returned = totalOf(remainingQty);
+  await recordAudit({
+    action: "update",
+    module: "daylogs",
+    entityId: existing.id,
+    entityLabel: logDate,
+    summary: returned > 0 ? `Ended the day — ${returned} packets left over` : "Ended the day",
+  });
 
   revalidatePath("/field/day-log");
   return { ok: true as const };

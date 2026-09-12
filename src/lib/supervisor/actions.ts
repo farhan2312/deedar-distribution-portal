@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, beatAssignments, counters, dayLogs, stockists, users } from "@/db/schema";
+import { recordAudit } from "@/lib/audit/record";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { formatISTTime } from "@/lib/date";
 import type { DuplicateMatch } from "@/lib/field/actions";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { GPS_REQUIRED, parseCoords } from "@/lib/field/gps";
@@ -38,7 +40,7 @@ export async function assignBeat(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(beatDate)) return { ok: false, error: "Invalid date." };
 
   const [rep] = await db
-    .select({ id: users.id, stockistId: users.stockistId, accessRoles: users.accessRoles })
+    .select({ id: users.id, name: users.name, stockistId: users.stockistId, accessRoles: users.accessRoles })
     .from(users)
     .where(eq(users.id, repUserId))
     .limit(1);
@@ -67,10 +69,24 @@ export async function assignBeat(
     return { ok: false, error: "All counters must be in the rep's own depot." };
   }
 
-  await db
+  // What comes back is what was actually new: re-submitting a beat that is
+  // already assigned conflicts away to nothing, and logging "assigned 12
+  // counters" for a no-op would be a lie in the record.
+  const added = await db
     .insert(beatAssignments)
     .values(counterIds.map((counterId) => ({ repUserId, counterId, assignedByUserId: user.id, beatDate })))
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: beatAssignments.id });
+
+  if (added.length > 0) {
+    await recordAudit({
+      action: "create",
+      module: "beats",
+      entityId: rep.id,
+      entityLabel: rep.name,
+      summary: `Assigned ${added.length} counter${added.length === 1 ? "" : "s"} to ${rep.name} for ${beatDate}`,
+    });
+  }
 
   revalidatePath("/supervisor/assign-beat");
   revalidatePath("/field/beat");
@@ -99,7 +115,7 @@ export async function forceEndDay(
   if (Number.isNaN(endAt.getTime())) return { ok: false, error: "Invalid end time." };
 
   const [rep] = await db
-    .select({ id: users.id, reportsToUserId: users.reportsToUserId })
+    .select({ id: users.id, name: users.name, reportsToUserId: users.reportsToUserId })
     .from(users)
     .where(eq(users.id, repUserId))
     .limit(1);
@@ -127,6 +143,14 @@ export async function forceEndDay(
     .update(dayLogs)
     .set({ endAt, endForced: true, endedByUserId: user.id, updatedAt: new Date() })
     .where(eq(dayLogs.id, log.id));
+
+  await recordAudit({
+    action: "update",
+    module: "daylogs",
+    entityId: log.id,
+    entityLabel: rep.name,
+    summary: `Force-ended the day for ${rep.name} on ${logDate}, at ${formatISTTime(endAt)}`,
+  });
 
   revalidatePath("/supervisor/exceptions");
   revalidatePath("/supervisor/day-log");
@@ -229,6 +253,14 @@ export async function createCounterBySupervisor(
       createdByUserId: user.id,
     })
     .returning({ id: counters.id });
+
+  await recordAudit({
+    action: "create",
+    module: "counters",
+    entityId: created.id,
+    entityLabel: input.name.trim(),
+    summary: `Added counter ${input.name.trim()} (${counterTypeLabel(input.type, typeOther || null)}) in ${area.name}, ${depot.name}`,
+  });
 
   revalidatePath("/supervisor/assign-beat");
   return { ok: true, counterId: created.id };

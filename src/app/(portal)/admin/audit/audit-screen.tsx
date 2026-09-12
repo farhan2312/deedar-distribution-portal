@@ -39,6 +39,11 @@ const MODULE_LABEL: Record<AuditModule, string> = {
   stockists: "Stockists",
   areas: "Areas",
   bugs: "Bugs",
+  counters: "Counters",
+  visits: "Visits",
+  daylogs: "Day Logs",
+  beats: "Beats",
+  stock: "Stock",
 };
 
 /** Weekday rows, Monday first — a working week reads better than Sun–Sat.
@@ -62,6 +67,16 @@ export type UsageRow = {
   actions: number;
   activeMinutes: number;
   lastAt: Date;
+};
+
+/** One page of usage rows. `users` and `totalMinutes` cover the whole window,
+ * not this page — the caption describes the period, not the slice. */
+export type UsagePage = {
+  rows: UsageRow[];
+  users: number;
+  totalMinutes: number;
+  page: number;
+  totalPages: number;
 };
 
 export type AuditData = {
@@ -100,7 +115,7 @@ export function AuditScreen({
   filters: AuditFilters;
   actors: { id: string; name: string }[];
   data: AuditData;
-  usage: UsageRow[];
+  usage: UsagePage;
   emptyHint: string;
 }) {
   const t = useT();
@@ -225,7 +240,7 @@ export function AuditScreen({
       ) : (
         <>
           {shown.tab === "overall" && <OverallTab data={data} t={t} />}
-          {shown.tab === "usage" && <UsageTab rows={usage} t={t} />}
+          {shown.tab === "usage" && <UsageTab usage={usage} t={t} />}
 
           {shown.tab !== "overall" && shown.tab !== "usage" && (
             <>
@@ -288,12 +303,15 @@ function OverallTab({ data, t }: { data: AuditData; t: (k: string) => string }) 
   );
 }
 
-function UsageTab({ rows, t }: { rows: UsageRow[]; t: (k: string) => string }) {
-  const totalMinutes = rows.reduce((s, r) => s + r.activeMinutes, 0);
+function UsageTab({ usage, t }: { usage: UsagePage; t: (k: string) => string }) {
+  // Counted across the window by Postgres, not summed from the rows on screen:
+  // the table shows one page, and a caption that added up only the visible
+  // fifty would quietly contradict the page it sits above.
+  const { rows, users, totalMinutes } = usage;
   return (
     <>
       <p className="mb-3 text-[12.5px]" style={{ color: "var(--ink-3)" }}>
-        {rows.length} {t(rows.length === 1 ? "user active" : "users active")} · {hhmm(totalMinutes)}{" "}
+        {users} {t(users === 1 ? "user active" : "users active")} · {hhmm(totalMinutes)}{" "}
         {t("total active time")} ·{" "}
         <span title={t("First to last action each day — this app records what people do, not a heartbeat.")}>
           {t("an approximation, not a stopwatch")}
@@ -354,6 +372,11 @@ function UsageTab({ rows, t }: { rows: UsageRow[]; t: (k: string) => string }) {
               ))}
             </tbody>
           </table>
+          {usage.totalPages > 1 && (
+            <div className="px-5 py-3">
+              <UrlPagination page={usage.page} totalPages={usage.totalPages} param="page" />
+            </div>
+          )}
         </div>
       )}
     </>

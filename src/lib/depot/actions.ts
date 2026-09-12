@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   counters,
+  stockists,
   stockistStock,
   stockistStockDays,
   productSegmentEnum,
@@ -14,8 +15,30 @@ import {
   type ProductSegment,
   type StockMovementType,
 } from "@/db/schema";
+import { recordAudit } from "@/lib/audit/record";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { istDateString } from "@/lib/date";
+
+/** How each movement reads in the audit log — the same wording as the Stock
+ * screen, so the log and the screen describe one event the same way. */
+const MOVEMENT_LABEL: Record<StockMovementType, string> = {
+  inward: "Inward from C&F",
+  outward_retail: "Outward — Retail",
+  outward_wholesale: "Outward — Wholesale",
+  returns: "Returns / damage",
+  manual: "Manual adjustment",
+};
+
+/** The depot name for the log line. Read rather than taken from the session
+ * because admin acts on depots it does not belong to. */
+async function depotName(stockistId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ name: stockists.name })
+    .from(stockists)
+    .where(eq(stockists.id, stockistId))
+    .limit(1);
+  return row?.name ?? null;
+}
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -58,8 +81,9 @@ async function guard(stockistId: string): Promise<GuardResult> {
   return { user };
 }
 
-/** Rewrite today's closing balance from the live on-hand figures. */
-async function stampClosingBalance(stockistId: string) {
+/** Rewrite today's closing balance from the live on-hand figures. Returns the
+ * new total, which the day-close log line reports. */
+async function stampClosingBalance(stockistId: string): Promise<number> {
   const rows = await db
     .select({ segment: stockistStock.segment, onHand: stockistStock.onHand })
     .from(stockistStock)
@@ -80,6 +104,8 @@ async function stampClosingBalance(stockistId: string) {
       target: [stockistStockDays.stockistId, stockistStockDays.stockDate],
       set: { closing, total, updatedAt: new Date() },
     });
+
+  return total;
 }
 
 /**
@@ -177,6 +203,15 @@ export async function recordMovement(input: RecordMovementInput): Promise<Result
   // History is logged automatically at each movement, per the prototype.
   await stampClosingBalance(input.stockistId);
 
+  const depot = await depotName(input.stockistId);
+  await recordAudit({
+    action: "create",
+    module: "stock",
+    entityId: input.stockistId,
+    entityLabel: depot,
+    summary: `${MOVEMENT_LABEL[input.type]}: ${qty > 0 ? "+" : ""}${qty} ${input.segment}${depot ? ` at ${depot}` : ""}`,
+  });
+
   revalidatePath("/depot/stock");
   revalidatePath("/depot/counters");
   return { ok: true };
@@ -188,13 +223,22 @@ export async function closeStockDay(stockistId: string): Promise<Result> {
   if ("error" in g) return { ok: false, error: g.error };
   const { user } = g;
 
-  await stampClosingBalance(stockistId);
+  const closingTotal = await stampClosingBalance(stockistId);
 
   const stockDate = istDateString();
   await db
     .update(stockistStockDays)
     .set({ closed: true, closedByUserId: user.id, closedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(stockistStockDays.stockistId, stockistId), eq(stockistStockDays.stockDate, stockDate)));
+
+  const depot = await depotName(stockistId);
+  await recordAudit({
+    action: "update",
+    module: "stock",
+    entityId: stockistId,
+    entityLabel: depot,
+    summary: `Closed the stock day ${stockDate}${depot ? ` for ${depot}` : ""} — ${closingTotal} packets on hand`,
+  });
 
   revalidatePath("/depot/stock");
   return { ok: true };

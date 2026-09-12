@@ -55,14 +55,25 @@ export async function submitBugReport(input: BugReportInput): Promise<Result> {
     }
   }
 
-  await db.insert(bugReports).values({
-    type: input.type,
-    title,
-    description: input.description.trim() || null,
-    severity: input.severity,
-    page: input.page.trim().slice(0, 300) || null,
-    screenshot,
-    reportedByUserId: user.id,
+  const [created] = await db
+    .insert(bugReports)
+    .values({
+      type: input.type,
+      title,
+      description: input.description.trim() || null,
+      severity: input.severity,
+      page: input.page.trim().slice(0, 300) || null,
+      screenshot,
+      reportedByUserId: user.id,
+    })
+    .returning({ id: bugReports.id });
+
+  await recordAudit({
+    action: "create",
+    module: "bugs",
+    entityId: created?.id,
+    entityLabel: title,
+    summary: `Reported ${input.type === "bug" ? "a bug" : "a feature request"} (${input.severity}): ${title}`,
   });
 
   revalidatePath("/admin/bugs");

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, counters, stockists } from "@/db/schema";
+import { recordAudit, diffFields } from "@/lib/audit/record";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
@@ -133,6 +134,14 @@ export async function createCounter(input: NewCounterInput) {
     })
     .returning({ id: counters.id });
 
+  await recordAudit({
+    action: "create",
+    module: "counters",
+    entityId: created.id,
+    entityLabel: input.name.trim(),
+    summary: `Added counter ${input.name.trim()} (${counterTypeLabel(input.type, typeOther || null)}) in ${area.name}, ${depot.name}`,
+  });
+
   return { ok: true as const, counterId: created.id };
 }
 
@@ -154,9 +163,23 @@ export async function updateCounter(counterId: string, input: EditCounterInput) 
   }
   if (!input.name.trim()) return { ok: false as const, error: "Name is required." };
 
+  // The pre-edit values come back with the permission check rather than in a
+  // second query: the audit row needs them, and re-reading afterwards would
+  // read what was just written.
   const [counter] = await db
-    .select({ id: counters.id, stockistId: counters.stockistId, type: counters.type })
+    .select({
+      id: counters.id,
+      stockistId: counters.stockistId,
+      type: counters.type,
+      typeOther: counters.typeOther,
+      name: counters.name,
+      address: counters.address,
+      areaName: areas.name,
+      lat: counters.lat,
+      lng: counters.lng,
+    })
     .from(counters)
+    .innerJoin(areas, eq(areas.id, counters.areaId))
     .where(eq(counters.id, counterId))
     .limit(1);
   if (!counter) return { ok: false as const, error: "Counter not found." };
@@ -200,9 +223,68 @@ export async function updateCounter(counterId: string, input: EditCounterInput) 
     })
     .where(eq(counters.id, counterId));
 
+  await recordAudit({
+    action: "update",
+    module: "counters",
+    entityId: counterId,
+    entityLabel: input.name.trim(),
+    summary: `Edited counter ${input.name.trim()}`,
+    changes: counterChanges(counter, { ...input, areaName: area.name, typeOther, coords }),
+  });
+
   revalidatePath(`/field/counter/${counterId}`);
   revalidatePath("/field/beat");
   return { ok: true as const };
+}
+
+/**
+ * What actually moved in a counter edit.
+ *
+ * Coordinates are compared at five decimals — about a metre. A rep editing a
+ * counter re-sends a fresh GPS fix every time, so comparing them raw would
+ * report "location changed" on every save and teach anyone reading the log to
+ * ignore that line.
+ */
+function counterChanges(
+  before: {
+    name: string;
+    address: string | null;
+    areaName: string;
+    type: string;
+    typeOther: string | null;
+    lat: string | null;
+    lng: string | null;
+  },
+  after: {
+    name: string;
+    address: string;
+    areaName: string;
+    type: NewCounterInput["type"];
+    typeOther?: string;
+    coords: { lat: string; lng: string };
+  },
+) {
+  // Numeric columns come back as strings, and so does a freshly parsed fix —
+  // both go through Number() before rounding so the comparison is arithmetic.
+  const place = (lat: string | null, lng: string | null) =>
+    lat == null || lng == null ? null : `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
+  return diffFields(
+    {
+      name: before.name,
+      address: before.address,
+      area: before.areaName,
+      type: counterTypeLabel(before.type, before.typeOther),
+      gps: place(before.lat, before.lng),
+    },
+    {
+      name: after.name.trim(),
+      address: after.address.trim() || null,
+      area: after.areaName,
+      type: counterTypeLabel(after.type, after.typeOther || null),
+      gps: place(after.coords.lat, after.coords.lng),
+    },
+    { name: "Name", address: "Address", area: "Area", type: "Type", gps: "Location" },
+  );
 }
 
 // ── Visits ────────────────────────────────────────────────────────────

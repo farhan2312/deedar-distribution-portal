@@ -10,6 +10,7 @@ import {
   type ProductSegment,
   type VisitItem,
 } from "@/db/schema";
+import { recordAudit, diffFields } from "@/lib/audit/record";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { istDateString } from "@/lib/date";
@@ -92,7 +93,10 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
   if (err) return { ok: false, error: err };
 
   const [counter] = await db
-    .select({ id: counters.id, stockistId: counters.stockistId })
+    // The name is read here so the audit row can say which shop was visited
+    // without a second query, and keeps reading right if the counter is later
+    // renamed or deleted.
+    .select({ id: counters.id, stockistId: counters.stockistId, name: counters.name })
     .from(counters)
     .where(eq(counters.id, counterId))
     .limit(1);
@@ -170,6 +174,14 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
 
   await db.update(counters).set({ lastVisitAt: now }).where(eq(counters.id, counter.id));
 
+  await recordAudit({
+    action: "create",
+    module: "visits",
+    entityId: v.id,
+    entityLabel: counter.name,
+    summary: `Visited ${counter.name} — sold ${totalSold}, stock ${totalStock}`,
+  });
+
   revalidatePath("/field/beat");
   revalidatePath(`/field/counter/${counterId}`);
   return { ok: true, visitId: v.id };
@@ -183,8 +195,22 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
   if (err) return { ok: false, error: err };
 
   const [v] = await db
-    .select({ id: visits.id, userId: visits.userId, counterId: visits.counterId, visitedAt: visits.visitedAt })
+    .select({
+      id: visits.id,
+      userId: visits.userId,
+      counterId: visits.counterId,
+      visitedAt: visits.visitedAt,
+      counterName: counters.name,
+      // Pre-edit figures, for the change list on the audit row.
+      sold: visits.sold,
+      stock: visits.stock,
+      rank: visits.rank,
+      competitor: visits.competitor,
+      competitorBrand: visits.competitorBrand,
+      remarks: visits.remarks,
+    })
     .from(visits)
+    .innerJoin(counters, eq(counters.id, visits.counterId))
     .where(eq(visits.id, visitId))
     .limit(1);
   if (!v) return { ok: false, error: "Visit not found." };
@@ -216,6 +242,40 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
       updatedAt: new Date(),
     })
     .where(eq(visits.id, visitId));
+
+  await recordAudit({
+    action: "update",
+    module: "visits",
+    entityId: visitId,
+    entityLabel: v.counterName,
+    summary: `Edited the visit to ${v.counterName}`,
+    changes: diffFields(
+      {
+        sold: v.sold,
+        stock: v.stock,
+        rank: v.rank,
+        competitor: v.competitor,
+        competitorBrand: v.competitorBrand,
+        remarks: v.remarks,
+      },
+      {
+        sold: totalSold,
+        stock: totalStock,
+        rank: input.rank,
+        competitor: input.competitor,
+        competitorBrand,
+        remarks: input.remarks.trim() || null,
+      },
+      {
+        sold: "Sold",
+        stock: "Stock",
+        rank: "Rank",
+        competitor: "Competitor",
+        competitorBrand: "Competitor brand",
+        remarks: "Remarks",
+      },
+    ),
+  });
 
   revalidatePath(`/field/counter/${v.counterId}`);
   return { ok: true, visitId };

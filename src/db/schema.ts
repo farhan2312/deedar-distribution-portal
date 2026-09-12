@@ -619,6 +619,14 @@ export const auditModuleEnum = pgEnum("audit_module", [
   "stockists",
   "areas",
   "bugs",
+  // The field side. Without these the log answered "what did an admin do",
+  // which is the smaller half of the question — every counter, visit, beat,
+  // day and stock movement was being written with nobody recording who.
+  "counters",
+  "visits",
+  "daylogs",
+  "beats",
+  "stock",
 ]);
 
 /**

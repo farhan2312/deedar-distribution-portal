@@ -47,8 +47,12 @@ export default async function AuditLogPage({
 
   const [data, usage, userOptions] = await Promise.all([
     getAuditData(window, filters, page, tab),
-    // Only the tab that renders it pays for it.
-    tab === "usage" ? getUsage(window) : Promise.resolve([]),
+    // Only the tab that renders it pays for it. Both tables read the same
+    // `page` param — they are never on screen together, and switching tab
+    // clears it.
+    tab === "usage"
+      ? getUsage(window, page)
+      : Promise.resolve({ rows: [], users: 0, totalMinutes: 0, page: 1, totalPages: 1 }),
     allUserOptions(),
   ]);
 
