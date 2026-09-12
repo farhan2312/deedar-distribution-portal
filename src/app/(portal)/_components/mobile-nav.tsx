@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { logoutAction } from "@/lib/auth/actions";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { ROLE_THEME, type NavItem, type NavSection } from "@/lib/portal/nav";
 import { useT } from "@/lib/i18n/provider";
 import { useTheme } from "@/lib/theme/use-theme";
@@ -225,14 +226,19 @@ export function MobileNav({
                 {t("Change Password")}
               </Link>
               <form action={logoutAction} className="flex-1">
-                <button
-                  type="submit"
+                <SubmitButton
                   className="flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-[13px] font-semibold"
                   style={{ borderColor: "rgba(199,38,59,.25)", color: "var(--danger)" }}
+                  pendingLabel={
+                    <>
+                      <SignOutIcon className="h-4 w-4" />
+                      {t("Signing out…")}
+                    </>
+                  }
                 >
                   <SignOutIcon className="h-4 w-4" />
                   {t("Sign out")}
-                </button>
+                </SubmitButton>
               </form>
             </div>
           </div>

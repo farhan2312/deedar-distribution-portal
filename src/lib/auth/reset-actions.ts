@@ -83,7 +83,7 @@ export async function requestPasswordReset(phone: string): Promise<ResetRequestR
   }
 
   const [user] = await db
-    .select({ id: users.id, name: users.name })
+    .select({ id: users.id, name: users.name, isActive: users.isActive })
     .from(users)
     .where(eq(users.phone, digits))
     .limit(1);
@@ -96,6 +96,26 @@ export async function requestPasswordReset(phone: string): Promise<ResetRequestR
     return {
       ok: false,
       error: "No user with this mobile number. Check the number, or ask your admin to add you.",
+    };
+  }
+
+  // A disabled account cannot sign in even with a correct password, so a
+  // reset would hand back a key to a locked door — and the request would sit
+  // in the admin queue looking like work. The wording is the same one the
+  // login screen gives, so the two screens do not tell different stories about
+  // the same account.
+  if (!user.isActive) {
+    await recordAudit({
+      action: "password_reset",
+      module: "auth",
+      entityId: user.id,
+      entityLabel: user.name,
+      summary: "Password reset refused — account deactivated",
+      actor: { id: user.id, name: user.name, phone: digits },
+    });
+    return {
+      ok: false,
+      error: "This account has been deactivated. Contact your administrator.",
     };
   }
 

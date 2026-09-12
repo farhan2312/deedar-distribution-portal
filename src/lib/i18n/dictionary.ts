@@ -153,6 +153,7 @@ const HI: Record<string, string> = {
   "Dark mode": "डार्क मोड",
   "Change Password": "पासवर्ड बदलें",
   "Sign out": "साइन आउट",
+  "Signing out…": "साइन आउट हो रहा है…",
 
   // ── Day Log ──
   "View all": "सभी देखें",

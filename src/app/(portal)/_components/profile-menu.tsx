@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { logoutAction } from "@/lib/auth/actions";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { useTheme } from "@/lib/theme/use-theme";
 import { useT } from "@/lib/i18n/provider";
 
@@ -90,16 +91,21 @@ export function ProfileMenu({
           </Link>
           <Divider />
 
-          {/* Sign out */}
+          {/* Sign out — one press only; see SubmitButton. */}
           <form action={logoutAction}>
-            <button
-              type="submit"
+            <SubmitButton
               className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-[13px] font-semibold transition-colors"
               style={{ color: "#F08A8A" }}
+              pendingLabel={
+                <>
+                  <SignOutIcon className="h-4 w-4 flex-none" />
+                  {t("Signing out…")}
+                </>
+              }
             >
               <SignOutIcon className="h-4 w-4 flex-none" />
               {t("Sign out")}
-            </button>
+            </SubmitButton>
           </form>
         </div>
       )}
