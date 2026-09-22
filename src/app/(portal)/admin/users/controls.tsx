@@ -1,10 +1,9 @@
 "use client";
 
-import { useActionState, useOptimistic, useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AccessRole, StockistKind } from "@/db/schema";
 import {
-  addUser,
   getUserDeleteImpact,
   removeUser,
   resetUserPassword,
@@ -17,77 +16,16 @@ import {
   toggleUserArea,
   toggleUserDepot,
   updateUser,
-  type AddUserResult,
 } from "@/lib/admin/actions";
 import { useT } from "@/lib/i18n/provider";
 import { Pagination } from "@/components/ui/pagination";
 import { SearchInput } from "@/components/ui/search-input";
 import { ConfirmDelete } from "@/components/ui/confirm-delete";
 
-/**
- * "Add a user" form with inline confirmation. `useActionState` keeps the
- * server action's result (added / duplicate / invalid) so the admin gets a
- * clear "user added" message instead of a silent refresh. The form clears
- * itself on success via a `key` bumped from the result.
- */
-export function AddUserForm() {
-  const t = useT();
-  const [state, formAction, pending] = useActionState<AddUserResult | null, FormData>(
-    async (_prev, fd) => addUser(fd),
-    null,
-  );
-  return (
-    <form action={formAction} key={state?.ok ? state.message : "form"}>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="field">
-          <label>{t("Name")}</label>
-          <input className="inp" type="text" name="name" placeholder={t("Full name")} required />
-        </div>
-        <div className="field">
-          <label>{t("Mobile")}</label>
-          <input className="inp" type="tel" name="phone" placeholder={t("10-digit mobile")} maxLength={10} required />
-        </div>
-      </div>
-      <button className="btn btn-primary mt-4" type="submit" disabled={pending}>
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" />
-        </svg>
-        {pending ? t("Adding…") : t("Add user")}
-      </button>
-
-      {state && (
-        <div
-          className="mt-3 flex items-start gap-2.5 rounded-xl px-3.5 py-3"
-          role="status"
-          style={
-            state.ok
-              ? { background: "rgba(30,158,90,.08)", color: "#1E9E5A", border: "1px solid rgba(30,158,90,.25)" }
-              : { background: "rgba(199,38,59,.06)", color: "var(--danger)", border: "1px solid rgba(199,38,59,.22)" }
-          }
-        >
-          {state.ok ? (
-            <svg className="mt-0.5 h-4 w-4 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-          ) : (
-            <svg className="mt-0.5 h-4 w-4 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
-          )}
-          <span className="text-[12.5px] font-medium">{state.message}</span>
-        </div>
-      )}
-      {!state && (
-        <div className="mt-4 flex items-start gap-2.5 rounded-xl px-3.5 py-3" style={{ background: "var(--bg-soft)" }}>
-          <svg className="mt-0.5 h-4 w-4 flex-none" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 16v-4M12 8h.01" /></svg>
-          <p className="text-[12.5px]" style={{ color: "var(--ink-2)" }}>
-            {t("Password is the mobile number until first login; assign access below.")}
-          </p>
-        </div>
-      )}
-    </form>
-  );
-}
-
 /** Bordered pill wrapping a checkbox — highlights in the accent colour when on,
- * matching the depot/area selectors in the reference design. */
-function pillStyle(checked: boolean): React.CSSProperties {
+ * matching the depot/area selectors in the reference design. Shared with the
+ * Add user form, so a pill looks the same whether it saves now or on submit. */
+export function pillStyle(checked: boolean): React.CSSProperties {
   return {
     borderColor: checked ? "var(--accent)" : "var(--hairline)",
     background: checked ? "var(--accent-tint)" : "#fff",
@@ -370,12 +308,13 @@ export function DepotSelect({
         onChange={(e) => {
           const next = e.target.value;
           setParentId(next);
-          // Assigning the parent is what the sub-dealer select is for when one
-          // exists, so only commit here when there is nothing to narrow into —
-          // otherwise merely opening the cascade would reassign the rep.
-          const picked = topLevel.find((d) => d.id === next);
-          const hasChildren = picked?.kind === "dealer" && inCnf.some((d) => d.parentId === picked.id);
-          if (next && !hasChildren) assign(next);
+          // Commit the pick straight away, dealers with sub-dealers included.
+          // The sub-dealer select below opens on "— the dealer itself", so the
+          // screen already SAYS the dealer is chosen; waiting for a second pick
+          // left that claim unsaved, and the dealer's areas never appeared
+          // until someone chose something else and came back. Narrowing to a
+          // sub-dealer afterwards is simply a second assignment.
+          if (next) assign(next);
         }}
       >
         <option value="">{cnfId ? t("Select stockist") : t("Pick a C&F first")}</option>
@@ -439,33 +378,51 @@ export function CnfSelect({
   );
 }
 
-/** Supervisor (SO) dropdown — which SO a field rep reports to. */
+/**
+ * Supervisor (SO) dropdown — which SO a field rep reports to.
+ *
+ * Offers only the SOs who supervise the rep's stockist; the page does that
+ * filtering. An existing assignment that no longer fits (the rep moved, or the
+ * SO dropped that stockist) still shows, flagged, so the select never reads
+ * blank for a value that is really there.
+ */
 export function SupervisorSelect({
   userId,
   value,
   options,
+  emptyHint,
 }: {
   userId: string;
   value: string | null;
-  options: { id: string; name: string }[];
+  options: { id: string; name: string; outside?: boolean }[];
+  /** Placeholder when nobody can be offered — explains why, not just "empty". */
+  emptyHint?: string;
 }) {
   const t = useT();
   const [pending, start] = useTransition();
+  const choosable = options.filter((o) => !o.outside);
   return (
     <select
       className="inp"
       style={{ padding: "5px 8px", fontSize: 12 }}
+      // Keyed on the offered set: when the rep's stockist changes, the list
+      // changes, and the select must not keep showing a stale choice.
+      key={options.map((o) => o.id).join(",")}
       defaultValue={value ?? ""}
-      disabled={pending}
+      disabled={pending || (options.length === 0 && !value)}
       onChange={(e) => {
         const fd = new FormData();
         fd.set("reportsToUserId", e.target.value);
         start(() => setUserReportsTo(userId, fd));
       }}
     >
-      <option value="">{t("Select supervisor")}</option>
+      <option value="">
+        {choosable.length === 0 && emptyHint ? emptyHint : t("Select supervisor")}
+      </option>
       {options.map((o) => (
-        <option key={o.id} value={o.id}>{o.name}</option>
+        <option key={o.id} value={o.id} disabled={o.outside}>
+          {o.outside ? `${o.name} (${t("doesn't supervise this stockist")})` : o.name}
+        </option>
       ))}
     </select>
   );

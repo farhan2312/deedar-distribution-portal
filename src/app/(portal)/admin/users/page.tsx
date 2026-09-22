@@ -21,7 +21,6 @@ import {
 import { formatISTDate, formatISTTime } from "@/lib/date";
 import { getT } from "@/lib/i18n/server";
 import {
-  AddUserForm,
   AreaCheckbox,
   AreaGroupToggle,
   CnfSelect,
@@ -35,6 +34,7 @@ import {
   SupervisorSelect,
   UsersPanel,
 } from "./controls";
+import { AddUserForm } from "./add-user-form";
 
 /** The role checkbox columns, in the order they appear in the users table. */
 const ROLE_COLS: { role: AccessRole; label: string }[] = [
@@ -135,6 +135,32 @@ export default async function AdminUsersPage({
    * them was what cleared their existing ticks. A depot or sub-dealer has no
    * children, so its list is just its own.
    */
+  /**
+   * The SOs a rep may report to: active, supervising the rep's own stockist,
+   * and not the rep themself. A current assignment outside that set is kept at
+   * the end, flagged, so it stays visible until someone changes it.
+   */
+  const reportsToOptions = (
+    userId: string,
+    stockistId: string | null,
+    current: string | null,
+  ) => {
+    const fits = stockistId
+      ? supervisorOptions.filter(
+          (s) => s.id !== userId && s.isActive && s.stockistIds.includes(stockistId),
+        )
+      : [];
+    const opts: { id: string; name: string; outside?: boolean }[] = fits.map((s) => ({
+      id: s.id,
+      name: s.name,
+    }));
+    if (current && !fits.some((s) => s.id === current)) {
+      const so = supervisorOptions.find((s) => s.id === current);
+      if (so) opts.push({ id: so.id, name: so.name, outside: true });
+    }
+    return opts;
+  };
+
   const areaGroupsFor = (stockistId: string) => {
     const self = allStockists.find((s) => s.id === stockistId);
     if (!self) return [];
@@ -161,7 +187,15 @@ export default async function AdminUsersPage({
       <div className="mb-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className="card p-6">
           <SectionHead icon={<UserPlusIcon className="h-5 w-5" style={{ color: "var(--accent)" }} />} title={t("Add a user")} />
-          <AddUserForm />
+          <AddUserForm
+            roles={ROLE_COLS}
+            groups={depotGroups}
+            areas={allAreas.map((a) => ({ id: a.id, name: a.name, stockistId: a.stockistId }))}
+            supervisors={supervisorOptions
+              .filter((s) => s.isActive)
+              .map((s) => ({ id: s.id, name: s.name, stockistIds: s.stockistIds }))}
+            cnfOptions={cnfOptions}
+          />
         </div>
 
         {/* Password reset requests — raised from the login page's "Forgot
@@ -332,7 +366,12 @@ export default async function AdminUsersPage({
                             <SupervisorSelect
                               userId={u.id}
                               value={u.reportsToUserId}
-                              options={supervisorOptions.filter((s) => s.id !== u.id)}
+                              options={reportsToOptions(u.id, u.stockistId, u.reportsToUserId)}
+                              emptyHint={
+                                u.stockistId
+                                  ? t("No Sales Officer supervises this stockist yet")
+                                  : t("Pick a stockist first")
+                              }
                             />
                           </Mapping>
                         </>

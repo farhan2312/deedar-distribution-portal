@@ -17,6 +17,7 @@ import {
   userStockists,
   users,
   visits,
+  accessRoleEnum,
   type AccessRole,
   type StockistKind,
 } from "@/db/schema";
@@ -24,6 +25,8 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { hashPassword } from "@/lib/auth/password";
 import { deleteFailure, insertFailure, type WriteResult } from "@/lib/db-errors";
 import { recordAudit, diffFields } from "@/lib/audit/record";
+import { ROLE_LABEL } from "@/lib/auth/roles";
+import type { AuditChange } from "@/db/schema";
 import { requireAdmin } from "./guard";
 
 // ── Hierarchy: State → C&F HQ → Depot → Area ────────────────────────────
@@ -479,6 +482,22 @@ export async function deleteArea(id: string): Promise<HierarchyResult> {
 
 export type AddUserResult = { ok: true; message: string } | { ok: false; message: string };
 
+/**
+ * Add a user — and, if the admin already knows it, everything they need to
+ * work: roles, their stockist and areas, who they report to, the stockists a
+ * Sales Officer oversees, an HQ user's C&F.
+ *
+ * Each rule is the one the per-field controls in the users table enforce,
+ * checked again here because every id arrives from the client. Nothing beyond
+ * name and mobile is required: someone whose areas are not settled yet can
+ * still be added and mapped later from the table, exactly as before.
+ *
+ * An admin has full access and needs no mapping, so anything sent alongside
+ * Admin is dropped — the same way the table hides the mapping for an admin.
+ *
+ * The user row and both join tables are written in one transaction, so a
+ * failure part-way leaves no half-mapped account behind.
+ */
 export async function addUser(formData: FormData): Promise<AddUserResult> {
   const admin = await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
@@ -487,36 +506,168 @@ export async function addUser(formData: FormData): Promise<AddUserResult> {
     return { ok: false, message: "Enter a name and a valid 10-digit mobile number." };
   }
 
+  const all = (key: string) => [...new Set(formData.getAll(key).map(String).filter(Boolean))];
+  const one = (key: string) => String(formData.get(key) ?? "").trim() || null;
+
+  const roles = all("role").filter((r): r is AccessRole =>
+    (accessRoleEnum.enumValues as readonly string[]).includes(r),
+  );
+  const isAdmin = roles.includes("admin");
+  // Mapping is read only for roles that use it — and for none under Admin.
+  const has = (r: AccessRole) => !isAdmin && roles.includes(r);
+
+  // Field, depot and dealer share the one stockist on the users row — the same
+  // single scope the table edits. Anything sent for a role that was not ticked
+  // is dropped rather than saved as an orphan.
+  const stockistId = has("field") || has("depot") || has("dealer") ? one("stockistId") : null;
+  const areaIds = has("field") && stockistId ? all("areaId") : [];
+  const reportsToUserId = has("field") ? one("reportsToUserId") : null;
+  const supervisedIds = has("supervisor") ? all("supervisedStockistId") : [];
+  const cnfId = has("hq") ? one("cnfId") : null;
+
+  // ── Validate every id against the database ─────────────────────────────
+  let stockist: { id: string; name: string; kind: StockistKind } | undefined;
+  if (stockistId) {
+    [stockist] = await db
+      .select({ id: stockists.id, name: stockists.name, kind: stockists.kind })
+      .from(stockists)
+      .where(eq(stockists.id, stockistId))
+      .limit(1);
+    if (!stockist) return { ok: false, message: "That stockist no longer exists." };
+  }
+
+  if (stockist && areaIds.length > 0) {
+    // A rep's areas come from their own stockist, or — when it is a dealer —
+    // from its sub-dealers too. Same family rule as `toggleUserArea`.
+    const family = [stockist.id];
+    if (stockist.kind === "dealer") {
+      const subs = await db
+        .select({ id: stockists.id })
+        .from(stockists)
+        .where(eq(stockists.parentId, stockist.id));
+      family.push(...subs.map((s) => s.id));
+    }
+    const found = await db
+      .select({ stockistId: areas.stockistId })
+      .from(areas)
+      .where(inArray(areas.id, areaIds));
+    if (found.length !== areaIds.length || found.some((a) => !family.includes(a.stockistId))) {
+      return { ok: false, message: `Some of the chosen areas are not under ${stockist.name}.` };
+    }
+  }
+
+  let reportsToName: string | null = null;
+  if (reportsToUserId) {
+    if (!stockistId) {
+      return { ok: false, message: "Pick the stockist first — Reports to follows it." };
+    }
+    const so = await supervisorFor(reportsToUserId, stockistId);
+    if (!so) {
+      return { ok: false, message: "Reports to must be an active Sales Officer who supervises that stockist." };
+    }
+    reportsToName = so.name;
+  }
+
+  let supervised: { id: string; name: string; cnfId: string }[] = [];
+  if (supervisedIds.length > 0) {
+    supervised = await db
+      .select({ id: stockists.id, name: stockists.name, cnfId: stockists.cnfId })
+      .from(stockists)
+      .where(inArray(stockists.id, supervisedIds));
+    if (supervised.length !== supervisedIds.length) {
+      return { ok: false, message: "One of the chosen stockists no longer exists." };
+    }
+    // The picker only ever offers one C&F at a time; a hand-built request
+    // that mixes two is refused rather than creating the legacy mix the
+    // table has to warn about.
+    if (new Set(supervised.map((s) => s.cnfId)).size > 1) {
+      return { ok: false, message: "A Sales Officer's stockists must all be under one C&F." };
+    }
+  }
+
+  let cnfName: string | null = null;
+  if (cnfId) {
+    const [c] = await db.select({ name: cnfs.name }).from(cnfs).where(eq(cnfs.id, cnfId)).limit(1);
+    if (!c) return { ok: false, message: "That C&F no longer exists." };
+    cnfName = c.name;
+  }
+
+  // ── Write, all or nothing ──────────────────────────────────────────────
   // First login: password is the phone number, same as the field-rep bootstrap
   // pattern — so force a reset before they can use the app (mustChangePassword).
   const passwordHash = await hashPassword(phone);
-  const inserted = await db
-    .insert(users)
-    .values({
-      name,
-      phone,
-      passwordHash,
-      accessRoles: [],
-      mustChangePassword: true,
-      createdByUserId: admin.id,
-    })
-    .onConflictDoNothing({ target: users.phone })
-    .returning({ id: users.id });
+  const createdId = await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(users)
+      .values({
+        name,
+        phone,
+        passwordHash,
+        accessRoles: roles,
+        mustChangePassword: true,
+        createdByUserId: admin.id,
+        stockistId,
+        reportsToUserId,
+        cnfId,
+      })
+      .onConflictDoNothing({ target: users.phone })
+      .returning({ id: users.id });
+    // No row back ⇒ the phone was already taken (conflict target skipped it).
+    if (inserted.length === 0) return null;
+    const id = inserted[0].id;
+    if (areaIds.length > 0) {
+      await tx.insert(userAreas).values(areaIds.map((areaId) => ({ userId: id, areaId })));
+    }
+    if (supervisedIds.length > 0) {
+      await tx
+        .insert(userStockists)
+        .values(supervisedIds.map((sid) => ({ userId: id, stockistId: sid })));
+    }
+    return id;
+  });
 
-  // No row back ⇒ the phone was already taken (conflict target skipped the insert).
-  if (inserted.length === 0) {
+  if (!createdId) {
     return { ok: false, message: `A user with mobile ${phone} already exists.` };
   }
+
+  // One audit row for the whole creation, its mapping in the change list —
+  // rather than the six separate "updated" rows the old add-then-map flow left.
+  const changes: AuditChange[] = [];
+  if (roles.length) changes.push({ field: "Roles", from: null, to: roles.map((r) => ROLE_LABEL[r]).join(", ") });
+  if (stockist) changes.push({ field: "Stockist", from: null, to: stockist.name });
+  if (areaIds.length) changes.push({ field: "Areas", from: null, to: `${areaIds.length} assigned` });
+  if (reportsToName) changes.push({ field: "Reports to", from: null, to: reportsToName });
+  if (supervised.length) changes.push({ field: "Supervises", from: null, to: supervised.map((s) => s.name).join(", ") });
+  if (cnfName) changes.push({ field: "C&F HQ", from: null, to: cnfName });
 
   await recordAudit({
     action: "create",
     module: "users",
-    entityId: inserted[0].id,
+    entityId: createdId,
     entityLabel: name,
-    summary: `Added user ${name} (${phone}) with no roles`,
+    summary: roles.length
+      ? `Added user ${name} (${phone}) as ${roles.map((r) => ROLE_LABEL[r]).join(", ")}`
+      : `Added user ${name} (${phone}) with no roles`,
+    changes,
   });
   revalidatePath("/admin/users");
-  return { ok: true, message: `${name} added — password is their mobile number until first login. Assign access below.` };
+
+  // Say what is still missing, so a half-mapped account is a known state and
+  // not a surprise the rep discovers on their first login.
+  const gaps: string[] = [];
+  if ((has("field") || has("depot") || has("dealer")) && !stockistId) gaps.push("a stockist");
+  if (has("field") && stockistId && areaIds.length === 0) gaps.push("areas");
+  if (has("supervisor") && supervisedIds.length === 0) gaps.push("stockists to supervise");
+  if (has("hq") && !cnfId) gaps.push("a C&F");
+  const tail = roles.length === 0
+    ? " No roles yet — assign access in the list below."
+    : gaps.length
+      ? ` Still needs ${gaps.join(", ")} — set it in the list below.`
+      : "";
+  return {
+    ok: true,
+    message: `${name} added — password is their mobile number until first login.${tail}`,
+  };
 }
 
 
@@ -852,17 +1003,55 @@ export async function setUserCnf(userId: string, formData: FormData) {
   revalidatePath("/admin/users");
 }
 
+/**
+ * An active Sales Officer who supervises this stockist — or null.
+ *
+ * "Supervises" is an exact row in `user_stockists`, the same test
+ * `assignBeat` applies: an SO can only hand beats to reps whose stockist they
+ * hold. Reporting to an SO who does not cover the rep's stockist would give
+ * that SO a team member they cannot assign work to.
+ */
+async function supervisorFor(soUserId: string, stockistId: string) {
+  const [so] = await db
+    .select({ name: users.name })
+    .from(users)
+    .innerJoin(
+      userStockists,
+      and(eq(userStockists.userId, users.id), eq(userStockists.stockistId, stockistId)),
+    )
+    .where(
+      and(
+        eq(users.id, soUserId),
+        eq(users.isActive, true),
+        sql`'supervisor' = ANY(${users.accessRoles}::text[])`,
+      ),
+    )
+    .limit(1);
+  return so ?? null;
+}
+
 /** Field rep → which Supervisor (SO) they report to. */
 export async function setUserReportsTo(userId: string, formData: FormData) {
   const admin = await requireAdmin();
   const reportsToUserId = String(formData.get("reportsToUserId") ?? "") || null;
 
   const [before] = await db
-    .select({ name: users.name, reportsToUserId: users.reportsToUserId })
+    .select({
+      name: users.name,
+      reportsToUserId: users.reportsToUserId,
+      stockistId: users.stockistId,
+    })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
   if (before?.reportsToUserId === reportsToUserId) return;
+  // Clearing is always allowed; setting one must be an SO over this rep's
+  // stockist. The dropdown only offers those, so this refuses a hand-built
+  // request rather than anything a person can click.
+  if (reportsToUserId) {
+    if (!before?.stockistId) return;
+    if (!(await supervisorFor(reportsToUserId, before.stockistId))) return;
+  }
 
   const ids = [reportsToUserId, before?.reportsToUserId].filter(Boolean) as string[];
   const supers = ids.length

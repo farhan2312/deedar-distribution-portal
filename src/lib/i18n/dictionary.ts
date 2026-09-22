@@ -1078,6 +1078,13 @@ const HI: Record<string, string> = {
   you: "आप",
   "Add user": "उपयोगकर्ता जोड़ें",
   // "Full name" already defined above under Auth: signup.
+  "Password is the mobile number until first login.":
+    "पहले लॉगिन तक पासवर्ड मोबाइल नंबर है।",
+  "This stockist has no areas yet.": "इस स्टॉकिस्ट का अभी कोई क्षेत्र नहीं है।",
+  "Pick a stockist first": "पहले स्टॉकिस्ट चुनें",
+  "No Sales Officer supervises this stockist yet":
+    "अभी कोई सेल्स ऑफिसर इस स्टॉकिस्ट की निगरानी नहीं करता",
+  "doesn't supervise this stockist": "इस स्टॉकिस्ट की निगरानी नहीं करता",
   "Password is the mobile number until first login; assign access below.":
     "पहले लॉगिन तक पासवर्ड मोबाइल नंबर है; नीचे एक्सेस असाइन करें।",
   "Select C&F": "C&F चुनें",

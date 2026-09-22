@@ -175,13 +175,33 @@ export async function fetchUsersPage(
   };
 }
 
-/** Every supervisor, for the "reports to" dropdown — that list has to cover
- * the whole system, not just whoever landed on this page. */
-export async function fetchSupervisorOptions(): Promise<{ id: string; name: string }[]> {
+export type SupervisorOption = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  /** The stockists this SO supervises — "Reports to" is filtered by these. */
+  stockistIds: string[];
+};
+
+/** Every supervisor, for the "reports to" dropdowns — that list has to cover
+ * the whole system, not just whoever landed on this page. Each carries the
+ * stockists they supervise, so a rep is only offered the SOs over their own
+ * stockist, and `isActive` so a deactivated SO is not offered to anyone new. */
+export async function fetchSupervisorOptions(): Promise<SupervisorOption[]> {
   return db
-    .select({ id: users.id, name: users.name })
+    .select({
+      id: users.id,
+      name: users.name,
+      isActive: users.isActive,
+      stockistIds: sql<string[]>`coalesce(
+        array_agg(${userStockists.stockistId}::text) filter (where ${userStockists.stockistId} is not null),
+        '{}'
+      )`,
+    })
     .from(users)
+    .leftJoin(userStockists, eq(userStockists.userId, users.id))
     .where(sql`'supervisor' = ANY(${users.accessRoles}::text[])`)
+    .groupBy(users.id)
     .orderBy(asc(users.name));
 }
 
