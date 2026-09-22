@@ -1,7 +1,6 @@
 "use client";
 
-import { useOptimistic, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useT } from "@/lib/i18n/provider";
 import { LEVEL, Legend } from "./hierarchy-shared";
 import type { HierarchyView } from "./view";
@@ -18,24 +17,22 @@ import type { HierarchyView } from "./view";
  */
 export function HierarchyHeader({ view }: { view: HierarchyView }) {
   const t = useT();
-  const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const [pending, startTransition] = useTransition();
-  const [shown, showOptimistic] = useOptimistic(view);
+  // No pending state to show any more: both layouts draw from data already on
+  // the page, so the switch is immediate.
+  const shown = view;
 
   function switchTo(next: HierarchyView) {
     if (next === shown) return;
-    startTransition(() => {
-      showOptimistic(next);
-      const q = new URLSearchParams(params.toString());
-      // Columns is the default, so it needs no param — and the drill-down
-      // selection is meaningless to the tree, which expands rather than picks.
-      if (next === "columns") q.delete("view");
-      else q.set("view", next);
-      const s = q.toString();
-      router.push(s ? `${pathname}?${s}` : pathname, { scroll: false });
-    });
+    const q = new URLSearchParams(params.toString());
+    // Columns is the default, so it needs no param — and the drill-down
+    // selection is meaningless to the tree, which expands rather than picks.
+    if (next === "columns") q.delete("view");
+    else q.set("view", next);
+    const s = q.toString();
+    // Native history, not the router: nothing here needs the server.
+    window.history.pushState(null, "", s ? `${pathname}?${s}` : pathname);
   }
 
   return (
@@ -54,7 +51,7 @@ export function HierarchyHeader({ view }: { view: HierarchyView }) {
 
       <div
         className="flex flex-none items-center gap-0.5 rounded-full p-[3px] transition-opacity"
-        style={{ background: "var(--bg-soft)", opacity: pending ? 0.72 : 1 }}
+        style={{ background: "var(--bg-soft)" }}
         role="group"
         aria-label={t("View mode")}
       >

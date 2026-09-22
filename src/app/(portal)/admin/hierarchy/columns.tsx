@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   addArea,
   addCnf,
@@ -35,23 +35,31 @@ export type { HierarchyData, Selection };
 
 // ── Screen ───────────────────────────────────────────────────────────────
 
-export function HierarchyColumns({
-  data,
-  selection,
-}: {
-  data: HierarchyData;
-  selection: Selection;
-}) {
+export function HierarchyColumns({ data }: { data: HierarchyData }) {
   const t = useT();
-  const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+
+  // Read here rather than passed from the server: the page no longer renders
+  // per selection, so the URL is the one place it lives.
+  const selection: Selection = {
+    state: params.get("state"),
+    cnf: params.get("cnf"),
+    stockist: params.get("stockist"),
+    sub: params.get("sub"),
+  };
 
   /**
    * Selection lives in the URL so the view is linkable and the back button
    * works. Picking a level clears everything below it — keeping a stale
    * sub-dealer selected while its dealer changes would show a column of
    * children that belong to something else.
+   *
+   * Written with `history.pushState`, not `router.push`: every column is
+   * worked out from data already on the page, and a router navigation would
+   * ask the server to re-render the whole hierarchy just to move a highlight.
+   * Next keeps `useSearchParams` in step with native history, so this still
+   * re-renders — locally, and at once.
    */
   function select(level: keyof Selection, id: string | null) {
     const order: (keyof Selection)[] = ["state", "cnf", "stockist", "sub"];
@@ -60,7 +68,7 @@ export function HierarchyColumns({
     for (const k of order.slice(from)) q.delete(k);
     if (id) q.set(level, id);
     const s = q.toString();
-    router.push(s ? `${pathname}?${s}` : pathname, { scroll: false });
+    window.history.pushState(null, "", s ? `${pathname}?${s}` : pathname);
   }
 
   const state = data.states.find((s) => s.id === selection.state) ?? null;

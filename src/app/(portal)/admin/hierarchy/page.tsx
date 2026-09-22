@@ -2,11 +2,8 @@ import { asc, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, cnfs, counters, states, stockists, users } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin/guard";
-import { HierarchyColumns } from "./columns";
-import { HierarchyHeader } from "./hierarchy-header";
 import type { HierarchyData } from "./hierarchy-shared";
-import { isHierarchyView } from "./view";
-import { HierarchyTree } from "./tree";
+import { HierarchyScreen } from "./hierarchy-screen";
 
 /**
  * Territory management, in either of two layouts (`?view=`): Miller columns
@@ -17,20 +14,13 @@ import { HierarchyTree } from "./tree";
  * Every count is aggregated in SQL. The previous version pulled every counter
  * row (688 and climbing) purely to length-count them in JS, which is a page
  * load that grows with the business for a number that does not.
+ *
+ * The page deliberately does not read the view or the selection: they change
+ * what is drawn, not what is loaded, so they are handled in the browser by
+ * `HierarchyScreen` and a click costs no request.
  */
-export default async function AdminHierarchyPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    state?: string;
-    cnf?: string;
-    stockist?: string;
-    sub?: string;
-    view?: string;
-  }>;
-}) {
+export default async function AdminHierarchyPage() {
   await requireAdmin();
-  const sel = await searchParams;
 
   const [
     allStates,
@@ -97,26 +87,5 @@ export default async function AdminHierarchyPage({
     })),
   };
 
-  // Columns is the default: it is the one that scales to a big territory
-  // without becoming a wall of rows.
-  const view = isHierarchyView(sel.view) ? sel.view : "columns";
-
-  return (
-    <div>
-      <HierarchyHeader view={view} />
-      {view === "tree" ? (
-        <HierarchyTree data={data} />
-      ) : (
-        <HierarchyColumns
-          data={data}
-          selection={{
-            state: sel.state ?? null,
-            cnf: sel.cnf ?? null,
-            stockist: sel.stockist ?? null,
-            sub: sel.sub ?? null,
-          }}
-        />
-      )}
-    </div>
-  );
+  return <HierarchyScreen data={data} />;
 }
