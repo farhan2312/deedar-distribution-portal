@@ -24,35 +24,52 @@ export default async function AssignmentSummaryPage() {
   // Same scope as Assign Beat — every rep this SO can schedule appears here,
   // including beats another SO or admin assigned to them.
   const stockistIds = (await getScopeStockists(user)).map((d) => d.id);
-  const repRows = stockistIds.length
-    ? (
-        await db
+  const today = istDateString();
+
+  /*
+   * The reps and their forward beats in one round trip.
+   *
+   * The assignment rows used to wait for the rep ids, although both are keyed
+   * on the same stockist scope — the rows reach it through a subquery instead,
+   * and the non-field users that subquery also matches are dropped below, the
+   * same set the rep filter removes.
+   */
+  const [userRows, allRows] = stockistIds.length
+    ? await Promise.all([
+        db
           .select({ id: users.id, accessRoles: users.accessRoles })
           .from(users)
-          .where(inArray(users.stockistId, stockistIds))
-      ).filter((u) => u.accessRoles.includes("field"))
-    : [];
-  const repIds = repRows.map((r) => r.id);
+          .where(inArray(users.stockistId, stockistIds)),
+        db
+          .select({
+            beatDate: beatAssignments.beatDate,
+            repUserId: beatAssignments.repUserId,
+            repName: users.name,
+            counterName: counters.name,
+            areaName: areas.name,
+            stockistName: stockists.name,
+          })
+          .from(beatAssignments)
+          .innerJoin(users, eq(users.id, beatAssignments.repUserId))
+          .innerJoin(counters, eq(counters.id, beatAssignments.counterId))
+          .innerJoin(areas, eq(areas.id, counters.areaId))
+          .innerJoin(stockists, eq(stockists.id, counters.stockistId))
+          .where(
+            and(
+              inArray(
+                beatAssignments.repUserId,
+                db.select({ id: users.id }).from(users).where(inArray(users.stockistId, stockistIds)),
+              ),
+              gte(beatAssignments.beatDate, today),
+            ),
+          )
+          .orderBy(asc(beatAssignments.beatDate), asc(users.name), asc(counters.name))
+      ])
+    : [[], []];
 
-  const today = istDateString();
-  const rows = repIds.length
-    ? await db
-        .select({
-          beatDate: beatAssignments.beatDate,
-          repUserId: beatAssignments.repUserId,
-          repName: users.name,
-          counterName: counters.name,
-          areaName: areas.name,
-          stockistName: stockists.name,
-        })
-        .from(beatAssignments)
-        .innerJoin(users, eq(users.id, beatAssignments.repUserId))
-        .innerJoin(counters, eq(counters.id, beatAssignments.counterId))
-        .innerJoin(areas, eq(areas.id, counters.areaId))
-        .innerJoin(stockists, eq(stockists.id, counters.stockistId))
-        .where(and(inArray(beatAssignments.repUserId, repIds), gte(beatAssignments.beatDate, today)))
-        .orderBy(asc(beatAssignments.beatDate), asc(users.name), asc(counters.name))
-    : [];
+  const repRows = userRows.filter((u) => u.accessRoles.includes("field"));
+  const repIds = new Set(repRows.map((r) => r.id));
+  const rows = allRows.filter((r) => repIds.has(r.repUserId));
 
   // One row per (rep, day) — the unit a beat is actually assigned in.
   type Group = {

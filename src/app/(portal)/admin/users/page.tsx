@@ -11,7 +11,6 @@ import {
 import { dismissPasswordReset } from "@/lib/admin/actions";
 import { requireAdmin } from "@/lib/admin/guard";
 import {
-  fetchAssignmentsFor,
   fetchDeactivatedUsers,
   fetchSupervisorOptions,
   fetchUsersPage,
@@ -67,47 +66,60 @@ export default async function AdminUsersPage({
   const t = await getT();
   const params = await searchParams;
 
+  // The C&F list is only needed by the user lists to vet `?cnf=`, so rather
+  // than waiting for it, the lists start at the same time with the filter as
+  // given (if it is at least shaped like an id — anything else would be a SQL
+  // error), and are re-read in the rare case it names a C&F that is gone.
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const cnfGuess = params.cnf && UUID.test(params.cnf) ? params.cnf : null;
+  const guessIds = cnfGuess ? [cnfGuess] : [];
+
   const [
-    allStockists,
-    allCnfs,
-    allAreas,
-    supervisorOptions,
-    resetRows,
+    [allStockists, allCnfs, allAreas, supervisorOptions, resetRows],
+    firstList,
+    firstDeactivated,
   ] = await Promise.all([
-    db.select().from(stockists).orderBy(asc(stockists.name)),
-    db.select().from(cnfs).orderBy(asc(cnfs.name)),
-    db.select().from(areas).orderBy(asc(areas.name)),
-    // The whole roster, not just this page — a rep on page 1 can report to a
-    // supervisor on page 3.
-    fetchSupervisorOptions(),
-    // Open "I forgot my password" requests. Left-joined to users so a number
-    // that matches no account still shows — that is worth an admin's eye, not
-    // something to hide.
-    db
-      .select({
-        id: passwordResetRequests.id,
-        phone: passwordResetRequests.phone,
-        createdAt: passwordResetRequests.createdAt,
-        userId: passwordResetRequests.userId,
-        userName: users.name,
-      })
-      .from(passwordResetRequests)
-      .leftJoin(users, eq(users.id, passwordResetRequests.userId))
-      .where(eq(passwordResetRequests.status, "pending"))
-      .orderBy(desc(passwordResetRequests.createdAt)),
-  ]);
-  // Users are paged, searched and C&F-filtered in SQL. The join tables are
-  // then read for this page's 25 users only, rather than in full.
-  const cnfIds = allCnfs.map((c) => c.id);
-  const [list, deactivated] = await Promise.all([
-    fetchUsersPage(params, cnfIds),
+    Promise.all([
+      db.select().from(stockists).orderBy(asc(stockists.name)),
+      db.select().from(cnfs).orderBy(asc(cnfs.name)),
+      db.select().from(areas).orderBy(asc(areas.name)),
+      // The whole roster, not just this page — a rep on page 1 can report to a
+      // supervisor on page 3.
+      fetchSupervisorOptions(),
+      // Open "I forgot my password" requests. Left-joined to users so a number
+      // that matches no account still shows — that is worth an admin's eye, not
+      // something to hide.
+      db
+        .select({
+          id: passwordResetRequests.id,
+          phone: passwordResetRequests.phone,
+          createdAt: passwordResetRequests.createdAt,
+          userId: passwordResetRequests.userId,
+          userName: users.name,
+        })
+        .from(passwordResetRequests)
+        .leftJoin(users, eq(users.id, passwordResetRequests.userId))
+        .where(eq(passwordResetRequests.status, "pending"))
+        .orderBy(desc(passwordResetRequests.createdAt)),
+    ]),
+    fetchUsersPage(params, guessIds),
     // Same search and C&F filter as the table above: a disabled account has
     // nowhere else to appear, so the search has to reach it here.
-    fetchDeactivatedUsers(params, cnfIds),
+    fetchDeactivatedUsers(params, guessIds),
   ]);
+  // Users are paged, searched and C&F-filtered in SQL. A `?cnf=` that named
+  // no C&F (an old link to a deleted one) gets the lists again unfiltered —
+  // the same outcome as before, just no longer paid for on every load.
+  const cnfIds = allCnfs.map((c) => c.id);
+  const [list, deactivated] =
+    cnfGuess && !cnfIds.includes(cnfGuess)
+      ? await Promise.all([fetchUsersPage(params, cnfIds), fetchDeactivatedUsers(params, cnfIds)])
+      : [firstList, firstDeactivated];
   const pageUsers = list.rows;
-  const { areasByUser: userAreaSet, stockistsByUser: userDepotSet } =
-    await fetchAssignmentsFor(pageUsers.map((u) => u.id));
+  // Each row carries its own mapping now; these are the lookups the table
+  // cells use.
+  const userAreaSet = new Map(pageUsers.map((u) => [u.id, new Set(u.areaIds)]));
+  const userDepotSet = new Map(pageUsers.map((u) => [u.id, new Set(u.stockistIds)]));
 
   // Depots grouped by their C&F. A user's depot(s) belong to exactly one C&F
   // (a Sales Officer supervises stockists under a single C&F), so the picker is a

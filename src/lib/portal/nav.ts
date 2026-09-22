@@ -239,7 +239,7 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/khq/reports",
         label: "Reports",
         icon: "clipboard",
-        blurb: "All counters and visits company-wide, exportable to CSV.",
+        blurb: "All counters and visits company-wide, exportable to Excel.",
       },
     ],
   },

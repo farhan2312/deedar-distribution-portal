@@ -74,8 +74,22 @@ function filterWhere(f: AuditFilters, tab: AuditTab): SQL[] {
 
 export type AuditWindow = { start: Date; end: Date };
 
+/** Tabs that render the paged table, its filter row and the actor dropdown. */
+const TABLE_TABS: readonly AuditTab[] = ["activity", "logins", "ownership"];
+export function isTableTab(tab: AuditTab): boolean {
+  return TABLE_TABS.includes(tab);
+}
+
 /**
- * Everything the audit screen renders, in one round of parallel queries.
+ * Everything the audit screen renders for one tab, in one round of parallel
+ * queries.
+ *
+ * Only the tab on screen is paid for. Every tab used to run all ten queries —
+ * the Usage tab loaded the heatmap, trend and device charts it never draws, and
+ * fifty table rows it never shows — which put thirteen queries at once against
+ * a ten-connection pool, so some waited in line for others. Now the charts run
+ * on Overall only, the table and its dropdown on the table tabs only, and the
+ * KPI cards (on every tab) always.
  *
  * The headline counts are deliberately fixed at "last 24 hours" rather than
  * following the period filter: they are a health check on right now, and a
@@ -94,6 +108,35 @@ export async function getAuditData(
   const where = scoped.length === 1 ? scoped[0] : and(...scoped);
 
   const day = sql`now() - interval '24 hours'`;
+  const charts = tab === "overall";
+  const table = isTableTab(tab);
+  const skip = Promise.resolve([] as never[]);
+
+  const wantedPage = Math.max(1, requestedPage);
+  const rowsAt = (page: number) =>
+    db
+      .select({
+        id: auditLogs.id,
+        createdAt: auditLogs.createdAt,
+        actorUserId: auditLogs.actorUserId,
+        actorName: auditLogs.actorName,
+        actorPhone: auditLogs.actorPhone,
+        action: auditLogs.action,
+        module: auditLogs.module,
+        entityLabel: auditLogs.entityLabel,
+        entityId: auditLogs.entityId,
+        summary: auditLogs.summary,
+        changes: auditLogs.changes,
+        ip: auditLogs.ip,
+        userAgent: auditLogs.userAgent,
+      })
+      .from(auditLogs)
+      .where(where)
+      // Two events in the same millisecond would otherwise straddle a page
+      // boundary unpredictably; the id makes the sort total.
+      .orderBy(desc(auditLogs.createdAt), asc(auditLogs.id))
+      .limit(AUDIT_PAGE_SIZE)
+      .offset((page - 1) * AUDIT_PAGE_SIZE);
 
   const [
     [last24],
@@ -104,9 +147,10 @@ export async function getAuditData(
     agents,
     topUsers,
     actorOptions,
-    [{ n: total }],
+    counted,
+    firstRows,
   ] = await Promise.all([
-    // Fixed 24h health check — see the note above.
+    // Fixed 24h health check — see the note above. Every tab shows it.
     db
       .select({
         logins: sql<number>`count(*) filter (where ${auditLogs.action} = 'login')::int`,
@@ -117,7 +161,8 @@ export async function getAuditData(
       .from(auditLogs)
       .where(sql`${auditLogs.createdAt} >= ${day}`),
 
-    // Same shape for the selected window, for the sub-captions.
+    // Same shape for the selected window. Every tab needs `actions` to tell
+    // "nothing recorded yet" from "nothing on this tab".
     db
       .select({
         logins: sql<number>`count(*) filter (where ${auditLogs.action} = 'login')::int`,
@@ -128,98 +173,98 @@ export async function getAuditData(
       .from(auditLogs)
       .where(inWindow),
 
-    db
-      .select({ action: auditLogs.action, n: sql<number>`count(*)::int` })
-      .from(auditLogs)
-      .where(where)
-      .groupBy(auditLogs.action)
-      .orderBy(desc(sql`count(*)`)),
+    // ── Overall's charts ────────────────────────────────────────────────
+    charts
+      ? db
+          .select({ action: auditLogs.action, n: sql<number>`count(*)::int` })
+          .from(auditLogs)
+          .where(where)
+          .groupBy(auditLogs.action)
+          .orderBy(desc(sql`count(*)`))
+      : skip,
 
     // One row per IST calendar day in the window.
-    db
-      .select({
-        day: sql<string>`(${auditLogs.createdAt} AT TIME ZONE 'Asia/Kolkata')::date::text`,
-        n: sql<number>`count(*)::int`,
-        logins: sql<number>`count(*) filter (where ${auditLogs.action} = 'login')::int`,
-        failed: sql<number>`count(*) filter (where ${auditLogs.action} = 'login_failed')::int`,
-      })
-      .from(auditLogs)
-      .where(where)
-      .groupBy(sql`(${auditLogs.createdAt} AT TIME ZONE 'Asia/Kolkata')::date`)
-      .orderBy(asc(sql`(${auditLogs.createdAt} AT TIME ZONE 'Asia/Kolkata')::date`)),
+    charts
+      ? db
+          .select({
+            day: sql<string>`(${auditLogs.createdAt} AT TIME ZONE 'Asia/Kolkata')::date::text`,
+            n: sql<number>`count(*)::int`,
+            logins: sql<number>`count(*) filter (where ${auditLogs.action} = 'login')::int`,
+            failed: sql<number>`count(*) filter (where ${auditLogs.action} = 'login_failed')::int`,
+          })
+          .from(auditLogs)
+          .where(where)
+          .groupBy(sql`(${auditLogs.createdAt} AT TIME ZONE 'Asia/Kolkata')::date`)
+          .orderBy(asc(sql`(${auditLogs.createdAt} AT TIME ZONE 'Asia/Kolkata')::date`))
+      : skip,
 
     // Weekday x hour, for the heatmap. Both are IST, since that is the day a
     // reader means when they say "Tuesday morning".
-    db
-      .select({
-        dow: sql<number>`extract(dow from ${auditLogs.createdAt} AT TIME ZONE 'Asia/Kolkata')::int`,
-        hour: sql<number>`extract(hour from ${auditLogs.createdAt} AT TIME ZONE 'Asia/Kolkata')::int`,
-        n: sql<number>`count(*)::int`,
-      })
-      .from(auditLogs)
-      .where(where)
-      .groupBy(sql`1`, sql`2`),
+    charts
+      ? db
+          .select({
+            dow: sql<number>`extract(dow from ${auditLogs.createdAt} AT TIME ZONE 'Asia/Kolkata')::int`,
+            hour: sql<number>`extract(hour from ${auditLogs.createdAt} AT TIME ZONE 'Asia/Kolkata')::int`,
+            n: sql<number>`count(*)::int`,
+          })
+          .from(auditLogs)
+          .where(where)
+          .groupBy(sql`1`, sql`2`)
+      : skip,
 
     // Grouped by the raw agent string, then folded into readable device names
     // in JS. Postgres could not do that folding without the regexes living in
     // SQL too, and one copy of them is the point of `./device`.
-    db
-      .select({ ua: auditLogs.userAgent, n: sql<number>`count(*)::int` })
-      .from(auditLogs)
-      .where(where)
-      .groupBy(auditLogs.userAgent),
+    charts
+      ? db
+          .select({ ua: auditLogs.userAgent, n: sql<number>`count(*)::int` })
+          .from(auditLogs)
+          .where(where)
+          .groupBy(auditLogs.userAgent)
+      : skip,
 
-    db
-      .select({
-        id: auditLogs.actorUserId,
-        name: auditLogs.actorName,
-        phone: auditLogs.actorPhone,
-        n: sql<number>`count(*)::int`,
-      })
-      .from(auditLogs)
-      .where(and(where, sql`${auditLogs.actorUserId} is not null`))
-      .groupBy(auditLogs.actorUserId, auditLogs.actorName, auditLogs.actorPhone)
-      .orderBy(desc(sql`count(*)`))
-      .limit(8),
+    charts
+      ? db
+          .select({
+            id: auditLogs.actorUserId,
+            name: auditLogs.actorName,
+            phone: auditLogs.actorPhone,
+            n: sql<number>`count(*)::int`,
+          })
+          .from(auditLogs)
+          .where(and(where, sql`${auditLogs.actorUserId} is not null`))
+          .groupBy(auditLogs.actorUserId, auditLogs.actorName, auditLogs.actorPhone)
+          .orderBy(desc(sql`count(*)`))
+          .limit(8)
+      : skip,
 
+    // ── The table tabs ──────────────────────────────────────────────────
     // Filter dropdown: everyone who has ever appeared in the log, not just in
     // this window — narrowing the options to the window makes the filter
     // unable to widen it again.
-    db
-      .selectDistinct({ id: auditLogs.actorUserId, name: auditLogs.actorName })
-      .from(auditLogs)
-      .where(sql`${auditLogs.actorUserId} is not null`)
-      .orderBy(asc(auditLogs.actorName)),
+    table
+      ? db
+          .selectDistinct({ id: auditLogs.actorUserId, name: auditLogs.actorName })
+          .from(auditLogs)
+          .where(sql`${auditLogs.actorUserId} is not null`)
+          .orderBy(asc(auditLogs.actorName))
+      : skip,
 
-    db.select({ n: sql<number>`count(*)::int` }).from(auditLogs).where(where),
+    table
+      ? db.select({ n: sql<number>`count(*)::int` }).from(auditLogs).where(where)
+      : Promise.resolve([{ n: 0 }]),
+
+    // Fetched alongside the count rather than after it. Waiting for the count
+    // only served to clamp a page number that is almost always in range; the
+    // rare stale "?page=9 of 3" costs a second read below instead of every
+    // request paying a round trip for it.
+    table ? rowsAt(wantedPage) : skip,
   ]);
 
+  const total = counted[0]?.n ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE));
-  const page = Math.min(Math.max(1, requestedPage), totalPages);
-
-  const rows = await db
-    .select({
-      id: auditLogs.id,
-      createdAt: auditLogs.createdAt,
-      actorUserId: auditLogs.actorUserId,
-      actorName: auditLogs.actorName,
-      actorPhone: auditLogs.actorPhone,
-      action: auditLogs.action,
-      module: auditLogs.module,
-      entityLabel: auditLogs.entityLabel,
-      entityId: auditLogs.entityId,
-      summary: auditLogs.summary,
-      changes: auditLogs.changes,
-      ip: auditLogs.ip,
-      userAgent: auditLogs.userAgent,
-    })
-    .from(auditLogs)
-    .where(where)
-    // Two events in the same millisecond would otherwise straddle a page
-    // boundary unpredictably; the id makes the sort total.
-    .orderBy(desc(auditLogs.createdAt), asc(auditLogs.id))
-    .limit(AUDIT_PAGE_SIZE)
-    .offset((page - 1) * AUDIT_PAGE_SIZE);
+  const page = Math.min(wantedPage, totalPages);
+  const rows = table && page !== wantedPage ? await rowsAt(page) : firstRows;
 
   // Many agent strings collapse to one device: every Chrome patch release is
   // its own user agent. Summed here so the chart shows five devices rather
@@ -322,52 +367,60 @@ export async function getUsage(window: AuditWindow, requestedPage = 1): Promise<
     .groupBy(auditLogs.actorUserId, auditLogs.actorName, auditLogs.actorPhone)
     .as("grouped");
 
-  const [[counted], [minutes]] = await Promise.all([
+  const rowsAt = (page: number) =>
+    db
+      .select({
+        id: auditLogs.actorUserId,
+        name: auditLogs.actorName,
+        phone: auditLogs.actorPhone,
+        roles: users.accessRoles,
+        sessions: sql<number>`count(*) filter (where ${auditLogs.action} = 'login')::int`,
+        actions: sql<number>`count(*)::int`,
+        // max() of a value that is constant within the group: it keeps the
+        // joined seconds out of GROUP BY without changing what it means.
+        seconds: sql<number>`coalesce(max(${spans.seconds}), 0)::int`,
+        // `.mapWith` is not decoration: drizzle-postgres-js overrides the
+        // driver type parsers and rebuilds Dates from each COLUMN mapper, so a
+        // bare `sql<Date>` aggregate arrives as a string and the type is simply
+        // wrong. Borrowing the column mapper makes it a real Date.
+        lastAt: sql<Date>`max(${auditLogs.createdAt})`.mapWith(auditLogs.createdAt),
+      })
+      .from(auditLogs)
+      .leftJoin(users, eq(users.id, auditLogs.actorUserId))
+      .leftJoin(spans, eq(spans.id, auditLogs.actorUserId))
+      .where(active)
+      .groupBy(auditLogs.actorUserId, auditLogs.actorName, auditLogs.actorPhone, users.accessRoles)
+      // Longest active time first, then busiest. The identity columns close the
+      // order: without a total order, LIMIT/OFFSET can show one user twice and
+      // skip another entirely between pages.
+      .orderBy(
+        desc(sql`coalesce(max(${spans.seconds}), 0)`),
+        desc(sql`count(*)`),
+        asc(auditLogs.actorUserId),
+        asc(auditLogs.actorName),
+      )
+      .limit(AUDIT_PAGE_SIZE)
+      .offset((page - 1) * AUDIT_PAGE_SIZE);
+
+  // Page rows, head count and total minutes all at once. Waiting for the
+  // count only served to clamp a page number that is almost always in range —
+  // the rare stale "?page=9 of 3" pays a second read instead of every request
+  // paying a round trip.
+  const wantedPage = Math.max(1, requestedPage);
+  const [[counted], [minutes], firstRows] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(grouped),
     // Summed the way the column displays it — each user rounded to the minute
     // first — so the caption equals the visible column added up.
     db
       .select({ n: sql<number>`coalesce(sum(round(${spans.seconds} / 60.0)), 0)::int` })
       .from(spans),
+    rowsAt(wantedPage),
   ]);
 
   const activeUsers = counted?.n ?? 0;
   const totalPages = Math.max(1, Math.ceil(activeUsers / AUDIT_PAGE_SIZE));
-  const page = Math.min(Math.max(1, requestedPage), totalPages);
-
-  const rows = await db
-    .select({
-      id: auditLogs.actorUserId,
-      name: auditLogs.actorName,
-      phone: auditLogs.actorPhone,
-      roles: users.accessRoles,
-      sessions: sql<number>`count(*) filter (where ${auditLogs.action} = 'login')::int`,
-      actions: sql<number>`count(*)::int`,
-      // max() of a value that is constant within the group: it keeps the
-      // joined seconds out of GROUP BY without changing what it means.
-      seconds: sql<number>`coalesce(max(${spans.seconds}), 0)::int`,
-      // `.mapWith` is not decoration: drizzle-postgres-js overrides the
-      // driver type parsers and rebuilds Dates from each COLUMN mapper, so a
-      // bare `sql<Date>` aggregate arrives as a string and the type is simply
-      // wrong. Borrowing the column mapper makes it a real Date.
-      lastAt: sql<Date>`max(${auditLogs.createdAt})`.mapWith(auditLogs.createdAt),
-    })
-    .from(auditLogs)
-    .leftJoin(users, eq(users.id, auditLogs.actorUserId))
-    .leftJoin(spans, eq(spans.id, auditLogs.actorUserId))
-    .where(active)
-    .groupBy(auditLogs.actorUserId, auditLogs.actorName, auditLogs.actorPhone, users.accessRoles)
-    // Longest active time first, then busiest. The identity columns close the
-    // order: without a total order, LIMIT/OFFSET can show one user twice and
-    // skip another entirely between pages.
-    .orderBy(
-      desc(sql`coalesce(max(${spans.seconds}), 0)`),
-      desc(sql`count(*)`),
-      asc(auditLogs.actorUserId),
-      asc(auditLogs.actorName),
-    )
-    .limit(AUDIT_PAGE_SIZE)
-    .offset((page - 1) * AUDIT_PAGE_SIZE);
+  const page = Math.min(wantedPage, totalPages);
+  const rows = page === wantedPage ? firstRows : await rowsAt(page);
 
   return {
     rows: rows.map((r) => ({

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   areas,
@@ -14,6 +14,7 @@ import {
   type VisitItem,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { asId, latestStockIn } from "@/lib/portal/map-scope";
 import { resolveSelectedCnf } from "@/lib/hq/scope";
 import { formatISTDate, istDateString, istDayBounds } from "@/lib/date";
 import { PRODUCT_SEGMENTS } from "@/lib/field/products";
@@ -159,13 +160,34 @@ export default async function HqDashboardPage({
   }
 
   const { cnf: requestedCnfId } = await searchParams;
-  const allCnfs = await db.select().from(cnfs);
+
+  // The C&F list and the chosen C&F's stockists together, rather than the
+  // second waiting on the first. `resolveSelectedCnf` below settles which C&F
+  // is shown; the guess here follows its rule — the URL, else the viewer's own,
+  // else the first — and the check afterwards re-reads on the rare miss, so the
+  // list always belongs to the C&F actually shown. Order matters here: these
+  // stockists are coloured by their position in this list.
+  const guessCnfId = asId(requestedCnfId) ?? user.cnf?.id ?? null;
+  const [allCnfs, guessedStockists] = await Promise.all([
+    db.select().from(cnfs),
+    db
+      .select()
+      .from(stockists)
+      .where(
+        guessCnfId
+          ? eq(stockists.cnfId, guessCnfId)
+          : eq(stockists.cnfId, sql`(select id from ${cnfs} limit 1)`),
+      ),
+  ]);
   const selectedCnf = resolveSelectedCnf(allCnfs, requestedCnfId, user.cnf?.id ?? null, isAdmin);
   if (!selectedCnf) {
     return <Notice title={t("C&F HQ")}>{t("No C&F HQ set up yet.")}</Notice>;
   }
 
-  const cnfStockists = await db.select().from(stockists).where(eq(stockists.cnfId, selectedCnf.id));
+  const cnfStockists =
+    guessedStockists.length > 0 && guessedStockists[0].cnfId === selectedCnf.id
+      ? guessedStockists
+      : await db.select().from(stockists).where(eq(stockists.cnfId, selectedCnf.id));
   const stockistIds = cnfStockists.map((d) => d.id);
   const hasDepots = stockistIds.length > 0;
 
@@ -196,6 +218,7 @@ export default async function HqDashboardPage({
     perRepMtd,
     competitorRows,
     rankRows,
+    latestStock,
   ] = await Promise.all([
     hasDepots
       ? db
@@ -374,20 +397,10 @@ export default async function HqDashboardPage({
           .where(and(inScope, gte(visits.visitedAt, mtd.start), lt(visits.visitedAt, mtd.end), sql`${visits.rank} is not null`))
           .groupBy(visits.rank)
       : Promise.resolve([] as Array<{ rank: number | null; n: number }>),
+    // Latest observed stock per retail counter, read with everything else —
+    // this used to follow the batch, over every visit those counters ever had.
+    latestStockIn(and(inScope, ne(counters.type, "Wholesale"))),
   ]);
-
-  // Latest observed stock per counter — needs the ids from the query above, so
-  // it can't join the parallel batch. One indexed lookup.
-  const retailCounters = counterRows.filter((c) => c.type !== "Wholesale");
-  const stockRows = retailCounters.length
-    ? await db
-        .select({ counterId: visits.counterId, stock: visits.stock, visitedAt: visits.visitedAt })
-        .from(visits)
-        .where(inArray(visits.counterId, retailCounters.map((c) => c.id)))
-        .orderBy(sql`${visits.visitedAt} desc`)
-    : [];
-  const latestStock = new Map<string, number>();
-  for (const r of stockRows) if (!latestStock.has(r.counterId)) latestStock.set(r.counterId, r.stock);
 
   // ── Counter health ──────────────────────────────────────────────────────
   const totalCounters = counterRows.length;
@@ -483,6 +496,8 @@ export default async function HqDashboardPage({
     value: soldBySegment.get(p.value) ?? 0,
     color: SEGMENT_COLOR[p.value],
   }));
+
+  const retailCounters = counterRows.filter((c) => c.type !== "Wholesale");
 
   // ── Counter type mix (retail only) ──────────────────────────────────────
   const typeCount = new Map<string, number>();

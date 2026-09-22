@@ -20,8 +20,47 @@ export default async function NewCounterPage() {
 
   const isAdmin = user.accessRoles.includes("admin");
 
+  /*
+   * Everything a rep's version of this page needs, in one round trip: whether
+   * their day has started, and their depot's C&F and areas. All three follow
+   * from the user alone, but the day-log check used to gate the other two, so
+   * the page waited three times over (the C&F was a third read after the
+   * depot). Admin's branch below keeps no day log and picks from the whole
+   * hierarchy, so it reads none of this.
+   */
+  let startedToday = true;
+  let depotCnfName: string | null = null;
+  let depotAreas: { id: string; name: string }[] = [];
+  if (!isAdmin) {
+    const [started, details] = await Promise.all([
+      hasStartedToday(user.id),
+      user.depot
+        ? Promise.all([
+            // The C&F name comes back joined to the depot rather than in a
+            // read of its own.
+            db
+              .select({ cnfName: cnfs.name })
+              .from(stockists)
+              .innerJoin(cnfs, eq(cnfs.id, stockists.cnfId))
+              .where(eq(stockists.id, user.depot.id))
+              .limit(1),
+            db
+              .select({ id: areas.id, name: areas.name })
+              .from(areas)
+              .where(eq(areas.stockistId, user.depot.id))
+              .orderBy(asc(areas.name)),
+          ])
+        : Promise.resolve(null),
+    ]);
+    startedToday = started;
+    if (details) {
+      depotCnfName = details[0][0]?.cnfName ?? null;
+      depotAreas = details[1];
+    }
+  }
+
   // A rep works inside a started day; admin keeps no day log and is exempt.
-  if (!isAdmin && !(await hasStartedToday(user.id))) {
+  if (!startedToday) {
     const t = await getT();
     return <StartDayRequired title={t("New Counter")} />;
   }
@@ -58,17 +97,13 @@ export default async function NewCounterPage() {
     );
   }
 
-  const [[depotRow], depotAreas] = await Promise.all([
-    db.select().from(stockists).where(eq(stockists.id, user.depot.id)).limit(1),
-    db.select().from(areas).where(eq(areas.stockistId, user.depot.id)).orderBy(asc(areas.name)),
-  ]);
-  const [cnfRow] = depotRow ? await db.select().from(cnfs).where(eq(cnfs.id, depotRow.cnfId)).limit(1) : [];
+
 
   return (
     <NewCounterWizard
       mode="locked"
       depot={{ id: user.depot.id, name: user.depot.name }}
-      cnf={{ name: cnfRow?.name ?? "—" }}
+      cnf={{ name: depotCnfName ?? "—" }}
       areas={depotAreas.map((a) => ({ id: a.id, name: a.name }))}
     />
   );

@@ -4,11 +4,11 @@ import { canAccess } from "@/lib/auth/access";
 import { getT } from "@/lib/i18n/server";
 import {
   countCountersReport,
-  countVisitsReport,
   fetchCountersReport,
   fetchVisitsReport,
   REPORT_PAGE_SIZE,
   resolveReportsScope,
+  visitsReportTotals,
   type ReportsParams,
 } from "@/lib/khq/reports";
 import { Notice } from "@/components/ui/notice";
@@ -41,13 +41,13 @@ export default async function KhqReportsPage({
         ])
       : [[], 0];
 
-  const [visitsRows, visitsTotal] =
+  const [visitsRows, visitsTotals] =
     scope.tab === "visits"
       ? await Promise.all([
           fetchVisitsReport(scope.filters, pageOpts),
-          countVisitsReport(scope.filters),
+          visitsReportTotals(scope.filters),
         ])
-      : [[], 0];
+      : [[], { count: 0, sold: 0, bySku: { DG10: 0, DG20: 0, DB20: 0, DB40: 0 } }];
 
   return (
     <ReportsClient
@@ -55,7 +55,9 @@ export default async function KhqReportsPage({
       counters={countersRows}
       countersTotal={countersTotal}
       visits={visitsRows}
-      visitsTotal={visitsTotal}
+      visitsTotal={visitsTotals.count}
+      visitsSold={visitsTotals.sold}
+      visitsSoldBySku={visitsTotals.bySku}
       pageSize={REPORT_PAGE_SIZE}
     />
   );

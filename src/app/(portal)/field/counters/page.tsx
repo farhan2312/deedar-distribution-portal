@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { and, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, eq, gte, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { visits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
@@ -31,31 +31,28 @@ export default async function FieldCountersPage({
     );
   }
 
-  // ISR → their own stockist; admin → every counter.
-  const list = await fetchCountersList({
-    scopeStockistIds: user.depot ? [user.depot.id] : null,
-    params: await searchParams,
-  });
+  const { start, end } = istDayBounds();
 
-  // Only this page's counters need the "visited today" flag, so the lookup is
-  // bounded by the page rather than by the rep's whole day.
-  const pageIds = list.rows.map((r) => r.id);
-  let visitedToday = new Set<string>();
-  if (!isAdmin && pageIds.length > 0) {
-    const { start, end } = istDayBounds();
-    const seen = await db
-      .select({ counterId: visits.counterId })
-      .from(visits)
-      .where(
-        and(
-          eq(visits.userId, user.id),
-          inArray(visits.counterId, pageIds),
-          gte(visits.visitedAt, start),
-          lt(visits.visitedAt, end),
-        ),
-      );
-    visitedToday = new Set(seen.map((v) => v.counterId));
-  }
+  // The rep's own visits for today come along beside the list rather than
+  // after it. It used to be bounded by the page's counter ids, which meant
+  // waiting for the page first; a rep's day is a handful of rows either way.
+  //
+  // ISR → their own stockist; admin → every counter.
+  const [list, seen] = await Promise.all([
+    fetchCountersList({
+      scopeStockistIds: user.depot ? [user.depot.id] : null,
+      params: await searchParams,
+    }),
+    isAdmin
+      ? Promise.resolve([] as { counterId: string }[])
+      : db
+          .select({ counterId: visits.counterId })
+          .from(visits)
+          .where(
+            and(eq(visits.userId, user.id), gte(visits.visitedAt, start), lt(visits.visitedAt, end)),
+          ),
+  ]);
+  const visitedToday = new Set(seen.map((v) => v.counterId));
 
   const rows: CounterListRow[] = list.rows.map((c) => ({
     ...c,

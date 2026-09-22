@@ -8,10 +8,20 @@ import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { EditCounterForm } from "./edit-form";
 
+/** `?from=khq` means Central Admin opened this from the Kanpur HQ counter page
+ * (the one Reports links to), so Cancel and Save belong back there rather than
+ * on the ISR’s own counter screen. A flag, not a return URL: nothing arbitrary
+ * from the query string ever becomes a redirect target. */
+function returnPath(from: string | undefined, counterId: string): string | undefined {
+  return from === "khq" ? `/khq/counter/${counterId}` : undefined;
+}
+
 export default async function EditCounterPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -20,7 +30,7 @@ export default async function EditCounterPage({
     return <Notice title={t("Edit counter")}>{t("You don't have Field Salesman ISR access.")}</Notice>;
   }
 
-  const { id } = await params;
+  const [{ id }, { from }] = await Promise.all([params, searchParams]);
   const [counter] = await db
     .select({
       id: counters.id,
@@ -59,6 +69,7 @@ export default async function EditCounterPage({
     <EditCounterForm
       counterId={counter.id}
       areaOptions={depotAreas}
+      returnTo={returnPath(from, counter.id)}
       initial={{
         name: counter.name,
         address: counter.address ?? "",

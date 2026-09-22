@@ -40,11 +40,13 @@ export type BugRow = {
   hasScreenshot: boolean;
 };
 
-const SEVERITY_STYLE: Record<BugSeverity, { label: string; bg: string; color: string }> = {
-  low: { label: "Low", bg: "var(--bg-soft)", color: "var(--ink-2)" },
-  medium: { label: "Medium", bg: "rgba(178,94,0,.1)", color: "var(--warning)" },
-  high: { label: "High", bg: "rgba(199,38,59,.1)", color: "var(--danger)" },
-  critical: { label: "Critical", bg: "var(--danger)", color: "#fff" },
+/** `stripe` is the card's left edge — severity readable across a whole lane at
+ * a glance, before any label is read. */
+const SEVERITY_STYLE: Record<BugSeverity, { label: string; bg: string; color: string; stripe: string }> = {
+  low: { label: "Low", bg: "var(--bg-soft)", color: "var(--ink-2)", stripe: "#A3A9B3" },
+  medium: { label: "Medium", bg: "rgba(178,94,0,.1)", color: "var(--warning)", stripe: "#D08A1E" },
+  high: { label: "High", bg: "rgba(199,38,59,.1)", color: "var(--danger)", stripe: "#D6455A" },
+  critical: { label: "Critical", bg: "var(--danger)", color: "#fff", stripe: "#8E1426" },
 };
 
 const STATUS_STYLE: Record<BugStatus, { label: string; tint: string; soft: string }> = {
@@ -80,9 +82,14 @@ const DRAG_TYPE = "application/x-bug-id";
  * between them.
  *
  * Dragging is the fast path, not the only one. HTML5 drag-and-drop is
- * pointer-only — there is no keyboard equivalent — so every card also carries a
- * status select. Losing the ability to triage from a keyboard would be a poor
- * trade for the convenience.
+ * pointer-only — there is no keyboard equivalent — so every card also carries
+ * ← → buttons that move it one lane at a time. Losing the ability to triage
+ * from a keyboard would be a poor trade for the convenience.
+ *
+ * The four lanes share the width rather than each taking a fixed 300px: at
+ * that width the fourth lane fell off the edge of a 1440px screen, and a board
+ * whose Closed lane needs a sideways scroll to find does not read as a board.
+ * Lanes are full height, so an empty one is still visibly a place to drop into.
  *
  * The whole card is the drag target, but `draggable` on a container makes the
  * browser treat mousedown on its descendants as the start of a drag, which
@@ -263,9 +270,14 @@ export function BugBoard({
           {filtered ? t("No reports match — try clearing the filter.") : `${t("No reports yet")}.`}
         </p>
       ) : (
-        // Horizontal scroll is the point: four readable columns beat four
-        // squeezed ones on a laptop.
-        <div className="flex gap-3.5 overflow-x-auto pb-2" style={{ scrollbarWidth: "thin" }}>
+        // The lanes share the width, down to a floor that keeps a card
+        // readable; below that (a narrow window, a phone) the board scrolls
+        // sideways instead of squeezing four lanes into slivers.
+        <div className="overflow-x-auto pb-2" style={{ scrollbarWidth: "thin" }}>
+          <div
+            className="grid gap-3.5"
+            style={{ gridTemplateColumns: `repeat(${STATUSES.length}, minmax(250px, 1fr))` }}
+          >
           {STATUSES.map((s) => {
             const rows = byStatus(s);
             const style = STATUS_STYLE[s];
@@ -273,13 +285,23 @@ export function BugBoard({
             return (
               <section
                 key={s}
-                className="flex w-[300px] flex-none flex-col overflow-hidden rounded-2xl border transition-colors"
+                className="flex flex-col overflow-hidden rounded-2xl border transition-colors"
                 style={{
-                  maxHeight: "calc(100dvh - 230px)",
-                  // The drop target has to be legible mid-drag, when the
-                  // pointer is over a column but the card is still elsewhere.
-                  borderColor: dragOver === s ? style.tint : "var(--hairline-soft)",
+                  // A fixed lane height, not one that shrinks to its cards: an
+                  // empty lane still has to look like somewhere to drop.
+                  height: "max(420px, calc(100dvh - 300px))",
                   background: dragOver === s ? style.soft : "var(--bg-soft)",
+                  // Every edge set on its own. A `borderTop` shorthand beside
+                  // a changing `borderColor` makes React drop one of them on
+                  // rerender, and the lane's colour band vanished after a drag.
+                  borderStyle: "solid",
+                  borderWidth: "3px 1px 1px 1px",
+                  borderTopColor: style.tint,
+                  // The drop target has to be legible mid-drag, when the
+                  // pointer is over a lane but the card is still elsewhere.
+                  borderRightColor: dragOver === s ? style.tint : "var(--hairline-soft)",
+                  borderBottomColor: dragOver === s ? style.tint : "var(--hairline-soft)",
+                  borderLeftColor: dragOver === s ? style.tint : "var(--hairline-soft)",
                 }}
                 onDragOver={(e) => {
                   // Without preventDefault the browser refuses the drop.
@@ -322,14 +344,19 @@ export function BugBoard({
                   </span>
                 </div>
 
-                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+                <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
                   {rows.length === 0 ? (
-                    <p
-                      className="rounded-xl border border-dashed px-2 py-8 text-center text-[12px]"
-                      style={{ borderColor: "var(--hairline)", color: "var(--ink-3)" }}
+                    // Fills the lane, so the whole empty lane is visibly the
+                    // drop zone rather than a small box at the top of it.
+                    <div
+                      className="flex flex-1 items-center justify-center rounded-xl border-2 border-dashed px-3 text-center text-[12px]"
+                      style={{
+                        borderColor: dragOver === s ? style.tint : "var(--hairline)",
+                        color: dragOver === s ? style.tint : "var(--ink-3)",
+                      }}
                     >
-                      {dragOver === s ? t("Drop to move here") : "—"}
-                    </p>
+                      {dragOver === s ? t("Drop to move here") : t("No reports")}
+                    </div>
                   ) : (
                     rows.map((r) => (
                       <BugCard key={r.id} report={r} onMove={move} busy={pending} />
@@ -344,6 +371,7 @@ export function BugBoard({
               </section>
             );
           })}
+          </div>
         </div>
       )}
     </div>
@@ -410,6 +438,7 @@ function BugCard({
   const cardRef = useRef<HTMLElement>(null);
 
   const sev = SEVERITY_STYLE[r.severity];
+  const idx = STATUSES.indexOf(r.status);
 
   /**
    * Open the details and pull the screenshot in the same gesture.
@@ -442,8 +471,11 @@ function BugCard({
         setDragging(true);
       }}
       onDragEnd={() => setDragging(false)}
-      className={`card p-3 ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
-      style={{ opacity: dragging ? 0.4 : busy ? 0.7 : 1 }}
+      className={`card flex-none p-3 ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
+      style={{
+        opacity: dragging ? 0.4 : busy ? 0.7 : 1,
+        borderLeft: `4px solid ${sev.stripe}`,
+      }}
       title={canDrag ? t("Drag to move") : undefined}
     >
       <div className="flex items-start gap-2">
@@ -477,16 +509,39 @@ function BugCard({
           drag on mousedown and the click never lands — which is exactly how
           the Details button and the select stopped working the first time. */}
       <div onMouseEnter={() => setCanDrag(false)} onMouseLeave={() => setCanDrag(true)}>
-      {(r.description || r.hasScreenshot) && (
-        <button
-          type="button"
-          className="link mt-1.5 text-[11.5px]"
-          onClick={toggleOpen}
-          aria-expanded={open}
-        >
-          {open ? t("Less") : r.hasScreenshot ? t("Details + screenshot") : t("Details")}
-        </button>
-      )}
+      <div className="mt-2 flex items-center justify-between gap-2">
+        {r.description || r.hasScreenshot ? (
+          <button
+            type="button"
+            className="link text-[11.5px]"
+            onClick={toggleOpen}
+            aria-expanded={open}
+          >
+            {open ? t("Less") : r.hasScreenshot ? t("Details + screenshot") : t("Details")}
+          </button>
+        ) : (
+          <span />
+        )}
+
+        {/* The keyboard path to the same move as a drag: one lane left or
+            right. Dragging is pointer-only, so these are not a fallback but
+            the accessible equivalent — and far lighter on a card than the
+            full-width status dropdown they replace. */}
+        <span className="flex flex-none gap-1">
+          <MoveButton
+            to={STATUSES[idx - 1]}
+            direction="left"
+            disabled={busy || idx === 0}
+            onMove={(to) => onMove(r.id, to)}
+          />
+          <MoveButton
+            to={STATUSES[idx + 1]}
+            direction="right"
+            disabled={busy || idx === STATUSES.length - 1}
+            onMove={(to) => onMove(r.id, to)}
+          />
+        </span>
+      </div>
 
       {open && (
         <>
@@ -522,23 +577,39 @@ function BugCard({
         </>
       )}
 
-      {/* The keyboard path to the same move. Dragging is pointer-only, so this
-          is not a fallback but the accessible equivalent. */}
-      <select
-        className="inp mt-2"
-        style={{ width: "100%", padding: "4px 8px", fontSize: 11.5 }}
-        value={r.status}
-        disabled={busy}
-        onChange={(e) => onMove(r.id, e.target.value as BugStatus)}
-        aria-label={t("Move to")}
-      >
-        {STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {t(STATUS_STYLE[s].label)}
-          </option>
-        ))}
-      </select>
       </div>
     </article>
+  );
+}
+
+/** One lane left or right. Named for where it goes — "Move to In progress" —
+ * so a screen reader says the destination, not just "previous". */
+function MoveButton({
+  to,
+  direction,
+  disabled,
+  onMove,
+}: {
+  to: BugStatus | undefined;
+  direction: "left" | "right";
+  disabled: boolean;
+  onMove: (to: BugStatus) => void;
+}) {
+  const t = useT();
+  const label = to ? `${t("Move to")} ${t(STATUS_STYLE[to].label)}` : undefined;
+  return (
+    <button
+      type="button"
+      className="flex h-6 w-6 items-center justify-center rounded-md border transition-colors disabled:opacity-30"
+      style={{ borderColor: "var(--hairline)", color: to ? STATUS_STYLE[to].tint : "var(--ink-3)" }}
+      disabled={disabled || !to}
+      onClick={() => to && onMove(to)}
+      aria-label={label}
+      title={label}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        {direction === "left" ? <path d="m15 18-6-6 6-6" /> : <path d="m9 18 6-6-6-6" />}
+      </svg>
+    </button>
   );
 }

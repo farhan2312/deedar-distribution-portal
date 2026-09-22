@@ -26,7 +26,19 @@ type LevelKey = ScopeLevel["key"];
  * defers back to the server's value when the transition settles, so a scope
  * the server rejects or re-resolves still ends up displayed correctly.
  */
-export function MapScopePickers({ levels }: { levels: ScopeLevel[] }) {
+export function MapScopePickers({
+  levels,
+  alsoClear = [],
+}: {
+  levels: ScopeLevel[];
+  /**
+   * Params that depend on the place and must go when it changes — e.g. the
+   * Reports ISR filter, since a rep picked under one stockist is meaningless
+   * under another. Without this a stale choice would sit in the URL and
+   * quietly come back the moment the old stockist was picked again.
+   */
+  alsoClear?: string[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -54,6 +66,7 @@ export function MapScopePickers({ levels }: { levels: ScopeLevel[] }) {
       q.set(key, next);
       if (key === "cnf") q.delete("depot");
       if (key !== "area") q.delete("area");
+      for (const k of alsoClear) q.delete(k);
       router.push(`${pathname}?${q.toString()}`);
     });
   }

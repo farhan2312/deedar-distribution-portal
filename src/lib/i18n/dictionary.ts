@@ -1082,6 +1082,10 @@ const HI: Record<string, string> = {
     "पहले लॉगिन तक पासवर्ड मोबाइल नंबर है।",
   "This stockist has no areas yet.": "इस स्टॉकिस्ट का अभी कोई क्षेत्र नहीं है।",
   "Pick a stockist first": "पहले स्टॉकिस्ट चुनें",
+  ISR: "ISR",
+  "All ISRs": "सभी ISR",
+  deactivated: "निष्क्रिय",
+  "Cumulative sold": "कुल बिक्री",
   "No Sales Officer supervises this stockist yet":
     "अभी कोई सेल्स ऑफिसर इस स्टॉकिस्ट की निगरानी नहीं करता",
   "doesn't supervise this stockist": "इस स्टॉकिस्ट की निगरानी नहीं करता",
@@ -1160,10 +1164,10 @@ const HI: Record<string, string> = {
   // ── Kanpur HQ: Reports ──
   Reports: "रिपोर्ट",
   "You don't have Kanpur HQ access.": "आपके पास कानपुर मुख्यालय एक्सेस नहीं है।",
-  "All counters and visits company-wide, exportable to CSV.":
-    "कंपनी-व्यापी सभी दुकानें और विज़िट, CSV में निर्यात योग्य।",
+  "All counters and visits company-wide, exportable to Excel.":
+    "कंपनी-व्यापी सभी दुकानें और विज़िट, Excel में निर्यात योग्य।",
   // "Visits" already defined above under Live maps: Sales Officer / C&F HQ team view.
-  "Export CSV": "CSV निर्यात करें",
+  "Export Excel": "Excel निर्यात करें",
   "Exporting…": "निर्यात हो रहा है…",
   "Search counter name or mobile…": "दुकान का नाम या मोबाइल खोजें…",
   "Search counter or rep name…": "दुकान या रेप का नाम खोजें…",
@@ -1319,6 +1323,7 @@ const HI: Record<string, string> = {
   // Bug tracker board
   "Drop to move here": "यहाँ ले जाने के लिए छोड़ें",
   "Move to": "यहाँ ले जाएँ",
+  "No reports": "कोई रिपोर्ट नहीं",
   "Details": "विवरण",
   "Less": "कम",
   // Bug tracker board: card details
@@ -1346,6 +1351,12 @@ const HI: Record<string, string> = {
   "← Back to reports": "← रिपोर्ट पर वापस",
   "Every visit recorded at this counter": "इस काउंटर पर दर्ज हर विज़िट",
   "No visits recorded at this counter yet.": "इस काउंटर पर अभी कोई विज़िट दर्ज नहीं है।",
+  // Central Admin's corrections on this page: the counter's own details, and
+  // each logged visit.
+  "Edit details": "विवरण संपादित करें",
+  // "visit" itself is already above, for the delete dialog's label.
+  "The visit's packets and stock leave every total that counts them. This can't be undone.":
+    "इस विज़िट के पैकेट और स्टॉक हर उस कुल से हट जाएंगे जिसमें वे गिने जाते हैं। इसे पूर्ववत नहीं किया जा सकता।",
   "Days visited": "विज़िट के दिन",
   "ISRs": "आईएसआर",
   "Never": "कभी नहीं",
@@ -1452,6 +1463,12 @@ const HI: Record<string, string> = {
   "This C&F HQ has no stockists yet.": "इस C&F HQ के अंतर्गत अभी कोई स्टॉकिस्ट नहीं है।",
   // Reports: counters-tab ordering
   "Sort by": "क्रम",
+  "Name (A–Z)": "नाम (अ–ज्ञ)",
+  "Last visit — oldest first": "अंतिम विज़िट — सबसे पुरानी पहले",
+  "Last visit — newest first": "अंतिम विज़िट — सबसे नई पहले",
+  "Stock — high to low": "स्टॉक — अधिक से कम",
+  "Stock — low to high": "स्टॉक — कम से अधिक",
+  "yesterday": "कल",
   "Newest first": "नए पहले",
   "Most visits": "सबसे ज़्यादा विज़िट",
   "Fewest visits": "सबसे कम विज़िट",

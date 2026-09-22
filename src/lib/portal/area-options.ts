@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, stockists } from "@/db/schema";
 import type { ScopeOption } from "./map-scope";
@@ -50,8 +50,26 @@ export async function subDealersOf(stockistId: string): Promise<string[]> {
  */
 export async function areaOptionsFor(stockistIds: string[]): Promise<ScopeOption[]> {
   if (stockistIds.length === 0) return [];
+  return groupAreaOptions(await areaRowsWhere(inArray(areas.stockistId, stockistIds)));
+}
 
-  const rows = await db
+/** An area with what the option list needs to know about its owner. */
+export type AreaRow = {
+  id: string;
+  name: string;
+  stockistId: string;
+  stockistName: string;
+  parentId: string | null;
+};
+
+/**
+ * Area rows under a predicate, in option order: by owning stockist's name,
+ * then area name. The order is Postgres's, not JS's — sorting stays in SQL so
+ * a list read here and filtered in memory comes out exactly as a list queried
+ * for directly would.
+ */
+export function areaRowsWhere(where: SQL | undefined): Promise<AreaRow[]> {
+  return db
     .select({
       id: areas.id,
       name: areas.name,
@@ -61,9 +79,17 @@ export async function areaOptionsFor(stockistIds: string[]): Promise<ScopeOption
     })
     .from(areas)
     .innerJoin(stockists, eq(stockists.id, areas.stockistId))
-    .where(inArray(areas.stockistId, stockistIds))
+    .where(where)
     .orderBy(asc(stockists.name), asc(areas.name));
+}
 
+/**
+ * The option list for a set of area rows already in option order — the part
+ * of `areaOptionsFor` that needs no database, so a caller that already holds
+ * the rows (the map scope loads them alongside everything else) gets the same
+ * list without another round trip.
+ */
+export function groupAreaOptions(rows: AreaRow[]): ScopeOption[] {
   const owners = new Set(rows.map((r) => r.stockistId));
   if (owners.size <= 1) {
     // One owner: a flat list, exactly as before sub-dealers existed.

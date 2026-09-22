@@ -14,6 +14,10 @@ type SegMap = Record<ProductSegment, number>;
 
 export type VisitFormProps = {
   counterId: string;
+  /** Where Cancel and a successful save go. Defaults to the ISR’s own counter
+   * page; Central Admin arrives here from the Kanpur HQ counter page and is
+   * sent back to the one it came from. */
+  returnTo?: string;
   counterName: string;
   counterArea: string;
   visitId?: string;
@@ -45,10 +49,11 @@ function mmss(totalSeconds: number): string {
  * for the same meaning and are imported as null). */
 const RANK_OPTIONS = [1, 2, 3, 4, 5, null] as const;
 
-export function VisitForm({ counterId, counterName, counterArea, visitId, initial }: VisitFormProps) {
+export function VisitForm({ counterId, counterName, counterArea, visitId, initial, returnTo }: VisitFormProps) {
   const router = useRouter();
   const t = useT();
   const isEdit = !!visitId;
+  const back = returnTo ?? `/field/counter/${counterId}`;
 
   const [sold, setSold] = useState<SegMap>(() => initMap(initial?.items, "sold"));
   const [stock, setStock] = useState<SegMap>(() => initMap(initial?.items, "stock"));
@@ -130,7 +135,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
     // Stay disabled on success: the push + refresh are still in flight and this
     // component unmounts on navigation. Clearing `busy` here would re-enable
     // "Submit visit" mid-save and allow a duplicate visit to be recorded.
-    router.push(`/field/counter/${counterId}`);
+    router.push(back);
     router.refresh();
   }
 
@@ -266,7 +271,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
             <>
               <button
                 className="btn btn-secondary flex-1 justify-center py-3.5"
-                onClick={() => router.push(`/field/counter/${counterId}`)}
+                onClick={() => router.push(back)}
               >
                 {t("Cancel")}
               </button>

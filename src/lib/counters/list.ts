@@ -3,6 +3,7 @@ import { and, asc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, counters, stockists } from "@/db/schema";
 import { counterTypeLabel } from "@/lib/field/counter-types";
+import { asId } from "@/lib/portal/map-scope";
 import type { CounterStatus } from "@/lib/khq/reports";
 
 /**
@@ -72,11 +73,87 @@ export async function fetchCountersList(opts: {
 }): Promise<CountersListPage> {
   const { scopeStockistIds, params, where: extra } = opts;
 
-  const stockistOptions = await db
-    .select({ id: stockists.id, name: stockists.name })
-    .from(stockists)
-    .where(scopeStockistIds ? inArray(stockists.id, scopeStockistIds) : undefined)
-    .orderBy(asc(stockists.name));
+  const q = (params.q ?? "").trim();
+
+  /*
+   * Options, count and page in ONE round trip.
+   *
+   * These used to run in a chain — the stockist options, then the areas that
+   * the picked stockist narrows, then the count, then the page — four waits on
+   * a database ~75 ms away for one table. The ids in the URL are applied
+   * straight away (an id-shaped value can be used in SQL before it is known to
+   * be on offer), the lists that vet them are read alongside, and the rare
+   * stale id is corrected afterwards with a second read.
+   */
+  const depotGuess = asId(params.depot);
+  const areaGuess = asId(params.area);
+
+  const scopeParts = (stockistId: string | null): SQL[] => {
+    const parts: SQL[] = [];
+    if (extra) parts.push(extra);
+    if (stockistId) parts.push(eq(counters.stockistId, stockistId));
+    else if (scopeStockistIds) parts.push(inArray(counters.stockistId, scopeStockistIds));
+    return parts;
+  };
+  const filterFor = (stockistId: string | null, areaId: string | null): SQL | undefined => {
+    const parts = scopeParts(stockistId);
+    if (areaId) parts.push(eq(counters.areaId, areaId));
+    if (q) {
+      const like = `%${q}%`;
+      // Name OR mobile — the two things someone types into this box.
+      parts.push(or(ilike(counters.name, like), ilike(counters.phone, like))!);
+    }
+    return parts.length ? and(...parts) : undefined;
+  };
+  const countWith = (filter: SQL | undefined) =>
+    db.select({ n: sql<number>`count(*)::int` }).from(counters).where(filter);
+  const rowsWith = (filter: SQL | undefined, page: number) =>
+    db
+      .select({
+        id: counters.id,
+        name: counters.name,
+        phone: counters.phone,
+        type: counters.type,
+        typeOther: counters.typeOther,
+        areaId: counters.areaId,
+        areaName: areas.name,
+        stockistId: counters.stockistId,
+        stockistName: stockists.name,
+        status: counters.status,
+      })
+      .from(counters)
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .innerJoin(stockists, eq(stockists.id, counters.stockistId))
+      .where(filter)
+      // The id is a tiebreaker, not decoration: names are not unique (59
+      // counters share one today), and LIMIT/OFFSET over a non-total order lets
+      // Postgres return tied rows in a different order per page — which
+      // silently drops some rows and repeats others across page boundaries.
+      .orderBy(asc(counters.name), asc(counters.id))
+      .limit(COUNTERS_PAGE_SIZE)
+      .offset((page - 1) * COUNTERS_PAGE_SIZE);
+
+  const requested = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const guessFilter = filterFor(depotGuess, areaGuess);
+  const scopeAll = scopeParts(null);
+  const [stockistOptions, areaRows, guessCount, guessRows] = await Promise.all([
+    db
+      .select({ id: stockists.id, name: stockists.name })
+      .from(stockists)
+      .where(scopeStockistIds ? inArray(stockists.id, scopeStockistIds) : undefined)
+      .orderBy(asc(stockists.name)),
+    // Areas that actually hold a counter in the viewer's scope, each tagged
+    // with the stockist whose counter put it there — picking a stockist
+    // narrows this list, which is now done in memory rather than in SQL.
+    db
+      .selectDistinct({ id: areas.id, name: areas.name, stockistId: counters.stockistId })
+      .from(counters)
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .where(scopeAll.length ? and(...scopeAll) : undefined)
+      .orderBy(asc(areas.name)),
+    countWith(guessFilter),
+    rowsWith(guessFilter, requested),
+  ]);
 
   // A hand-edited or stale id is dropped rather than honoured, so the filter
   // never silently narrows to something the viewer can't see.
@@ -84,72 +161,26 @@ export async function fetchCountersList(opts: {
     ? (params.depot as string)
     : null;
 
-  const scopeWhere = (): SQL[] => {
-    const parts: SQL[] = [];
-    if (extra) parts.push(extra);
-    if (stockistId) parts.push(eq(counters.stockistId, stockistId));
-    else if (scopeStockistIds) parts.push(inArray(counters.stockistId, scopeStockistIds));
-    return parts;
-  };
-
-  // Areas offered are those that actually hold a counter in the current
-  // stockist scope — picking a stockist narrows the area list to that
-  // stockist's areas, which is what the client did before.
-  const scoped = scopeWhere();
-  const areaOptions = await db
-    .selectDistinct({ id: areas.id, name: areas.name })
-    .from(counters)
-    .innerJoin(areas, eq(areas.id, counters.areaId))
-    .where(scoped.length ? and(...scoped) : undefined)
-    .orderBy(asc(areas.name));
+  const inStockist = stockistId ? areaRows.filter((a) => a.stockistId === stockistId) : areaRows;
+  const seenArea = new Set<string>();
+  const areaOptions = inStockist
+    .filter((a) => (seenArea.has(a.id) ? false : (seenArea.add(a.id), true)))
+    .map((a) => ({ id: a.id, name: a.name }));
 
   const areaId = areaOptions.some((a) => a.id === params.area) ? (params.area as string) : null;
 
-  const q = (params.q ?? "").trim();
-  const parts = scopeWhere();
-  if (areaId) parts.push(eq(counters.areaId, areaId));
-  if (q) {
-    const like = `%${q}%`;
-    // Name OR mobile — the two things someone types into this box.
-    parts.push(or(ilike(counters.name, like), ilike(counters.phone, like))!);
-  }
-  const filter = parts.length ? and(...parts) : undefined;
-
-  const [{ n: total }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(counters)
-    .where(filter);
+  // The count and page above were read for the ids as given. When one of them
+  // turns out not to be on offer, they are read again for the filter that was
+  // actually applied — a stale link's cost, not a normal load's.
+  const asGiven = stockistId === depotGuess && areaId === areaGuess;
+  const filter = asGiven ? guessFilter : filterFor(stockistId, areaId);
+  const [{ n: total }] = asGiven ? guessCount : await countWith(filter);
 
   const totalPages = Math.max(1, Math.ceil(total / COUNTERS_PAGE_SIZE));
   // Clamped, not rejected: a filter that shrinks the result can leave the URL
   // pointing at page 7 of 3, and an empty table would look like no matches.
-  const requested = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const page = Math.min(requested, totalPages);
-
-  const rows = await db
-    .select({
-      id: counters.id,
-      name: counters.name,
-      phone: counters.phone,
-      type: counters.type,
-      typeOther: counters.typeOther,
-      areaId: counters.areaId,
-      areaName: areas.name,
-      stockistId: counters.stockistId,
-      stockistName: stockists.name,
-      status: counters.status,
-    })
-    .from(counters)
-    .innerJoin(areas, eq(areas.id, counters.areaId))
-    .innerJoin(stockists, eq(stockists.id, counters.stockistId))
-    .where(filter)
-    // The id is a tiebreaker, not decoration: names are not unique (59 counters
-    // share one today), and LIMIT/OFFSET over a non-total order lets Postgres
-    // return tied rows in a different order per page — which silently drops
-    // some rows and repeats others across page boundaries.
-    .orderBy(asc(counters.name), asc(counters.id))
-    .limit(COUNTERS_PAGE_SIZE)
-    .offset((page - 1) * COUNTERS_PAGE_SIZE);
+  const rows = asGiven && page === requested ? guessRows : await rowsWith(filter, page);
 
   return {
     rows: rows.map((c) => ({

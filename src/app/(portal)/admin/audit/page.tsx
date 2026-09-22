@@ -4,6 +4,7 @@ import {
   getAuditData,
   getUsage,
   isAction,
+  isTableTab,
   isModule,
   isTab,
   type AuditFilters,
@@ -53,7 +54,8 @@ export default async function AuditLogPage({
     tab === "usage"
       ? getUsage(window, page)
       : Promise.resolve({ rows: [], users: 0, totalMinutes: 0, page: 1, totalPages: 1 }),
-    allUserOptions(),
+    // Feeds the table tabs' "who" dropdown and nothing else.
+    isTableTab(tab) ? allUserOptions() : Promise.resolve([]),
   ]);
 
   // Everyone who exists, plus anyone in the log who no longer does — a filter

@@ -1,6 +1,6 @@
 import "server-only";
 import { alias } from "drizzle-orm/pg-core";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { bugReports, users, type BugStatus, type BugType } from "@/db/schema";
 import { formatISTDate, formatISTTime } from "@/lib/date";
@@ -51,34 +51,39 @@ export async function getBugInbox(user: {
     ? inArray(bugReports.status, TRIAGE_ACTIVE)
     : eq(bugReports.reportedByUserId, user.id);
 
-  const rows = await db
-    .select({
-      id: bugReports.id,
-      type: bugReports.type,
-      title: bugReports.title,
-      status: bugReports.status,
-      createdAt: bugReports.createdAt,
-      reporterName: reporter.name,
-    })
-    .from(bugReports)
-    .leftJoin(reporter, eq(reporter.id, bugReports.reportedByUserId))
-    .where(scope)
-    .orderBy(desc(bugReports.createdAt))
-    .limit(FEED_LIMIT);
+  // The feed and the badge count are independent reads, so they run together
+  // — this sits in the portal layout, on every page.
+  const [rows, [counted]] = await Promise.all([
+    db
+      .select({
+        id: bugReports.id,
+        type: bugReports.type,
+        title: bugReports.title,
+        status: bugReports.status,
+        createdAt: bugReports.createdAt,
+        reporterName: reporter.name,
+      })
+      .from(bugReports)
+      .leftJoin(reporter, eq(reporter.id, bugReports.reportedByUserId))
+      .where(scope)
+      .orderBy(desc(bugReports.createdAt))
+      .limit(FEED_LIMIT),
 
-  // Count the full active set, not just the page we display.
-  const countRows = await db
-    .select({ id: bugReports.id })
-    .from(bugReports)
-    .where(
-      isTriage
-        ? inArray(bugReports.status, TRIAGE_ACTIVE)
-        : and(eq(bugReports.reportedByUserId, user.id), inArray(bugReports.status, REPORTER_ACTIVE)),
-    );
+    // Count the full active set, not just the page we display — counted in
+    // SQL rather than by fetching every id to take its length.
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(bugReports)
+      .where(
+        isTriage
+          ? inArray(bugReports.status, TRIAGE_ACTIVE)
+          : and(eq(bugReports.reportedByUserId, user.id), inArray(bugReports.status, REPORTER_ACTIVE)),
+      ),
+  ]);
 
   return {
     isTriage,
-    count: countRows.length,
+    count: counted?.n ?? 0,
     items: rows.map((r) => ({
       id: r.id,
       type: r.type,

@@ -2,17 +2,18 @@
 
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
+import { countersWorkbook, visitsWorkbook } from "./report-xlsx";
 import {
-  countersToCsv,
   fetchCountersReport,
   fetchVisitsReport,
   resolveReportsScope,
-  visitsToCsv,
   type ReportsParams,
 } from "./reports";
 
-export type CsvResult =
-  | { ok: true; filename: string; data: string }
+/** A finished .xlsx, base64-encoded — a server action returns serialisable
+ * values, and the browser turns this back into bytes for the download. */
+export type ExportResult =
+  | { ok: true; filename: string; base64: string }
   | { ok: false; error: string };
 
 async function guard(): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -34,20 +35,30 @@ function stamp(): string {
   );
 }
 
-export async function exportCountersCsv(params: ReportsParams): Promise<CsvResult> {
+export async function exportCountersXlsx(params: ReportsParams): Promise<ExportResult> {
   const g = await guard();
   if (!g.ok) return g;
   const scope = await resolveReportsScope(params);
   // No LIMIT for exports — the whole point of exporting is to get everything
   // that matched the filter, even when the on-screen view was trimmed.
-  const rows = await fetchCountersReport(scope.filters);
-  return { ok: true, filename: `counters-${stamp()}.csv`, data: countersToCsv(rows) };
+  const rows = await fetchCountersReport(scope.filters, undefined, scope.sort);
+  return {
+    ok: true,
+    filename: `counters-${stamp()}.xlsx`,
+    base64: await countersWorkbook(rows, scope),
+  };
 }
 
-export async function exportVisitsCsv(params: ReportsParams): Promise<CsvResult> {
+export async function exportVisitsXlsx(params: ReportsParams): Promise<ExportResult> {
   const g = await guard();
   if (!g.ok) return g;
-  const scope = await resolveReportsScope(params);
+  // Same scope the page rendered — the ISR filter included — so the file
+  // holds exactly what the screen was showing, every page of it.
+  const scope = await resolveReportsScope({ ...params, tab: "visits" });
   const rows = await fetchVisitsReport(scope.filters);
-  return { ok: true, filename: `visits-${stamp()}.csv`, data: visitsToCsv(rows) };
+  return {
+    ok: true,
+    filename: `visits-${stamp()}.xlsx`,
+    base64: await visitsWorkbook(rows, scope),
+  };
 }

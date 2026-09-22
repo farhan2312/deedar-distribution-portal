@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { AccessRole, DayLog } from "@/db/schema";
-import { areas, beatAssignments, cnfs, counters, dayLogs, stockists, users, visits } from "@/db/schema";
+import { areas, cnfs, counters, dayLogs, stockists, users, visits } from "@/db/schema";
 
 /** The subset of the current user needed to scope a supervisor's team. */
 export type ScopeUser = {
@@ -204,23 +204,6 @@ export async function getVisitsToday(
   return out;
 }
 
-/**
- * Total stock observed at each counter's MOST RECENT visit (any rep, any
- * date). Counters never visited are absent from the map — callers default
- * them to 0.
- */
-export async function getLatestVisitStock(counterIds: string[]): Promise<Map<string, number>> {
-  if (counterIds.length === 0) return new Map();
-  const rows = await db
-    .select({ counterId: visits.counterId, stock: visits.stock })
-    .from(visits)
-    .where(inArray(visits.counterId, counterIds))
-    .orderBy(desc(visits.visitedAt));
-
-  const out = new Map<string, number>();
-  for (const r of rows) if (!out.has(r.counterId)) out.set(r.counterId, r.stock); // newest-first
-  return out;
-}
 
 /** Distinct counter ids the team visited within the window (map coloring + coverage KPI). */
 export async function getCountersVisitedToday(
@@ -237,21 +220,3 @@ export async function getCountersVisitedToday(
   return new Set(rows.map((r) => r.counterId));
 }
 
-/**
- * Counters a Supervisor has put on a rep's beat for the given IST day. Keyed by
- * counter id (not rep) — the map only cares whether a counter is assigned today,
- * not to whom. `counterIds` bounds the query to the counters actually on screen.
- */
-export async function getCountersAssignedToday(
-  counterIds: string[],
-  logDate: string,
-): Promise<Set<string>> {
-  if (counterIds.length === 0) return new Set();
-  const rows = await db
-    .select({ counterId: beatAssignments.counterId })
-    .from(beatAssignments)
-    .where(
-      and(inArray(beatAssignments.counterId, counterIds), eq(beatAssignments.beatDate, logDate)),
-    );
-  return new Set(rows.map((r) => r.counterId));
-}

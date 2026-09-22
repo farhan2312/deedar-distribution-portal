@@ -1,6 +1,6 @@
 import "server-only";
 import { alias } from "drizzle-orm/pg-core";
-import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { AccessRole, ProductSegment, StockistKind, StockMovementType } from "@/db/schema";
 import {
@@ -42,20 +42,21 @@ export async function stockistScope(user: ScopeUser): Promise<StockistOption[]> 
   }
   if (!user.depot) return [];
 
-  const [self] = await db
-    .select({ id: stockists.id, name: stockists.name, kind: stockists.kind })
+  // The stockist and anything hanging off it, in one read. The sub-dealers
+  // used to be fetched only after the parent's kind came back, which cost a
+  // second wait on every dealer's page load to save one narrow query.
+  const rows = await db
+    .select({ id: stockists.id, name: stockists.name, kind: stockists.kind, parentId: stockists.parentId })
     .from(stockists)
-    .where(eq(stockists.id, user.depot.id))
-    .limit(1);
-  if (!self) return [];
-  if (self.kind !== "dealer") return [self];
-
-  const children = await db
-    .select({ id: stockists.id, name: stockists.name, kind: stockists.kind })
-    .from(stockists)
-    .where(eq(stockists.parentId, self.id))
+    .where(or(eq(stockists.id, user.depot.id), eq(stockists.parentId, user.depot.id)))
     .orderBy(asc(stockists.name));
-  return [self, ...children];
+
+  const self = rows.find((s) => s.id === user.depot!.id);
+  if (!self) return [];
+  const bare = ({ id, name, kind }: (typeof rows)[number]) => ({ id, name, kind });
+  // Only a dealer owns sub-dealers; for anyone else the extra rows are ignored.
+  if (self.kind !== "dealer") return [bare(self)];
+  return [bare(self), ...rows.filter((s) => s.id !== self.id).map(bare)];
 }
 
 export { ROLLUP_ID } from "./constants";
@@ -132,18 +133,11 @@ export async function getDepotCountersData(
     eq(counters.type, "Wholesale"),
   );
 
-  const [{ n: total }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(counters)
-    .where(wholesaleHere);
   const pageSize = DEPOT_COUNTERS_PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  // Clamped: switching stockist can shrink the list under the current page.
-  const page = Math.min(Math.max(1, requestedPage), totalPages);
-
-  const [counterRows, outwardToday] = await Promise.all([
-    // Scoped to Wholesale at the SQL layer so retail rows never even leave
-    // the DB — the client can't reveal them via devtools either.
+  const asked = Math.max(1, requestedPage);
+  // Scoped to Wholesale at the SQL layer so retail rows never even leave the
+  // DB — the client can't reveal them via devtools either.
+  const rowsAt = (page: number) =>
     db
       .select({
         id: counters.id,
@@ -161,7 +155,38 @@ export async function getDepotCountersData(
       // unique, and paging a non-total order loses rows.
       .orderBy(asc(counters.name), asc(counters.id))
       .limit(pageSize)
-      .offset((page - 1) * pageSize),
+      .offset((page - 1) * pageSize);
+
+  // Last observed stock, for one page of counters. This used to select every
+  // visit ever recorded against the stockist's wholesale counters and keep the
+  // first row per counter in JS — a scan that grew with history forever to
+  // produce one number per row. DISTINCT ON does the same pick in the index,
+  // and the page it covers is expressed as a subquery so it no longer waits
+  // for the rows themselves to come back.
+  const stockAt = (page: number) =>
+    db
+      .selectDistinctOn([visits.counterId], { counterId: visits.counterId, stock: visits.stock })
+      .from(visits)
+      .where(
+        inArray(
+          visits.counterId,
+          db
+            .select({ id: counters.id })
+            .from(counters)
+            .where(wholesaleHere)
+            .orderBy(asc(counters.name), asc(counters.id))
+            .limit(pageSize)
+            .offset((page - 1) * pageSize),
+        ),
+      )
+      .orderBy(visits.counterId, desc(visits.visitedAt));
+
+  // The count no longer gates the page: the rows are read for the page asked
+  // for, and read again only if that turns out to be past the end.
+  const [countRows, askedRows, askedStock, outwardToday] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(counters).where(wholesaleHere),
+    rowsAt(asked),
+    stockAt(asked),
     // "Bulk sales" = bora lifting by wholesale counters. This is what the
     // depot actually cares about — retail sales are the reps' number, not
     // the depot's, so no "salesman market sales" tile here.
@@ -178,21 +203,15 @@ export async function getDepotCountersData(
       ),
   ]);
 
-  // Last observed stock, for this page's counters only. This used to select
-  // every visit ever recorded against the stockist's wholesale counters and
-  // keep the first row per counter in JS — a scan that grew with history
-  // forever to produce one number per row. DISTINCT ON does the same pick in
-  // the index, over 50 counters instead of all of them.
-  const pageIds = counterRows.map((c) => c.id);
+  const total = countRows[0]?.n ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // Clamped: switching stockist can shrink the list under the current page.
+  const page = Math.min(asked, totalPages);
+  const [counterRows, stockRows] =
+    page === asked ? [askedRows, askedStock] : await Promise.all([rowsAt(page), stockAt(page)]);
+
   const latestStock = new Map<string, number>();
-  if (pageIds.length > 0) {
-    const stockRows = await db
-      .selectDistinctOn([visits.counterId], { counterId: visits.counterId, stock: visits.stock })
-      .from(visits)
-      .where(inArray(visits.counterId, pageIds))
-      .orderBy(visits.counterId, desc(visits.visitedAt));
-    for (const v of stockRows) latestStock.set(v.counterId, v.stock);
-  }
+  for (const v of stockRows) latestStock.set(v.counterId, v.stock);
   // qty is signed (outward is negative) — report it as a positive packet count.
   const bulkSales = outwardToday.reduce((s, m) => s + Math.abs(m.qty), 0);
 

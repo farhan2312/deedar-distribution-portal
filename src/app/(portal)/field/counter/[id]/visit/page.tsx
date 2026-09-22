@@ -26,22 +26,33 @@ export default async function NewVisitPage({
   }
 
   const { id } = await params;
-  const [counter] = await db
-    .select({
-      id: counters.id,
-      name: counters.name,
-      type: counters.type,
-      typeOther: counters.typeOther,
-      areaName: areas.name,
-      stockistId: counters.stockistId,
-    })
-    .from(counters)
-    .innerJoin(areas, eq(areas.id, counters.areaId))
-    .where(eq(counters.id, id))
-    .limit(1);
+  const isAdmin = user.accessRoles.includes("admin");
+
+  /*
+   * The counter, whether the rep has started their day, and whether this
+   * counter has already been called on today — one round trip. The three
+   * guards below read the same three facts in the same order as before; they
+   * are simply fetched together rather than one guard at a time.
+   */
+  const [[counter], startedToday, existing] = await Promise.all([
+    db
+      .select({
+        id: counters.id,
+        name: counters.name,
+        type: counters.type,
+        typeOther: counters.typeOther,
+        areaName: areas.name,
+        stockistId: counters.stockistId,
+      })
+      .from(counters)
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .where(eq(counters.id, id))
+      .limit(1),
+    isAdmin ? Promise.resolve(true) : hasStartedToday(user.id),
+    isAdmin ? Promise.resolve(null) : findTodaysVisit(user.id, id),
+  ]);
   if (!counter) notFound();
 
-  const isAdmin = user.accessRoles.includes("admin");
   const canVisit = isAdmin || counter.stockistId === user.depot?.id;
   if (!canVisit) {
     const t = await getT();
@@ -53,7 +64,7 @@ export default async function NewVisitPage({
   }
 
   // A rep works inside a started day; admin keeps no day log and is exempt.
-  if (!isAdmin && !(await hasStartedToday(user.id))) {
+  if (!startedToday) {
     const t = await getT();
     return <StartDayRequired title={t("Add visit")} />;
   }
@@ -62,7 +73,6 @@ export default async function NewVisitPage({
   // edit their visit; anyone else is told who got there first. Mirrors the
   // guard in `createVisit`.
   if (!isAdmin) {
-    const existing = await findTodaysVisit(user.id, counter.id);
     if (existing) {
       const t = await getT();
       return (

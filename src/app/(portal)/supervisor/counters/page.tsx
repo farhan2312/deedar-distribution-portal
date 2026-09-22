@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { getScopeCnfs, getScopeStockists, pickCnf } from "@/lib/supervisor/team";
+import { asId } from "@/lib/portal/map-scope";
 import { fetchCountersList, type CountersListParams } from "@/lib/counters/list";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
@@ -22,14 +23,22 @@ export default async function SupervisorCountersPage({
 
   const params = await searchParams;
   // Central Admin can narrow to one C&F HQ first; nobody else gets the level.
-  const cnfs = await getScopeCnfs(user);
+  // The C&F list vets the id in the URL, and the stockist scope is read for
+  // that same id beside it rather than after it — a C&F that is not on offer
+  // re-reads below, which is what a stale link costs.
+  const cnfGuess = asId(params.cnf);
+  const [cnfs, guessedStockists] = await Promise.all([
+    getScopeCnfs(user),
+    getScopeStockists(user, cnfGuess ?? undefined),
+  ]);
   const cnf = pickCnf(cnfs, params.cnf);
 
   // Scope: every stockist this SO supervises (admin bypasses via
   // getScopeStockists), narrowed to the chosen C&F. Narrowing here is all the
   // filter needs to do — the stockist dropdown and the counter rows are both
   // built from this list.
-  const scopeStockists = await getScopeStockists(user, cnf?.id);
+  const scopeStockists =
+    (cnf?.id ?? null) === cnfGuess ? guessedStockists : await getScopeStockists(user, cnf?.id);
   if (scopeStockists.length === 0) {
     return (
       <Notice title={t("All Counters")}>

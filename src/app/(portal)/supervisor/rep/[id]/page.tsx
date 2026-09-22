@@ -70,12 +70,6 @@ export default async function SupervisorRepPage({
   // open a rep who actually reports to them — the id comes from the URL and is
   // trivially editable, so team membership is re-derived here rather than
   // trusted.
-  const reps = await getTeamReps(user);
-  const rep = reps.find((r) => r.id === repId);
-  if (!rep) {
-    return <Notice title={t("Rep detail")}>{t("This rep is not on your team.")}</Notice>;
-  }
-
   const now = nowInstant();
   const todayStr = istDateString(now);
   const dayWindow = DAY_LABELS.map((label, i) => ({ date: shiftDays(todayStr, -i), label }));
@@ -87,7 +81,13 @@ export default async function SupervisorRepPage({
   const windowStart = istDayBounds(anchor(windowDates[windowDates.length - 1])).start;
   const windowEnd = istDayBounds(anchor(todayStr)).end;
 
-  const [visitRows, createdRows, logRows] = await Promise.all([
+  // The team check and the rep's own three days of data are read together.
+  // The check still decides what is shown — nothing below renders until it has
+  // passed — but it no longer holds the data back while it runs, and the reads
+  // it guards are reads, so a rep who turns out not to be on this team simply
+  // has their rows thrown away.
+  const [reps, visitRows, createdRows, logRows] = await Promise.all([
+    getTeamReps(user),
     db
       .select({
         id: visits.id,
@@ -137,6 +137,11 @@ export default async function SupervisorRepPage({
       .from(dayLogs)
       .where(and(eq(dayLogs.userId, repId), inArray(dayLogs.logDate, windowDates))),
   ]);
+
+  const rep = reps.find((r) => r.id === repId);
+  if (!rep) {
+    return <Notice title={t("Rep detail")}>{t("This rep is not on your team.")}</Notice>;
+  }
 
   const logByDate = new Map(logRows.map((l) => [l.logDate, l]));
 

@@ -1,19 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   counters,
+  users,
   visits,
   type CompetitorPresence,
   type ProductSegment,
   type VisitItem,
 } from "@/db/schema";
 import { recordAudit, diffFields } from "@/lib/audit/record";
+import { deleteFailure, type WriteResult } from "@/lib/db-errors";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
-import { istDateString } from "@/lib/date";
+import { formatISTDate, istDateString } from "@/lib/date";
 import { hasStartedToday, START_DAY_REQUIRED } from "./day-log";
 import { ALREADY_VISITED_TODAY, findTodaysVisit, visitedByOther } from "./visit-day";
 import { isWithinEditWindow } from "./products";
@@ -214,13 +216,24 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
     .where(eq(visits.id, visitId))
     .limit(1);
   if (!v) return { ok: false, error: "Visit not found." };
-  // Reps may only edit their own; admin can correct anyone's, so a same-day
-  // mistake can be fixed centrally. The midnight lock applies to BOTH — once
-  // the day closes its figures are final for everyone.
-  if (v.userId !== user.id && !user.accessRoles.includes("admin")) {
+  const isAdmin = user.accessRoles.includes("admin");
+  // Reps may only edit their own; admin can correct anyone's, so a mistake can
+  // be fixed centrally.
+  if (v.userId !== user.id && !isAdmin) {
     return { ok: false, error: "You can only edit your own visits." };
   }
-  if (!isWithinEditWindow(v.visitedAt)) {
+  /**
+   * The midnight lock is a rep's lock. Their figures going final when the day
+   * closes is what stops yesterday's numbers moving under a supervisor who has
+   * already read them.
+   *
+   * Admin is the exception, and the only one: correcting a visit logged wrong —
+   * or one of a run of duplicates from a retried submit weeks back — is the job
+   * that account exists for. The edit is not silent; the audit row below says
+   * so explicitly when it lands after the window closed.
+   */
+  const afterWindow = !isWithinEditWindow(v.visitedAt);
+  if (afterWindow && !isAdmin) {
     return { ok: false, error: "This visit locked at midnight and can no longer be edited." };
   }
 
@@ -248,7 +261,9 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
     module: "visits",
     entityId: visitId,
     entityLabel: v.counterName,
-    summary: `Edited the visit to ${v.counterName}`,
+    summary: afterWindow
+      ? `Corrected ${formatISTDate(v.visitedAt)}'s visit to ${v.counterName} after it locked`
+      : `Edited the visit to ${v.counterName}`,
     changes: diffFields(
       {
         sold: v.sold,
@@ -277,13 +292,86 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
     ),
   });
 
-  revalidatePath(`/field/counter/${v.counterId}`);
+  revalidateVisit(v.counterId);
   return { ok: true, visitId };
 }
 
-/** Load a visit for the edit form. Owner (or admin) + within window only —
- * mirrors the check in `updateVisit` so the form can't open on something the
- * action would then refuse to save. */
+/**
+ * Remove one visit. Admin only, and permanent.
+ *
+ * There is no soft delete, so the audit line is all that survives — which is
+ * why the summary carries the figures the row was holding rather than just its
+ * id. It is the only record left of what was taken out of the totals.
+ */
+export async function deleteVisit(visitId: string): Promise<WriteResult> {
+  const user = await getCurrentUser();
+  // Not `canAccess`: a field rep with the "field" role must not be able to
+  // erase history, their own included. This is a Central Admin correction tool.
+  if (!user || !user.accessRoles.includes("admin")) {
+    return { ok: false, error: "Only Central Admin can delete a visit." };
+  }
+
+  const [v] = await db
+    .select({
+      counterId: visits.counterId,
+      visitedAt: visits.visitedAt,
+      sold: visits.sold,
+      stock: visits.stock,
+      counterName: counters.name,
+      repName: users.name,
+    })
+    .from(visits)
+    .innerJoin(counters, eq(counters.id, visits.counterId))
+    .innerJoin(users, eq(users.id, visits.userId))
+    .where(eq(visits.id, visitId))
+    .limit(1);
+  if (!v) return { ok: false, error: "Visit not found." };
+
+  try {
+    await db.delete(visits).where(eq(visits.id, visitId));
+  } catch (err) {
+    return deleteFailure(err, "visit");
+  }
+
+  // `counters.lastVisitAt` is a cached copy of the newest visit, so removing
+  // one can leave the counter advertising a visit that no longer exists. Rebuilt
+  // from what remains — null when that was the only one, which is what "Never
+  // visited" reads from.
+  const [newest] = await db
+    .select({ at: visits.visitedAt })
+    .from(visits)
+    .where(eq(visits.counterId, v.counterId))
+    .orderBy(desc(visits.visitedAt))
+    .limit(1);
+  await db
+    .update(counters)
+    .set({ lastVisitAt: newest?.at ?? null })
+    .where(eq(counters.id, v.counterId));
+
+  await recordAudit({
+    action: "delete",
+    module: "visits",
+    entityId: visitId,
+    entityLabel: v.counterName,
+    summary: `Deleted ${v.repName}'s ${formatISTDate(v.visitedAt)} visit to ${v.counterName} — sold ${v.sold}, stock ${v.stock}`,
+  });
+
+  revalidateVisit(v.counterId);
+  return { ok: true };
+}
+
+/** Every screen a visit's figures show up on. The Kanpur HQ pages are in the
+ * list because that is where a visit is now edited from, and Reports reads the
+ * same totals. */
+function revalidateVisit(counterId: string): void {
+  revalidatePath(`/field/counter/${counterId}`);
+  revalidatePath(`/khq/counter/${counterId}`);
+  revalidatePath("/khq/reports");
+}
+
+/** Load a visit for the edit form. Owner (or admin) only, and — for a rep —
+ * within the day window: mirrors the checks in `updateVisit` so the form can't
+ * open on something the action would then refuse to save. */
 export async function getVisitForEdit(visitId: string) {
   const user = await getCurrentUser();
   if (!user || !canAccess(user, "field")) return null;
@@ -298,7 +386,7 @@ export async function getVisitForEdit(visitId: string) {
         : and(eq(visits.id, visitId), eq(visits.userId, user.id)),
     )
     .limit(1);
-  if (!v || !isWithinEditWindow(v.visitedAt)) return null;
+  if (!v || (!isAdmin && !isWithinEditWindow(v.visitedAt))) return null;
 
   return {
     counterId: v.counterId,

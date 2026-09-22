@@ -12,8 +12,11 @@ export function EditCounterForm({
   counterId,
   areaOptions,
   initial,
+  returnTo,
 }: {
   counterId: string;
+  /** Where Cancel and a successful save go — see the note on VisitFormProps. */
+  returnTo?: string;
   areaOptions: { id: string; name: string }[];
   initial: {
     name: string;
@@ -27,6 +30,7 @@ export function EditCounterForm({
 }) {
   const router = useRouter();
   const t = useT();
+  const back = returnTo ?? `/field/counter/${counterId}`;
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -73,7 +77,7 @@ export function EditCounterForm({
     // still in flight, and this component unmounts when the route changes.
     // Clearing `busy` here would flash the button back to "Save changes" while
     // the save was still completing, inviting a double submit.
-    router.push(`/field/counter/${counterId}`);
+    router.push(back);
     router.refresh();
   }
 
@@ -148,7 +152,7 @@ export function EditCounterForm({
       <div className="flex gap-3">
         <button
           className="btn btn-secondary flex-1 justify-center py-3.5"
-          onClick={() => router.push(`/field/counter/${counterId}`)}
+          onClick={() => router.push(back)}
           disabled={busy}
         >
           {t("Cancel")}

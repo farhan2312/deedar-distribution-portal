@@ -12,8 +12,11 @@ import { VisitForm } from "../visit-form";
 
 export default async function EditVisitPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; visitId: string }>;
+  /** `?from=khq` — see the note in the counter edit page. */
+  searchParams: Promise<{ from?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -22,7 +25,7 @@ export default async function EditVisitPage({
     return <Notice title={t("Edit visit")}>{t("You don't have Field Salesman ISR access.")}</Notice>;
   }
 
-  const { id, visitId } = await params;
+  const [{ id, visitId }, { from }] = await Promise.all([params, searchParams]);
   const visit = await getVisitForEdit(visitId);
   if (!visit || visit.counterId !== id) {
     const t = await getT();
@@ -50,6 +53,7 @@ export default async function EditVisitPage({
   return (
     <VisitForm
       counterId={counter.id}
+      returnTo={from === "khq" ? `/khq/counter/${counter.id}` : undefined}
       counterName={counter.name}
       counterArea={`${counterTypeLabel(counter.type, counter.typeOther)} · ${counter.areaName}`}
       visitId={visitId}

@@ -145,6 +145,13 @@ export function AuditScreen({
 
   const filtered = !!(filters.module || filters.action || filters.actorId || filters.q);
   const dim = { opacity: pending ? 0.72 : 1 };
+  // A tab click lights the new tab at once (`shown.tab`), but the content
+  // below keeps drawing `tab` — the tab the data on hand was fetched for —
+  // until the new tab's data arrives. Drawing the new tab straight away drew
+  // it from the old tab's data: the Logins table full of visit updates, or
+  // Usage announcing "Nobody was active in this period" for most of a second
+  // before the real numbers landed.
+  const switchingTab = shown.tab !== tab;
   const nothingEver = data.totals.actions === 0 && period === "all" && !filtered;
 
   return (
@@ -238,14 +245,18 @@ export function AuditScreen({
           {emptyHint}
         </p>
       ) : (
-        <>
-          {shown.tab === "overall" && <OverallTab data={data} t={t} />}
-          {shown.tab === "usage" && <UsageTab usage={usage} t={t} />}
+        <div
+          className="transition-opacity"
+          style={{ opacity: switchingTab ? 0.5 : 1 }}
+          aria-busy={switchingTab || undefined}
+        >
+          {tab === "overall" && <OverallTab data={data} t={t} />}
+          {tab === "usage" && <UsageTab usage={usage} t={t} />}
 
-          {shown.tab !== "overall" && shown.tab !== "usage" && (
+          {tab !== "overall" && tab !== "usage" && (
             <>
               <FilterRow
-                tab={shown.tab}
+                tab={tab}
                 shown={shown}
                 filters={filters}
                 actors={actors}
@@ -262,7 +273,7 @@ export function AuditScreen({
               />
               <div className="transition-opacity" style={{ opacity: pending ? 0.6 : 1 }}>
                 <ActivityTable
-                  tab={shown.tab}
+                  tab={tab}
                   rows={data.rows}
                   page={data.page}
                   totalPages={data.totalPages}
@@ -271,7 +282,7 @@ export function AuditScreen({
               </div>
             </>
           )}
-        </>
+        </div>
       )}
     </div>
   );

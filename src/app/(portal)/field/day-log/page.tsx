@@ -49,11 +49,24 @@ export default async function FieldDayLogPage() {
   const t = await getT();
 
   const today = istDateString();
-  const logs = await db
-    .select()
-    .from(dayLogs)
-    .where(eq(dayLogs.userId, user.id))
-    .orderBy(desc(dayLogs.logDate));
+  const dayBounds = istDayBounds();
+
+  // The log history and today's visits, read together. The visits used to wait
+  // to see whether today's log had been started, which cost a second wait on
+  // every load to save one narrow query on the loads where it hadn't.
+  const [logs, visitItemRows] = await Promise.all([
+    db.select().from(dayLogs).where(eq(dayLogs.userId, user.id)).orderBy(desc(dayLogs.logDate)),
+    db
+      .select({ items: visits.items })
+      .from(visits)
+      .where(
+        and(
+          eq(visits.userId, user.id),
+          gte(visits.visitedAt, dayBounds.start),
+          lt(visits.visitedAt, dayBounds.end),
+        ),
+      ),
+  ]);
 
   const todayLog = logs.find((l) => l.logDate === today) ?? null;
   const history: HistoryRow[] = logs
@@ -71,19 +84,9 @@ export default async function FieldDayLogPage() {
   // in "picked up − sold = remaining". Summed in JS from the items JSONB for
   // the same reason the dashboards do: a jsonb SRF join errors on any
   // non-array legacy row.
-  const dayBounds = istDayBounds();
-  const todayVisitItems = todayLog?.startAt
-    ? await db
-        .select({ items: visits.items })
-        .from(visits)
-        .where(
-          and(
-            eq(visits.userId, user.id),
-            gte(visits.visitedAt, dayBounds.start),
-            lt(visits.visitedAt, dayBounds.end),
-          ),
-        )
-    : [];
+  // Still only counted once the day has been started, exactly as before — a
+  // rep who hasn't clocked in sees zeroes rather than stray visits.
+  const todayVisitItems = todayLog?.startAt ? visitItemRows : [];
   const soldToday = zeroQty();
   for (const row of todayVisitItems) {
     const items = (row.items ?? []) as VisitItem[];

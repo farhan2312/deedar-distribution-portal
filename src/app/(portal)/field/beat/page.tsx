@@ -32,43 +32,58 @@ export default async function FieldBeatPage() {
   const today = istDateString();
 
   // ISR: only their own beat assignments today. Admin: every rep's assignment
-  // today, so they can audit coverage across the company. Joined to `users` so
-  // an admin row can label which rep the counter is assigned to.
-  const assignmentRows = await db
-    .select({
-      counterId: beatAssignments.counterId,
-      repUserId: beatAssignments.repUserId,
-      repName: users.name,
-    })
-    .from(beatAssignments)
-    .innerJoin(users, eq(users.id, beatAssignments.repUserId))
-    .where(
-      isAdmin
-        ? eq(beatAssignments.beatDate, today)
-        : and(eq(beatAssignments.repUserId, user.id), eq(beatAssignments.beatDate, today)),
-    );
-
-  const counterIds = [...new Set(assignmentRows.map((a) => a.counterId))];
-  const counterRows = counterIds.length
-    ? await db
-        .select({
-          id: counters.id,
-          name: counters.name,
-          type: counters.type,
-          typeOther: counters.typeOther,
-          areaName: areas.name,
-          stockistId: counters.stockistId,
-        })
-        .from(counters)
-        .innerJoin(areas, eq(areas.id, counters.areaId))
-        .where(inArray(counters.id, counterIds))
-    : [];
-  const counterById = new Map(counterRows.map((c) => [c.id, c]));
+  // today, so they can audit coverage across the company.
+  const todaysBeat = isAdmin
+    ? eq(beatAssignments.beatDate, today)
+    : and(eq(beatAssignments.repUserId, user.id), eq(beatAssignments.beatDate, today));
 
   // Same scoping rule for the stat cards: an ISR sees their own totals, an
   // admin sees company-wide totals for the day.
   const dayBounds = and(gte(visits.visitedAt, start), lt(visits.visitedAt, end));
-  const [visitCountRows, newCounterCountRows, allVisitedRows] = await Promise.all([
+
+  /*
+   * The beat, the counters on it and the three day figures — one round trip.
+   *
+   * The counters used to wait for the assignment ids, and the figures waited
+   * behind both although they never needed either: three waits on a database
+   * ~75 ms away for a screen a rep opens first thing every morning. The
+   * counters are keyed on the same beat through a subquery instead.
+   */
+  const [
+    assignmentRows,
+    counterRows,
+    visitCountRows,
+    newCounterCountRows,
+    allVisitedRows,
+  ] = await Promise.all([
+    // Joined to `users` so an admin row can label which rep the counter is
+    // assigned to.
+    db
+      .select({
+        counterId: beatAssignments.counterId,
+        repUserId: beatAssignments.repUserId,
+        repName: users.name,
+      })
+      .from(beatAssignments)
+      .innerJoin(users, eq(users.id, beatAssignments.repUserId))
+      .where(todaysBeat),
+    db
+      .select({
+        id: counters.id,
+        name: counters.name,
+        type: counters.type,
+        typeOther: counters.typeOther,
+        areaName: areas.name,
+        stockistId: counters.stockistId,
+      })
+      .from(counters)
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .where(
+        inArray(
+          counters.id,
+          db.select({ id: beatAssignments.counterId }).from(beatAssignments).where(todaysBeat),
+        ),
+      ),
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(visits)
@@ -88,14 +103,24 @@ export default async function FieldBeatPage() {
     // For row-level "visited today" flags: an ISR only cares if THEY visited,
     // but admin wants to know whether the ASSIGNED rep did — so pull the
     // (userId, counterId) pairs for today's visits and match per assignment.
-    counterIds.length
-      ? db
-          .select({ userId: visits.userId, counterId: visits.counterId, repName: users.name })
-          .from(visits)
-          .innerJoin(users, eq(users.id, visits.userId))
-          .where(and(dayBounds, inArray(visits.counterId, counterIds)))
-      : Promise.resolve([]),
+    // Bounded by the same beat through a subquery, so it no longer waits for
+    // the assignment ids to come back first.
+    db
+      .select({ userId: visits.userId, counterId: visits.counterId, repName: users.name })
+      .from(visits)
+      .innerJoin(users, eq(users.id, visits.userId))
+      .where(
+        and(
+          dayBounds,
+          inArray(
+            visits.counterId,
+            db.select({ id: beatAssignments.counterId }).from(beatAssignments).where(todaysBeat),
+          ),
+        ),
+      ),
   ]);
+
+  const counterById = new Map(counterRows.map((c) => [c.id, c]));
 
   const visitedPairs = new Set(allVisitedRows.map((v) => `${v.userId}__${v.counterId}`));
   // Who called on each counter today, whoever they are. A counter is visited

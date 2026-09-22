@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { areas, cnfs, counters, stockists } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { deleteArea, deleteDepot } from "@/lib/hq/actions";
 import { getDeleteImpact } from "@/lib/admin/actions";
 import { resolveSelectedCnf } from "@/lib/hq/scope";
+import { asId } from "@/lib/portal/map-scope";
 import { getT } from "@/lib/i18n/server";
 import { ConfirmDelete } from "@/components/ui/confirm-delete";
 import { AddAreaForm, AddStockistForm } from "./depot-forms";
@@ -40,23 +41,46 @@ export default async function HqDepotsPage({
   }
 
   const { cnf: requestedCnfId } = await searchParams;
-  const allCnfs = await db.select().from(cnfs).orderBy(asc(cnfs.name));
+
+  /*
+   * The C&F list, its stockists, their areas and the counters per area — one
+   * round trip instead of three.
+   *
+   * `resolveSelectedCnf` below settles which C&F is shown; the guess here
+   * follows its rule (the URL, else the viewer's own, else the first), and the
+   * three scoped reads hang off that id through a subquery rather than waiting
+   * for the stockist ids to come back. A guess that turns out wrong re-reads
+   * below — that is what a stale `?cnf=` costs, not what a normal load costs.
+   */
+  const guessCnfId = asId(requestedCnfId) ?? user.cnf?.id ?? null;
+  const forCnf = (cnfId: string | null) => {
+    const owner = cnfId
+      ? eq(stockists.cnfId, cnfId)
+      : eq(stockists.cnfId, sql`(select id from ${cnfs} order by name asc limit 1)`);
+    const scoped = db.select({ id: stockists.id }).from(stockists).where(owner);
+    return Promise.all([
+      db.select().from(stockists).where(owner).orderBy(asc(stockists.name)),
+      db.select().from(areas).where(inArray(areas.stockistId, scoped)).orderBy(asc(areas.name)),
+      db.select({ areaId: counters.areaId }).from(counters).where(inArray(counters.stockistId, scoped)),
+    ]);
+  };
+
+  const [allCnfs, guessed] = await Promise.all([
+    db.select().from(cnfs).orderBy(asc(cnfs.name)),
+    forCnf(guessCnfId),
+  ]);
   const selectedCnf = resolveSelectedCnf(allCnfs, requestedCnfId, user.cnf?.id ?? null, isAdmin);
 
   if (!selectedCnf) {
     return <Notice title={t("Stockists & Areas")}>{t("No C&F HQ set up yet.")}</Notice>;
   }
 
-  const cnfStockists = await db
-    .select()
-    .from(stockists)
-    .where(eq(stockists.cnfId, selectedCnf.id))
-    .orderBy(asc(stockists.name));
-  const stockistIds = cnfStockists.map((d) => d.id);
-  const [allAreas, counterRows] = await Promise.all([
-    stockistIds.length ? db.select().from(areas).where(inArray(areas.stockistId, stockistIds)).orderBy(asc(areas.name)) : Promise.resolve([]),
-    stockistIds.length ? db.select({ areaId: counters.areaId }).from(counters).where(inArray(counters.stockistId, stockistIds)) : Promise.resolve([]),
-  ]);
+  // Which C&F the three reads above actually used — the guess, or the first by
+  // name when there was none, which is the same tie-break `resolveSelectedCnf`
+  // applies to this very list.
+  const queriedCnfId = guessCnfId ?? allCnfs[0]?.id ?? null;
+  const [cnfStockists, allAreas, counterRows] =
+    queriedCnfId === selectedCnf.id ? guessed : await forCnf(selectedCnf.id);
   const counterCountByArea = new Map<string, number>();
   for (const c of counterRows) counterCountByArea.set(c.areaId, (counterCountByArea.get(c.areaId) ?? 0) + 1);
 

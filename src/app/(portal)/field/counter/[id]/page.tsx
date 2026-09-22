@@ -34,7 +34,29 @@ export default async function CounterDetailPage({
   const t = await getT();
 
   const { id } = await params;
-  const [counter] = await db
+  const isAdmin = user.accessRoles.includes("admin");
+
+  // The history list is "editable visits" only, for everyone — visits from
+  // before today's midnight cutoff never appear here, not even for admin. A
+  // field rep is further scoped to their OWN visits; admin sees every rep's
+  // today, since admin can edit any of them within the window.
+  const historyWhere = isAdmin
+    ? and(eq(visits.counterId, id), gte(visits.visitedAt, editableVisitCutoff()))
+    : and(
+        eq(visits.counterId, id),
+        eq(visits.userId, user.id),
+        gte(visits.visitedAt, editableVisitCutoff()),
+      );
+
+  /*
+   * The counter, its editable history and today's call — one round trip.
+   *
+   * All three are keyed on the id in the URL, but they used to be read one
+   * after another, so the page waited three times over for facts it could have
+   * asked for at once.
+   */
+  const [[counter], history, todaysVisit] = await Promise.all([
+    db
     .select({
       id: counters.id,
       name: counters.name,
@@ -52,42 +74,35 @@ export default async function CounterDetailPage({
     .innerJoin(areas, eq(areas.id, counters.areaId))
     .innerJoin(stockists, eq(stockists.id, counters.stockistId))
     .innerJoin(cnfs, eq(cnfs.id, stockists.cnfId))
-    .where(eq(counters.id, id))
-    .limit(1);
+      .where(eq(counters.id, id))
+      .limit(1),
+    db
+      .select({
+        id: visits.id,
+        userId: visits.userId,
+        repName: users.name,
+        visitedAt: visits.visitedAt,
+        items: visits.items,
+        rank: visits.rank,
+        competitor: visits.competitor,
+        competitorBrand: visits.competitorBrand,
+        remarks: visits.remarks,
+        durationSeconds: visits.durationSeconds,
+      })
+      .from(visits)
+      .innerJoin(users, eq(users.id, visits.userId))
+      .where(historyWhere)
+      .orderBy(desc(visits.visitedAt)),
+    // Deliberately a separate lookup rather than reading `history`: for a rep
+    // that list is scoped to their OWN visits, so a colleague's call on this
+    // counter today would be invisible in it — and a colleague's call is
+    // exactly what has to block the button. Admin is exempt from the
+    // one-a-day rule.
+    isAdmin ? Promise.resolve(null) : findTodaysVisit(user.id, id),
+  ]);
   if (!counter) notFound();
 
-  const isAdmin = user.accessRoles.includes("admin");
   const canVisit = isAdmin || counter.stockistId === user.depot?.id;
-
-  // The history list is "editable visits" only, for everyone — visits from
-  // before today's midnight cutoff never appear here, not even for admin. A
-  // field rep is further scoped to their OWN visits; admin sees every rep's
-  // today, since admin can edit any of them within the window.
-  const historyWhere = isAdmin
-    ? and(eq(visits.counterId, id), gte(visits.visitedAt, editableVisitCutoff()))
-    : and(
-        eq(visits.counterId, id),
-        eq(visits.userId, user.id),
-        gte(visits.visitedAt, editableVisitCutoff()),
-      );
-
-  const history = await db
-    .select({
-      id: visits.id,
-      userId: visits.userId,
-      repName: users.name,
-      visitedAt: visits.visitedAt,
-      items: visits.items,
-      rank: visits.rank,
-      competitor: visits.competitor,
-      competitorBrand: visits.competitorBrand,
-      remarks: visits.remarks,
-      durationSeconds: visits.durationSeconds,
-    })
-    .from(visits)
-    .innerJoin(users, eq(users.id, visits.userId))
-    .where(historyWhere)
-    .orderBy(desc(visits.visitedAt));
 
   const gps = counter.lat && counter.lng ? `${counter.lat}, ${counter.lng}` : "—";
   // Only meaningful while something on screen is still editable.
@@ -96,11 +111,6 @@ export default async function CounterDetailPage({
   );
   const timeLeft = hasEditable ? editWindowRemaining() : null;
 
-  // Deliberately a separate lookup rather than reading `history`: for a rep
-  // that list is scoped to their OWN visits, so a colleague's call on this
-  // counter today would be invisible in it — and a colleague's call is exactly
-  // what has to block the button. Admin is exempt from the one-a-day rule.
-  const todaysVisit = isAdmin ? null : await findTodaysVisit(user.id, id);
   const ownVisitToday = todaysVisit?.isOwn ? todaysVisit : null;
   const otherVisitToday = todaysVisit && !todaysVisit.isOwn ? todaysVisit : null;
 

@@ -30,8 +30,8 @@ export type CounterType = (typeof counterTypeEnum.enumValues)[number];
 
 /**
  * Kanpur HQ Reports — company-wide dumps of counters and visits, filterable
- * (C&F → Depot → Area + text search + period) and exportable to CSV. Screen
- * queries are paginated 50/page; the CSV export pulls the full filtered set
+ * (C&F → Depot → Area + text search + period) and exportable to Excel. Screen
+ * queries are paginated 50/page; the Excel export pulls the full filtered set
  * via a server action.
  *
  * The period applies to both tabs, against the date each tab is actually about:
@@ -52,6 +52,7 @@ export type ReportsParams = {
   from?: string;   // "YYYY-MM-DD" (IST); both tabs
   to?: string;     // "YYYY-MM-DD" (IST); both tabs
   page?: string;   // 1-based; both tabs
+  isr?: string;    // visits tab: the rep who made the visit
 };
 
 /** Sanitised, resolved filters. `null` = "no restriction at this level". */
@@ -67,7 +68,11 @@ export type ReportsFilters = {
    * bound that merely happens to cover every row. */
   from: Date | null;
   to: Date | null;
+  /** Visits tab only: the ISR who made the visit. */
+  isrId: string | null;
 };
+
+export type IsrOption = { id: string; name: string; isActive: boolean };
 
 export type ReportsScope = {
   tab: ReportTab;
@@ -77,6 +82,13 @@ export type ReportsScope = {
   sort: CounterSort;
   /** Levels rendered by `<MapScopePickers/>` — reused as-is. */
   levels: ScopeLevel[];
+  /**
+   * Visits tab: everyone with at least one visit inside the chosen C&F /
+   * stockist / area — deactivated reps included, since a report on last month
+   * has to be able to show someone who has since left. Empty on the counters
+   * tab, which has no rep to filter by.
+   */
+  isrOptions: IsrOption[];
   /** Everything `<PeriodFilter/>` needs to render its own state. */
   period: {
     key: PeriodKey | null;
@@ -89,7 +101,7 @@ export type ReportsScope = {
 };
 
 /** Per-segment (sold/stock) breakdown parsed out of `visits.items`, indexed by
- * segment so the CSV export can emit one pair of columns per SKU. Missing
+ * segment so the Excel export can emit one pair of columns per SKU. Missing
  * segments are treated as (0, 0) both on screen and in export. */
 export type SegmentBreakdown = Partial<Record<ProductSegment, { sold: number; stock: number }>>;
 
@@ -175,6 +187,12 @@ export async function resolveReportsScope(params: ReportsParams): Promise<Report
   const areaOptions = stockistIds ? await areaOptionsFor(stockistIds) : [];
   const areaId = pickId(areaOptions, params.area);
 
+  // Validated against the options like every other level, so an ISR left in
+  // the URL from a different C&F or stockist is ignored rather than returning
+  // an empty report.
+  const isrOptions = tab === "visits" ? await visitAuthorsIn({ cnfId, stockistIds, areaId }) : [];
+  const isrId = pickId(isrOptions, params.isr);
+
   // The calendar floor is the oldest counter in the system: every visit's
   // counter existed before the visit, so this bounds both tabs.
   const [oldest] = await db
@@ -192,6 +210,7 @@ export async function resolveReportsScope(params: ReportsParams): Promise<Report
     q: (params.q ?? "").trim(),
     from: unbounded ? null : range.start,
     to: unbounded ? null : range.end,
+    isrId,
   };
 
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
@@ -209,6 +228,7 @@ export async function resolveReportsScope(params: ReportsParams): Promise<Report
     page,
     sort,
     levels,
+    isrOptions,
     period: {
       key: range.period,
       from: range.from,
@@ -222,7 +242,7 @@ export async function resolveReportsScope(params: ReportsParams): Promise<Report
 
 // ── Counter fetch ───────────────────────────────────────────────────────
 
-/** Counter predicate common to on-screen and CSV queries. */
+/** Counter predicate common to on-screen and export queries. */
 function counterWhere(f: ReportsFilters): SQL | undefined {
   const parts: SQL[] = [];
   // A counter's date is when it was created — the only date it has.
@@ -322,10 +342,42 @@ export async function fetchCountersReport(
 
 // ── Visit fetch ─────────────────────────────────────────────────────────
 
+/**
+ * Reps with at least one visit inside a place — the ISR filter's options.
+ *
+ * Taken from the visits themselves rather than from users with the field
+ * role: a rep who was deactivated, moved stockist or lost the role still has
+ * visits here, and every name offered is one that returns rows. Period and
+ * search are left out on purpose, so the list does not reshuffle while the
+ * dates are being adjusted.
+ */
+async function visitAuthorsIn(p: {
+  cnfId: string | null;
+  stockistIds: string[] | null;
+  areaId: string | null;
+}): Promise<IsrOption[]> {
+  const where = p.areaId
+    ? eq(counters.areaId, p.areaId)
+    : p.stockistIds
+      ? inArray(counters.stockistId, p.stockistIds)
+      : p.cnfId
+        ? eq(stockists.cnfId, p.cnfId)
+        : undefined;
+  return db
+    .selectDistinct({ id: users.id, name: users.name, isActive: users.isActive })
+    .from(visits)
+    .innerJoin(users, eq(users.id, visits.userId))
+    .innerJoin(counters, eq(counters.id, visits.counterId))
+    .innerJoin(stockists, eq(stockists.id, counters.stockistId))
+    .where(where)
+    .orderBy(asc(users.name), asc(users.id));
+}
+
 function visitWhere(f: ReportsFilters): SQL | undefined {
   const parts: SQL[] = [];
   if (f.from) parts.push(gte(visits.visitedAt, f.from));
   if (f.to) parts.push(lt(visits.visitedAt, f.to));
+  if (f.isrId) parts.push(eq(visits.userId, f.isrId));
   if (f.areaId) parts.push(eq(counters.areaId, f.areaId));
   else if (f.stockistIds) parts.push(inArray(counters.stockistId, f.stockistIds));
   else if (f.cnfId) parts.push(eq(stockists.cnfId, f.cnfId));
@@ -416,141 +468,72 @@ export async function countCountersReport(f: ReportsFilters): Promise<number> {
   return row?.n ?? 0;
 }
 
-export async function countVisitsReport(f: ReportsFilters): Promise<number> {
+export type VisitsTotals = {
+  count: number;
+  sold: number;
+  /** Sold per SKU, every SKU present (0 when none sold), in SEGMENT_ORDER. */
+  bySku: Record<ProductSegment, number>;
+};
+
+/**
+ * How many visits match, and how much they sold between them — in total and
+ * per SKU — across the whole filtered set, not the fifty rows on screen.
+ *
+ * One query for all of it, since every figure shares the same filters and
+ * joins. The per-SKU sums read each visit's `items`, where the SKU split
+ * lives; `visits.sold` is that split added up at write time, so the SKU sums
+ * always add up to the total (checked against every visit on record: none
+ * differ, none carry a total without a split).
+ */
+export async function visitsReportTotals(f: ReportsFilters): Promise<VisitsTotals> {
+  const skuSold = (seg: ProductSegment) =>
+    sql<number>`coalesce(sum((
+      select coalesce(sum((it->>'sold')::int), 0)
+      from jsonb_array_elements(${visits.items}) it
+      where it->>'segment' = ${seg}
+    )), 0)::int`;
+
   const [row] = await db
-    .select({ n: sql<number>`count(*)::int` })
+    .select({
+      n: sql<number>`count(*)::int`,
+      sold: sql<number>`coalesce(sum(${visits.sold}), 0)::int`,
+      DG10: skuSold("DG10"),
+      DG20: skuSold("DG20"),
+      DB20: skuSold("DB20"),
+      DB40: skuSold("DB40"),
+    })
     .from(visits)
     .innerJoin(counters, eq(counters.id, visits.counterId))
     .innerJoin(stockists, eq(stockists.id, counters.stockistId))
     .innerJoin(users, eq(users.id, visits.userId))
     .where(visitWhere(f));
-  return row?.n ?? 0;
+
+  const bySku = Object.fromEntries(
+    SEGMENT_ORDER.map((seg) => [seg, row?.[seg as "DG10"] ?? 0]),
+  ) as Record<ProductSegment, number>;
+  return { count: row?.n ?? 0, sold: row?.sold ?? 0, bySku };
 }
 
-// ── CSV serialisation ────────────────────────────────────────────────────
-
-/** RFC 4180: quote if it contains a comma, quote, newline, or CR; double any
- * embedded quotes. Empty and pure-numeric values pass through untouched. */
-function csvCell(v: string | number | null | undefined): string {
-  if (v == null) return "";
-  const s = String(v);
-  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-function csvRows(header: string[], rows: (string | number | null | undefined)[][]): string {
-  const lines = [header.map(csvCell).join(",")];
-  for (const r of rows) lines.push(r.map(csvCell).join(","));
-  // \r\n so Excel on Windows opens without a "convert" prompt.
-  return lines.join("\r\n") + "\r\n";
-}
+// ── Export helpers ─────────────────────────────────────────────────────
 
 /**
  * A counter's ownership spread across three columns: sub-dealer, dealer,
  * depot. Only the ones that apply are filled, so a row says which kind of
  * stockist it belongs to without needing a separate "type" column.
  */
-function stockistChain(r: { stockistName: string; stockistKind: StockistKind; parentName: string | null }) {
+export function stockistChain(r: { stockistName: string; stockistKind: StockistKind; parentName: string | null }) {
   if (r.stockistKind === "sub_dealer") return [r.stockistName, r.parentName ?? "", ""];
   if (r.stockistKind === "dealer") return ["", r.stockistName, ""];
   return ["", "", r.stockistName];
 }
 
-export function countersToCsv(rows: CounterReportRow[]): string {
-  return csvRows(
-    [
-      "Name", "Mobile", "Type", "Status",
-      "Area", "Sub-Dealer", "Dealer", "Depot", "C&F",
-      "Address", "Latitude", "Longitude",
-      "Created by", "Created at", "Last visit", "Total visits",
-    ],
-    rows.map((r) => [
-      r.name,
-      r.phone ?? "",
-      r.type,
-      r.status,
-      r.areaName,
-      ...stockistChain(r),
-      r.cnfName,
-      r.address ?? "",
-      r.lat ?? "",
-      r.lng ?? "",
-      r.createdByName ?? "",
-      formatIstDdMmYyyy(r.createdAt),
-      r.lastVisitAt ? formatIstDdMmYyyy(r.lastVisitAt) : "",
-      r.totalVisits,
-    ]),
-  );
-}
-
-/** Segments in a fixed order so every CSV row has the same columns in the
+/** Segments in a fixed order so every export row has the same columns in the
  * same positions, even when a visit didn't touch a SKU. */
 const SEGMENT_ORDER: ProductSegment[] = PRODUCT_SEGMENTS.map((p) => p.value);
 
-export function visitsToCsv(rows: VisitReportRow[]): string {
-  const header = [
-    "Date",
-    "Rep",
-    "Mobile (rep)",
-    "Counter",
-    "Counter Mobile",
-    "Area",
-    "Sub-Dealer",
-    "Dealer",
-    "Depot",
-    "C&F",
-  ];
-  for (const seg of SEGMENT_ORDER) {
-    header.push(`${seg} Sold`, `${seg} Stock`);
-  }
-  header.push(
-    "Total Sold",
-    "Total Stock",
-    "Rank",
-    // Competitor split into its own two columns so a downstream spreadsheet
-    // can filter by presence separately from the free-text brand name.
-    "Competitor",
-    "Competitor Brand",
-    "Duration (mm:ss)",
-    "Remarks",
-  );
-
-  return csvRows(
-    header,
-    rows.map((r) => {
-      const line: (string | number | null | undefined)[] = [
-        formatIstDdMmYyyy(r.visitedAt),
-        r.repName,
-        r.repPhone,
-        r.counterName,
-        r.counterPhone ?? "",
-        r.areaName,
-        ...stockistChain(r),
-        r.cnfName,
-      ];
-      for (const seg of SEGMENT_ORDER) {
-        const s = r.segments[seg];
-        line.push(s?.sold ?? 0, s?.stock ?? 0);
-      }
-      line.push(
-        r.sold,
-        r.stock,
-        r.rank ?? "",
-        r.competitorLabel,
-        // Brand is meaningful only when a competitor is present; blank
-        // otherwise so "None" rows don't have stray brand text.
-        r.competitor && r.competitor !== "none" ? (r.competitorBrand ?? "").trim() : "",
-        formatMmSs(r.durationSeconds),
-        r.remarks ?? "",
-      );
-      return line;
-    }),
-  );
-}
-
 /** "mm:ss" from whole seconds — blank on null so unmeasured (legacy or
  * edited) visits export as empty cells rather than "0:00". */
-function formatMmSs(seconds: number | null): string {
+export function formatMmSs(seconds: number | null): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "";
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
@@ -567,19 +550,6 @@ function pickId<T extends { id: string }>(options: T[], requested: string | unde
 function competitorLabel(c: string | null): string {
   if (!c) return "";
   return COMPETITOR_LABEL[c as keyof typeof COMPETITOR_LABEL] ?? c;
-}
-
-/** "dd/mm/yyyy" in IST — used for the Counters CSV date columns so the
- * exported value matches how the same date reads on screen (India calendar
- * day), not the raw UTC instant. */
-function formatIstDdMmYyyy(d: Date): string {
-  // en-GB happens to render exactly dd/mm/yyyy with no locale surprises.
-  return d.toLocaleDateString("en-GB", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
 }
 
 function segmentBreakdown(items: VisitItem[] | null | undefined): SegmentBreakdown {

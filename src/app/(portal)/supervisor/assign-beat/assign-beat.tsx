@@ -16,8 +16,11 @@ export type AssignCounter = {
   typeLabel: string;
   area: string;
   stockistId: string;
-  /** Total stock observed at this counter's most recent visit (0 if none). */
-  stock: number;
+  /** Total stock recorded at this counter's most recent visit; null when it
+   * has never been visited (unknown, which is not the same as empty). */
+  stock: number | null;
+  /** When that visit was (ISO), or null if never visited. */
+  lastVisitAt: string | null;
   trend: "Increasing" | "Flat" | "Declining";
 };
 export type RepOption = { id: string; name: string; stockistId: string | null };
@@ -30,6 +33,71 @@ const TREND_STYLE: Record<AssignCounter["trend"], { bg: string; color: string }>
 };
 
 const TYPE_OPTIONS = ["all", "Kirana", "Paan", "Tea Stall", "Wholesale", "Vegetable Shop", "Others"];
+
+type CounterSort = "name" | "visit-old" | "visit-new" | "stock-high" | "stock-low";
+const SORT_OPTIONS: { key: CounterSort; label: string }[] = [
+  { key: "name", label: "Name (A–Z)" },
+  { key: "visit-old", label: "Last visit — oldest first" },
+  { key: "visit-new", label: "Last visit — newest first" },
+  { key: "stock-high", label: "Stock — high to low" },
+  { key: "stock-low", label: "Stock — low to high" },
+];
+
+/**
+ * Order the candidate list.
+ *
+ * A never-visited counter has no date and no stock, and where it belongs
+ * depends on the question: sorting by oldest visit is asking "who is most
+ * overdue", and nothing is more overdue than never — so those lead. Sorting by
+ * stock is asking about a number they do not have, so they go last either way
+ * rather than posing as zero. Name settles every tie, so the order is stable.
+ */
+function sortCounters(list: AssignCounter[], by: CounterSort): AssignCounter[] {
+  const byName = (a: AssignCounter, b: AssignCounter) => a.name.localeCompare(b.name);
+  const out = [...list];
+  out.sort((a, b) => {
+    switch (by) {
+      case "visit-old":
+      case "visit-new": {
+        if (a.lastVisitAt === b.lastVisitAt) return byName(a, b);
+        if (a.lastVisitAt === null) return by === "visit-old" ? -1 : 1;
+        if (b.lastVisitAt === null) return by === "visit-old" ? 1 : -1;
+        const d = a.lastVisitAt.localeCompare(b.lastVisitAt); // ISO sorts as time
+        return (by === "visit-old" ? d : -d) || byName(a, b);
+      }
+      case "stock-high":
+      case "stock-low": {
+        if (a.stock === b.stock) return byName(a, b);
+        if (a.stock === null) return 1;
+        if (b.stock === null) return -1;
+        const d = a.stock - b.stock;
+        return (by === "stock-low" ? d : -d) || byName(a, b);
+      }
+      default:
+        return byName(a, b);
+    }
+  });
+  return out;
+}
+
+/** "12 Sep" (with the year only when it is not this one) and how long ago, in
+ * IST calendar days — the same days the rest of the app counts in. */
+function lastVisitLabel(iso: string, today: string): { date: string; days: number } {
+  const at = new Date(iso);
+  const day = istDateString(at);
+  const date = at.toLocaleDateString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+    ...(day.slice(0, 4) !== today.slice(0, 4) ? { year: "numeric" } : {}),
+  });
+  const days = Math.round(
+    (Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10)) -
+      Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10))) /
+      86_400_000,
+  );
+  return { date, days };
+}
 const TREND_OPTIONS: (AssignCounter["trend"] | "all")[] = ["all", "Increasing", "Flat", "Declining"];
 
 function dateOptions() {
@@ -67,6 +135,9 @@ export function AssignBeat({
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterTrend, setFilterTrend] = useState<(typeof TREND_OPTIONS)[number]>("all");
+  const [sortBy, setSortBy] = useState<CounterSort>("name");
+  // Read once: "N days ago" is counted from the IST day the screen was opened.
+  const today = useMemo(() => istDateString(), []);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [pending, startAssign] = useTransition();
@@ -86,13 +157,16 @@ export function AssignBeat({
     [depotCounters],
   );
 
-  const candidates = depotCounters.filter((c) => {
-    if (scope === "area" && area && c.area !== area) return false;
-    if (filterType !== "all" && c.type !== filterType) return false;
-    if (filterTrend !== "all" && c.trend !== filterTrend) return false;
-    if (search.trim() && !c.name.toLowerCase().includes(search.trim().toLowerCase())) return false;
-    return true;
-  });
+  const candidates = sortCounters(
+    depotCounters.filter((c) => {
+      if (scope === "area" && area && c.area !== area) return false;
+      if (filterType !== "all" && c.type !== filterType) return false;
+      if (filterTrend !== "all" && c.trend !== filterTrend) return false;
+      if (search.trim() && !c.name.toLowerCase().includes(search.trim().toLowerCase())) return false;
+      return true;
+    }),
+    sortBy,
+  );
 
   const allSelected = candidates.length > 0 && candidates.every((c) => selected.has(c.id));
   const repName = reps.find((r) => r.id === repId)?.name ?? "";
@@ -216,6 +290,16 @@ export function AssignBeat({
               </button>
             ))}
           </div>
+          <select
+            className="inp w-auto"
+            value={sortBy}
+            aria-label={t("Sort by")}
+            onChange={(e) => setSortBy(e.target.value as CounterSort)}
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>{t(o.label)}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -236,6 +320,7 @@ export function AssignBeat({
             <tbody>
               {candidates.map((c) => {
                 const ts = TREND_STYLE[c.trend];
+                const last = c.lastVisitAt ? lastVisitLabel(c.lastVisitAt, today) : null;
                 return (
                   <tr key={c.id}>
                     <td className="w-8">
@@ -246,7 +331,24 @@ export function AssignBeat({
                       <div className="text-[12px]" style={{ color: "var(--ink-3)" }}>{t(c.typeLabel)} · {c.area}</div>
                     </td>
                     <td className="whitespace-nowrap text-right">
-                      <div className="text-[13px] font-semibold tabular-nums" style={{ color: "var(--ink-1)" }}>{c.stock}</div>
+                      {last ? (
+                        <>
+                          <div className="text-[13px] font-semibold tabular-nums" style={{ color: "var(--ink-1)" }}>{last.date}</div>
+                          <div className="text-[11px]" style={{ color: "var(--ink-3)" }}>
+                            {last.days <= 0 ? t("today") : last.days === 1 ? t("yesterday") : `${last.days} ${t("days ago")}`}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-[13px] font-semibold" style={{ color: "var(--ink-3)" }}>—</div>
+                          <div className="text-[11px]" style={{ color: "var(--ink-3)" }}>{t("Never visited")}</div>
+                        </>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap text-right">
+                      <div className="text-[13px] font-semibold tabular-nums" style={{ color: c.stock === null ? "var(--ink-3)" : "var(--ink-1)" }}>
+                        {c.stock ?? "—"}
+                      </div>
                       <div className="text-[11px]" style={{ color: "var(--ink-3)" }}>{t("stock")}</div>
                     </td>
                     <td className="text-right">

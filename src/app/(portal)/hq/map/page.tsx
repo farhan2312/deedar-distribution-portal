@@ -4,15 +4,9 @@ import { db } from "@/db";
 import { areas, counters, stockists, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
-import { resolveMapScope } from "@/lib/portal/map-scope";
+import { assignedTodayIn, latestStockIn, resolveMapScope } from "@/lib/portal/map-scope";
 import { durationLabel, formatISTDate, formatISTTime, istDateString, istDayBounds } from "@/lib/date";
-import {
-  getCountersAssignedToday,
-  getCountersVisitedToday,
-  getLatestVisitStock,
-  getTeamDayLogs,
-  getVisitsToday,
-} from "@/lib/supervisor/team";
+import { getCountersVisitedToday, getTeamDayLogs, getVisitsToday } from "@/lib/supervisor/team";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
@@ -46,23 +40,22 @@ export default async function HqLiveMapPage({
   // HQ sees every field rep in scope — not a reports-to team like an SO. A
   // null scope is admin-wide, so the depot filter drops away entirely.
   const isFieldRep = sql`'field' = ANY(${users.accessRoles}::text[])`;
-  const repRowsRaw =
+  const today = istDateString();
+  const bounds = istDayBounds();
+
+  // The roster, the counters and the two counter-wide lookups have no
+  // dependency on each other — the stock and beat lookups are keyed on the
+  // scope, not on the ids the counter query happens to return — so they are
+  // read together. Only the per-rep figures below have to wait, for the ids.
+  const [repRowsRaw, counterRows, stockByCounter, assignedCounterIds] = await Promise.all([
     stockistIds && stockistIds.length === 0
-      ? []
-      : await db
+      ? Promise.resolve([] as { id: string; name: string; stockistName: string }[])
+      : db
           .select({ id: users.id, name: users.name, stockistName: stockists.name })
           .from(users)
           .innerJoin(stockists, eq(stockists.id, users.stockistId))
           .where(stockistIds ? and(inArray(users.stockistId, stockistIds), isFieldRep) : isFieldRep)
-          .orderBy(asc(users.name));
-  const repIds = repRowsRaw.map((r) => r.id);
-
-  const today = istDateString();
-  const bounds = istDayBounds();
-  const [dayLogs, visitMap, visitedCounterIds, counterRows] = await Promise.all([
-    getTeamDayLogs(repIds, today),
-    getVisitsToday(repIds, bounds),
-    getCountersVisitedToday(repIds, bounds),
+          .orderBy(asc(users.name)),
     db
       .select({
         id: counters.id,
@@ -77,14 +70,18 @@ export default async function HqLiveMapPage({
       .from(counters)
       .innerJoin(areas, eq(areas.id, counters.areaId))
       .where(scope.where),
+    latestStockIn(scope.where),
+    assignedTodayIn(scope.where, today),
+  ]);
+  const repIds = repRowsRaw.map((r) => r.id);
+
+  const [dayLogs, visitMap, visitedCounterIds] = await Promise.all([
+    getTeamDayLogs(repIds, today),
+    getVisitsToday(repIds, bounds),
+    getCountersVisitedToday(repIds, bounds),
   ]);
 
   const geoCounters = counterRows.filter((c) => c.lat != null && c.lng != null);
-  const geoIds = geoCounters.map((c) => c.id);
-  const [stockByCounter, assignedCounterIds] = await Promise.all([
-    getLatestVisitStock(geoIds),
-    getCountersAssignedToday(geoIds, today),
-  ]);
 
   const mapCounters: CounterPin[] = geoCounters.map((c) => ({
     id: c.id,

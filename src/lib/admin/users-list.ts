@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, getTableColumns, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, ilike, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { stockists, userAreas, userStockists, users, type AccessRole } from "@/db/schema";
@@ -30,8 +30,15 @@ export type DeactivatedUser = {
 };
 
 /** A user row plus the name of whoever added them — null for accounts that
- * predate the column, and for a creator who has since been deleted. */
-export type UserRow = typeof users.$inferSelect & { createdByName: string | null };
+ * predate the column, and for a creator who has since been deleted — and the
+ * ids of the areas and stockists they are mapped to. */
+export type UserRow = typeof users.$inferSelect & {
+  createdByName: string | null;
+  /** Field ISR: the areas they cover. */
+  areaIds: string[];
+  /** Sales Officer: the stockists they supervise. */
+  stockistIds: string[];
+};
 
 export type UsersPage = {
   rows: UserRow[];
@@ -135,7 +142,40 @@ export async function fetchUsersPage(
   // checkboxes and a password reset that do nothing for them.
   const filter = and(eq(users.isActive, true), ...parts);
 
-  const [[counts], [{ n: total }]] = await Promise.all([
+  // Self-join for the creator's name: one query instead of a lookup per row.
+  // Each user's area and stockist mapping rides along as two id arrays, so the
+  // table needs no second read of the join tables once the page is known —
+  // that follow-up used to cost the page a round trip of its own.
+  const creator = alias(users, "created_by");
+  const rowsAt = (page: number) =>
+    db
+      .select({
+        ...getTableColumns(users),
+        createdByName: creator.name,
+        areaIds: sql<string[]>`coalesce(
+          (select array_agg(ua.area_id::text) from ${userAreas} ua where ua.user_id = ${users.id}),
+          '{}'
+        )`,
+        stockistIds: sql<string[]>`coalesce(
+          (select array_agg(us.stockist_id::text) from ${userStockists} us where us.user_id = ${users.id}),
+          '{}'
+        )`,
+      })
+      .from(users)
+      .leftJoin(creator, eq(creator.id, users.createdByUserId))
+      .where(filter)
+      // Names are not unique, and LIMIT/OFFSET over a non-total order drops and
+      // repeats rows across page boundaries — the id makes the sort total.
+      .orderBy(asc(users.name), asc(users.id))
+      .limit(USERS_PAGE_SIZE)
+      .offset((page - 1) * USERS_PAGE_SIZE);
+
+  // The page's rows load alongside the counts rather than after them. Waiting
+  // only served to clamp a page number that is almost always in range; a stale
+  // "page 7 of 2" (a filter that shrank the result) pays a second read instead
+  // of every request paying a round trip.
+  const requested = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const [[counts], [{ n: total }], firstRows] = await Promise.all([
     db
       .select({
         all: sql<number>`count(*)::int`,
@@ -143,25 +183,12 @@ export async function fetchUsersPage(
       })
       .from(users),
     db.select({ n: sql<number>`count(*)::int` }).from(users).where(filter),
+    rowsAt(requested),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / USERS_PAGE_SIZE));
-  // Clamped: a filter that shrinks the result can leave the URL on page 7 of 2.
-  const requested = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const page = Math.min(requested, totalPages);
-
-  // Self-join for the creator's name: one query instead of a lookup per row.
-  const creator = alias(users, "created_by");
-  const rows = await db
-    .select({ ...getTableColumns(users), createdByName: creator.name })
-    .from(users)
-    .leftJoin(creator, eq(creator.id, users.createdByUserId))
-    .where(filter)
-    // Names are not unique, and LIMIT/OFFSET over a non-total order drops and
-    // repeats rows across page boundaries — the id makes the sort total.
-    .orderBy(asc(users.name), asc(users.id))
-    .limit(USERS_PAGE_SIZE)
-    .offset((page - 1) * USERS_PAGE_SIZE);
+  const rows = page === requested ? firstRows : await rowsAt(page);
 
   return {
     rows,
@@ -203,28 +230,4 @@ export async function fetchSupervisorOptions(): Promise<SupervisorOption[]> {
     .where(sql`'supervisor' = ANY(${users.accessRoles}::text[])`)
     .groupBy(users.id)
     .orderBy(asc(users.name));
-}
-
-/** Area and stockist assignments for just the users on screen. */
-export async function fetchAssignmentsFor(userIds: string[]): Promise<{
-  areasByUser: Map<string, Set<string>>;
-  stockistsByUser: Map<string, Set<string>>;
-}> {
-  const areasByUser = new Map<string, Set<string>>();
-  const stockistsByUser = new Map<string, Set<string>>();
-  if (userIds.length === 0) return { areasByUser, stockistsByUser };
-
-  const [areaRows, stockistRows] = await Promise.all([
-    db.select().from(userAreas).where(inArray(userAreas.userId, userIds)),
-    db.select().from(userStockists).where(inArray(userStockists.userId, userIds)),
-  ]);
-  for (const r of areaRows) {
-    if (!areasByUser.has(r.userId)) areasByUser.set(r.userId, new Set());
-    areasByUser.get(r.userId)!.add(r.areaId);
-  }
-  for (const r of stockistRows) {
-    if (!stockistsByUser.has(r.userId)) stockistsByUser.set(r.userId, new Set());
-    stockistsByUser.get(r.userId)!.add(r.stockistId);
-  }
-  return { areasByUser, stockistsByUser };
 }

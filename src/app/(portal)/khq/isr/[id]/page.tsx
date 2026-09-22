@@ -52,30 +52,33 @@ export default async function KhqIsrPage({
   }
 
   const { id: isrId } = await params;
-  const [isr] = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      phone: users.phone,
-      roles: users.accessRoles,
-      depot: stockists.name,
-    })
-    .from(users)
-    .leftJoin(stockists, eq(stockists.id, users.stockistId))
-    .where(eq(users.id, isrId))
-    .limit(1);
+
+  // The profile and the calendar floor are both keyed on this one id, so they
+  // are read together rather than one after the other. The floor is THIS ISR's
+  // first visit, so the filter covers their whole history rather than the
+  // company's — and "All time" means their all time, not the company's.
+  const [[isr], [first]] = await Promise.all([
+    db
+      .select({
+        id: users.id,
+        name: users.name,
+        phone: users.phone,
+        roles: users.accessRoles,
+        depot: stockists.name,
+      })
+      .from(users)
+      .leftJoin(stockists, eq(stockists.id, users.stockistId))
+      .where(eq(users.id, isrId))
+      .limit(1),
+    db
+      .select({ d: sql<string | null>`min(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date::text` })
+      .from(visits)
+      .where(eq(visits.userId, isrId)),
+  ]);
 
   if (!isr || !isr.roles.includes("field")) {
     return <Notice title={t("ISR detail")}>{t("No such ISR.")}</Notice>;
   }
-
-  // The calendar floor is THIS ISR's first visit, so the filter covers their
-  // whole history rather than the company's — and "All time" means their all
-  // time, not the company's.
-  const [first] = await db
-    .select({ d: sql<string | null>`min(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date::text` })
-    .from(visits)
-    .where(eq(visits.userId, isrId));
 
   const now = nowInstant();
   const today = istDateString(now);
@@ -98,15 +101,81 @@ export default async function KhqIsrPage({
     lt(visits.visitedAt, dayEnd),
   );
 
+  const createdInRange = and(
+    eq(counters.createdByUserId, isrId),
+    gte(counters.createdAt, dayStart),
+    lt(counters.createdAt, dayEnd),
+  );
+
   /**
-   * Counts and aggregates first, rows second.
+   * Counts, aggregates and both tables' rows, in one batch.
    *
    * The table used to render every visit in the range, and the totals above it
    * were derived from that same array. Paging the array would have quietly
-   * turned "packets sold" into "packets sold on this page", so the figures now
-   * come from SQL over the whole range and only the table is paged.
+   * turned "packets sold" into "packets sold on this page", so the figures come
+   * from SQL over the whole range and only the table is paged.
+   *
+   * The rows used to wait for the counts, purely so the page number could be
+   * clamped first. They are read for the page the URL asks for instead, and
+   * re-read below only when that page turns out to be past the end.
    */
-  const [visitAgg, counterAgg, itemRows, logRows, lifetime, lifetimeCreated] = await Promise.all([
+  const visitRowsAt = (page: number) =>
+    db
+      .select({
+        id: visits.id,
+        visitedAt: visits.visitedAt,
+        sold: visits.sold,
+        stock: visits.stock,
+        items: visits.items,
+        rank: visits.rank,
+        competitor: visits.competitor,
+        competitorBrand: visits.competitorBrand,
+        durationSeconds: visits.durationSeconds,
+        counterId: visits.counterId,
+        counterName: counters.name,
+        counterType: counters.type,
+        counterTypeOther: counters.typeOther,
+        area: areas.name,
+      })
+      .from(visits)
+      .innerJoin(counters, eq(counters.id, visits.counterId))
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .where(inRange)
+      // Two visits in the same second would otherwise straddle a page boundary
+      // unpredictably; the id makes the sort total.
+      .orderBy(desc(visits.visitedAt), asc(visits.id))
+      .limit(VISITS_PER_PAGE)
+      .offset((page - 1) * VISITS_PER_PAGE);
+
+  const createdRowsAt = (page: number) =>
+    db
+      .select({
+        id: counters.id,
+        name: counters.name,
+        type: counters.type,
+        typeOther: counters.typeOther,
+        area: areas.name,
+        createdAt: counters.createdAt,
+        lat: counters.lat,
+        lng: counters.lng,
+      })
+      .from(counters)
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .where(createdInRange)
+      .orderBy(desc(counters.createdAt), asc(counters.id))
+      .limit(COUNTERS_PER_PAGE)
+      .offset((page - 1) * COUNTERS_PER_PAGE);
+
+  const [
+    visitAgg,
+    counterAgg,
+    itemRows,
+    logRows,
+    lifetime,
+    lifetimeCreated,
+    askedVisitRows,
+    askedCreatedRows,
+  ] = await Promise.all([
     db
       .select({
         n: sql<number>`count(*)::int`,
@@ -115,16 +184,7 @@ export default async function KhqIsrPage({
       })
       .from(visits)
       .where(inRange),
-    db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(counters)
-      .where(
-        and(
-          eq(counters.createdByUserId, isrId),
-          gte(counters.createdAt, dayStart),
-          lt(counters.createdAt, dayEnd),
-        ),
-      ),
+    db.select({ n: sql<number>`count(*)::int` }).from(counters).where(createdInRange),
     // Just the items column, for the per-SKU split. One narrow column across
     // the range is far less than the joined rows it used to be read from, and
     // the split has to cover every visit rather than one page of them.
@@ -156,6 +216,8 @@ export default async function KhqIsrPage({
       .select({ n: sql<number>`count(*)::int` })
       .from(counters)
       .where(eq(counters.createdByUserId, isrId)),
+    visitRowsAt(askedVisitPage),
+    createdRowsAt(askedCounterPage),
   ]);
 
   const visitTotal = visitAgg[0]?.n ?? 0;
@@ -165,56 +227,10 @@ export default async function KhqIsrPage({
   const visitPage = Math.min(askedVisitPage, visitPages);
   const counterPage = Math.min(askedCounterPage, counterPages);
 
+  // A page past the end is clamped, not rejected — and only then re-read.
   const [visitRows, createdRows] = await Promise.all([
-    db
-      .select({
-        id: visits.id,
-        visitedAt: visits.visitedAt,
-        sold: visits.sold,
-        stock: visits.stock,
-        items: visits.items,
-        rank: visits.rank,
-        competitor: visits.competitor,
-        competitorBrand: visits.competitorBrand,
-        durationSeconds: visits.durationSeconds,
-        counterId: visits.counterId,
-        counterName: counters.name,
-        counterType: counters.type,
-        counterTypeOther: counters.typeOther,
-        area: areas.name,
-      })
-      .from(visits)
-      .innerJoin(counters, eq(counters.id, visits.counterId))
-      .innerJoin(areas, eq(areas.id, counters.areaId))
-      .where(inRange)
-      // Two visits in the same second would otherwise straddle a page boundary
-      // unpredictably; the id makes the sort total.
-      .orderBy(desc(visits.visitedAt), asc(visits.id))
-      .limit(VISITS_PER_PAGE)
-      .offset((visitPage - 1) * VISITS_PER_PAGE),
-    db
-      .select({
-        id: counters.id,
-        name: counters.name,
-        type: counters.type,
-        typeOther: counters.typeOther,
-        area: areas.name,
-        createdAt: counters.createdAt,
-        lat: counters.lat,
-        lng: counters.lng,
-      })
-      .from(counters)
-      .innerJoin(areas, eq(areas.id, counters.areaId))
-      .where(
-        and(
-          eq(counters.createdByUserId, isrId),
-          gte(counters.createdAt, dayStart),
-          lt(counters.createdAt, dayEnd),
-        ),
-      )
-      .orderBy(desc(counters.createdAt), asc(counters.id))
-      .limit(COUNTERS_PER_PAGE)
-      .offset((counterPage - 1) * COUNTERS_PER_PAGE),
+    visitPage === askedVisitPage ? askedVisitRows : visitRowsAt(visitPage),
+    counterPage === askedCounterPage ? askedCreatedRows : createdRowsAt(counterPage),
   ]);
 
   // A one-day window still has exactly one log, so the single-day view keeps

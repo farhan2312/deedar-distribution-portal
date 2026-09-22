@@ -16,6 +16,7 @@ import {
 } from "@/lib/supervisor/team";
 import { canAccess } from "@/lib/auth/access";
 import { getT } from "@/lib/i18n/server";
+import { asId } from "@/lib/portal/map-scope";
 import { Donut, type DonutSegment } from "@/components/ui/donut";
 import { Notice } from "@/components/ui/notice";
 import { CnfPicker } from "../_components/cnf-picker";
@@ -79,14 +80,26 @@ export default async function SupervisorAnalyticsPage({
   }
 
   const { cnf: requestedCnf, depot: requestedDepot, date: requestedDate } = await searchParams;
-  const cnfs = await getScopeCnfs(user);
+  // The C&F list vets the id in the URL; the stockist scope for that same id
+  // is read beside it rather than after it, and re-read only if the id turns
+  // out not to be on offer.
+  const cnfGuess = asId(requestedCnf);
+  // With neither filter set — which is how this page opens — the team depends
+  // on nothing else, so it is read here too rather than in a stage of its own.
+  const unfiltered = !requestedCnf && !requestedDepot;
+  const [cnfs, guessedStockists, guessedReps] = await Promise.all([
+    getScopeCnfs(user),
+    getScopeStockists(user, cnfGuess ?? undefined),
+    unfiltered ? getTeamReps(user) : Promise.resolve(null),
+  ]);
   const cnf = pickCnf(cnfs, requestedCnf);
-  const stockists = await getScopeStockists(user, cnf?.id);
+  const stockists =
+    (cnf?.id ?? null) === cnfGuess ? guessedStockists : await getScopeStockists(user, cnf?.id);
   const depot = pickStockist(stockists, requestedDepot);
   // Already narrowed to the chosen C&F, since `stockists` is.
   const stockistIds = depot ? [depot.id] : stockists.map((d) => d.id);
 
-  const reps = await getTeamReps(user, depot?.id, cnf ? stockistIds : undefined);
+  const reps = guessedReps ?? (await getTeamReps(user, depot?.id, cnf ? stockistIds : undefined));
   const repIds = reps.map((r) => r.id);
 
   // ── Selected day (defaults to today) and its comparison day ─────────────

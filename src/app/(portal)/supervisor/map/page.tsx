@@ -5,14 +5,12 @@ import { areas, counters } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { durationLabel, formatISTDate, formatISTTime, istDateString, istDayBounds } from "@/lib/date";
 import {
-  getCountersAssignedToday,
   getCountersVisitedToday,
-  getLatestVisitStock,
   getTeamDayLogs,
   getTeamReps,
   getVisitsToday,
 } from "@/lib/supervisor/team";
-import { resolveMapScope } from "@/lib/portal/map-scope";
+import { assignedTodayIn, latestStockIn, resolveMapScope } from "@/lib/portal/map-scope";
 import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { getT } from "@/lib/i18n/server";
@@ -40,19 +38,14 @@ export default async function SupervisorMapPage({
 
   // The roster follows the depot level only — an area narrows counters, not
   // people, since a rep belongs to a depot rather than to one area.
-  const allReps = await getTeamReps(user, scope.depot?.id);
-  const reps =
-    !scope.depot && stockistIds
-      ? allReps.filter((r) => r.stockistId != null && stockistIds.includes(r.stockistId))
-      : allReps;
-  const repIds = reps.map((r) => r.id);
   const today = istDateString();
   const bounds = istDayBounds();
 
-  const [dayLogs, visitMap, visitedCounterIds, counterRows] = await Promise.all([
-    getTeamDayLogs(repIds, today),
-    getVisitsToday(repIds, bounds),
-    getCountersVisitedToday(repIds, bounds),
+  // Roster, counters, stock and beat together: the last two are keyed on the
+  // scope rather than on the counter ids, so nothing here waits on anything
+  // else. Only the per-rep figures below need the roster's ids.
+  const [allReps, counterRows, stockByCounter, assignedCounterIds] = await Promise.all([
+    getTeamReps(user, scope.depot?.id),
     db
       .select({
         id: counters.id,
@@ -67,15 +60,24 @@ export default async function SupervisorMapPage({
       .from(counters)
       .innerJoin(areas, eq(areas.id, counters.areaId))
       .where(scope.where),
+    latestStockIn(scope.where),
+    assignedTodayIn(scope.where, today),
+  ]);
+
+  const reps =
+    !scope.depot && stockistIds
+      ? allReps.filter((r) => r.stockistId != null && stockistIds.includes(r.stockistId))
+      : allReps;
+  const repIds = reps.map((r) => r.id);
+
+  const [dayLogs, visitMap, visitedCounterIds] = await Promise.all([
+    getTeamDayLogs(repIds, today),
+    getVisitsToday(repIds, bounds),
+    getCountersVisitedToday(repIds, bounds),
   ]);
 
   // Leaflet plots real coordinates, so only geo-tagged counters are mappable.
   const geoCounters = counterRows.filter((c) => c.lat != null && c.lng != null);
-  const geoIds = geoCounters.map((c) => c.id);
-  const [stockByCounter, assignedCounterIds] = await Promise.all([
-    getLatestVisitStock(geoIds),
-    getCountersAssignedToday(geoIds, today),
-  ]);
 
   const mapCounters: CounterPin[] = geoCounters.map((c) => ({
     id: c.id,

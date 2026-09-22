@@ -15,6 +15,7 @@ import {
   type VisitItem,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { asId } from "@/lib/portal/map-scope";
 import { formatISTDate, istDateString, istDayBounds } from "@/lib/date";
 import { PRODUCT_SEGMENTS, COMPETITOR_LABEL } from "@/lib/field/products";
 import { MONTH_SHORT } from "@/lib/khq/period";
@@ -102,31 +103,34 @@ export default async function KhqDashboardPage({
   if (!user) redirect("/login");
   const t = await getT();
 
-  // Oldest visit sets the slider's floor — no point letting it scroll back
-  // through years that can't contain data.
-  const [earliest] = await db
-    .select({
-      d: sql<string | null>`min(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date::text`,
-    })
-    .from(visits);
-
   const params = await searchParams;
-  const range = resolveRange(params, earliest?.d ?? null);
 
-  // State scope. Resolved before the aggregates so every query below can be
-  // filtered by the same depot list: state → C&Fs → stockists → counters.
-  const stateRows = await db.select().from(states);
+  // The slider's floor, the state picker's options and the state scope, all at
+  // once. These used to run one after another — oldest visit, then states,
+  // then that state's C&Fs, then those C&Fs' stockists — four waits before a
+  // single dashboard figure was asked for. The scope is now one join on the
+  // state named in the URL; a state that no longer exists returns nothing and
+  // is ignored below, exactly as an unknown id was before.
+  const stateGuess = asId(params.state);
+  const [[earliest], stateRows, scopedStockists] = await Promise.all([
+    db
+      .select({
+        d: sql<string | null>`min(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date::text`,
+      })
+      .from(visits),
+    db.select().from(states),
+    stateGuess
+      ? db
+          .select({ id: stockists.id })
+          .from(stockists)
+          .innerJoin(cnfs, eq(cnfs.id, stockists.cnfId))
+          .where(eq(cnfs.stateId, stateGuess))
+      : Promise.resolve(null),
+  ]);
+
+  const range = resolveRange(params, earliest?.d ?? null);
   const selectedState = stateRows.find((s) => s.id === params.state) ?? null;
-  const scopedCnfs = selectedState
-    ? await db.select({ id: cnfs.id }).from(cnfs).where(eq(cnfs.stateId, selectedState.id))
-    : null;
-  const scopedStockists = scopedCnfs
-    ? await db
-        .select({ id: stockists.id })
-        .from(stockists)
-        .where(scopedCnfs.length ? inArray(stockists.cnfId, scopedCnfs.map((c) => c.id)) : sql`false`)
-    : null;
-  const scopedStockistIds = scopedStockists?.map((d) => d.id) ?? null;
+  const scopedStockistIds = selectedState ? (scopedStockists ?? []).map((d) => d.id) : null;
 
   /** Counter-side scope predicate, or undefined company-wide. Every visit
    * query that uses it joins `counters`, since the state lives up that chain
@@ -168,7 +172,6 @@ export default async function KhqDashboardPage({
   // All aggregates run in parallel — sequential awaits on a dashboard multiply
   // the DB round-trip cost.
   const [
-    allStates,
     allCnfs,
     allStockists,
     allCounters,
@@ -189,10 +192,9 @@ export default async function KhqDashboardPage({
     newCountersTodayRow,
     todayLogs,
   ] = await Promise.all([
-    db.select().from(states),
     // C&Fs and stockists follow the state filter too, so the headline counts
     // ("3 C&F · 12 stockists") describe what is on screen rather than the
-    // company. `allStates` stays unscoped — it fills the state picker.
+    // company. The state picker's own options were read above.
     db
       .select()
       .from(cnfs)
@@ -365,19 +367,6 @@ export default async function KhqDashboardPage({
       .where(eq(dayLogs.logDate, today)),
   ]);
 
-  // Latest observed stock per retail counter — needs ids from the query above,
-  // so it can't join the parallel batch.
-  const retailCounters = allCounters.filter((c) => c.type !== "Wholesale");
-  const stockRows = retailCounters.length
-    ? await db
-        .select({ counterId: visits.counterId, stock: visits.stock })
-        .from(visits)
-        .where(inArray(visits.counterId, retailCounters.map((c) => c.id)))
-        .orderBy(desc(visits.visitedAt))
-    : [];
-  const latestStock = new Map<string, number>();
-  for (const r of stockRows) if (!latestStock.has(r.counterId)) latestStock.set(r.counterId, r.stock);
-
   // ── Counter health ─────────────────────────────────────────────────────
   const activeCount = allCounters.filter((c) => c.status === "active").length;
   const dormantCount = allCounters.filter((c) => c.status === "dormant").length;
@@ -391,6 +380,8 @@ export default async function KhqDashboardPage({
     { label: t("Dormant"), value: dormantCount, color: "var(--warning)" },
     { label: t("Declining"), value: decliningCount, color: "var(--danger)" },
   ];
+
+  const retailCounters = allCounters.filter((c) => c.type !== "Wholesale");
 
   // ── Counter type mix (retail only) ─────────────────────────────────────
   const typeCount = new Map<string, number>();
@@ -408,7 +399,7 @@ export default async function KhqDashboardPage({
   // ── Counters by state ───────────────────────────────────────────────────
   const stockistToCnf = new Map(allStockists.map((d) => [d.id, d.cnfId]));
   const cnfToState = new Map(allCnfs.map((c) => [c.id, c.stateId]));
-  const stateName = new Map(allStates.map((s) => [s.id, s.name]));
+  const stateName = new Map(stateRows.map((s) => [s.id, s.name]));
   const cnfName = new Map(allCnfs.map((c) => [c.id, c.name]));
   const stateCounts = new Map<string, number>();
   for (const c of allCounters) {
@@ -702,7 +693,7 @@ export default async function KhqDashboardPage({
           </h1>
         </div>
         <div className="flex flex-none flex-wrap items-end gap-2">
-          <StatePicker options={allStates} value={selectedState?.id ?? "all"} />
+          <StatePicker options={stateRows} value={selectedState?.id ?? "all"} />
           <RefreshButton />
         </div>
       </div>
@@ -725,7 +716,7 @@ export default async function KhqDashboardPage({
           {formatISTDate(today)}
         </span>
         <span>·</span>
-        <span>{selectedState ? selectedState.name : `${allStates.length} ${t("states")}`}</span>
+        <span>{selectedState ? selectedState.name : `${stateRows.length} ${t("states")}`}</span>
         <span>·</span>
         <span>{allCnfs.length} {t("C&F")}</span>
         <span>·</span>

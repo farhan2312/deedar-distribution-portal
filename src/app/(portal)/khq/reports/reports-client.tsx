@@ -11,7 +11,7 @@ import { PeriodFilter } from "../_components/period-filter";
 import { COUNTER_SORTS } from "@/lib/khq/report-sorts";
 import type { StockistKind } from "@/db/schema";
 import { PRODUCT_SEGMENTS } from "@/lib/field/products";
-import { exportCountersCsv, exportVisitsCsv } from "@/lib/khq/report-actions";
+import { exportCountersXlsx, exportVisitsXlsx } from "@/lib/khq/report-actions";
 // Types only — `reports.ts` is `server-only` and pulls in the DB driver, so a
 // runtime import from it would drag `postgres`/`fs`/`net` into the client
 // bundle and fail the build. Type imports are erased at compile time.
@@ -27,13 +27,14 @@ const STATUS_STYLE: Record<CounterReportRow["status"], { bg: string; color: stri
   declining: { bg: "rgba(199,38,59,.1)", color: "var(--danger)" },
 };
 
-/** Turn a resolved server-action CSV payload into a browser download. Blob
- * URLs are session-scoped and freed on `revokeObjectURL`, so re-running the
- * export never leaks memory. */
-function downloadCsv(filename: string, data: string) {
-  // BOM so Excel recognises the UTF-8 encoding (Hindi rep/counter names
-  // otherwise render as mojibake in the default Windows Excel install).
-  const blob = new Blob(["﻿" + data], { type: "text/csv;charset=utf-8;" });
+/** Turn a finished workbook (base64 from the server action) into a browser
+ * download. Blob URLs are session-scoped and freed on `revokeObjectURL`, so
+ * re-running the export never leaks memory. */
+function downloadXlsx(filename: string, base64: string) {
+  const bytes = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
+  const blob = new Blob([bytes], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -57,6 +58,8 @@ export function ReportsClient({
   countersTotal,
   visits,
   visitsTotal,
+  visitsSold,
+  visitsSoldBySku,
   pageSize,
 }: {
   scope: ReportsScope;
@@ -64,6 +67,10 @@ export function ReportsClient({
   countersTotal: number;
   visits: VisitReportRow[];
   visitsTotal: number;
+  /** Packets sold across every matching visit, all pages. */
+  visitsSold: number;
+  /** The same, per SKU. */
+  visitsSoldBySku: Record<(typeof SEGMENT_ORDER)[number], number>;
   pageSize: number;
 }) {
   const t = useT();
@@ -121,19 +128,19 @@ export function ReportsClient({
   function runExport() {
     setExportError(null);
     // Pass the CURRENT URL params through — the server action re-resolves the
-    // same scope the page rendered, so the CSV matches the filters on screen
+    // same scope the page rendered, so the workbook matches the filters on screen
     // (minus pagination: export always covers every match).
     const payload = Object.fromEntries(params.entries());
     startExport(async () => {
       const res =
         scope.tab === "counters"
-          ? await exportCountersCsv(payload)
-          : await exportVisitsCsv(payload);
+          ? await exportCountersXlsx(payload)
+          : await exportVisitsXlsx(payload);
       if (!res.ok) {
         setExportError(res.error);
         return;
       }
-      downloadCsv(res.filename, res.data);
+      downloadXlsx(res.filename, res.base64);
     });
   }
 
@@ -165,7 +172,7 @@ export function ReportsClient({
           onClick={runExport}
           disabled={exporting || total === 0}
         >
-          {exporting ? t("Exporting…") : t("Export CSV")}
+          {exporting ? t("Exporting…") : t("Export Excel")}
         </button>
       </div>
 
@@ -182,7 +189,26 @@ export function ReportsClient({
 
       {/* Filter row */}
       <div className="card mb-4 flex flex-wrap items-center gap-2 p-3.5">
-        <MapScopePickers levels={scope.levels} />
+        <MapScopePickers levels={scope.levels} alsoClear={["isr"]} />
+        {/* Visits only: a counter has no rep of its own to filter by. */}
+        {scope.tab === "visits" && (
+          <select
+            className="inp"
+            style={{ width: "auto", padding: "6px 10px", fontSize: 12 }}
+            value={scope.filters.isrId ?? "all"}
+            aria-label={t("ISR")}
+            disabled={scope.isrOptions.length === 0}
+            onChange={(e) => push({ isr: e.target.value === "all" ? null : e.target.value })}
+          >
+            <option value="all">{t("All ISRs")}</option>
+            {scope.isrOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+                {o.isActive ? "" : ` (${t("deactivated")})`}
+              </option>
+            ))}
+          </select>
+        )}
         {/* Counters only: the visits tab is a log, and a log reads newest
             first or not at all. */}
         {scope.tab === "counters" && (
@@ -211,6 +237,58 @@ export function ReportsClient({
               : t("Search counter or rep name…")
           }
         />
+        {/* The cumulative for everything the filters match — every page, not
+            only the fifty rows below — so it answers "how much did this
+            selection sell" without exporting first. */}
+        {scope.tab === "visits" && (
+          <div
+            className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-lg px-3 py-1.5"
+            style={{
+              background: "var(--accent-tint)",
+              // Stays in the filter row instead of dropping below it. A zero
+              // basis with a floor means it only leaves the row when even the
+              // floor will not fit; it then grows no wider than its content,
+              // and the auto margin pushes it to the right end. When space is
+              // short the SKU chips wrap under the total rather than the whole
+              // box moving to a line of its own.
+              flex: "1 1 0",
+              minWidth: 180,
+              maxWidth: "max-content",
+            }}
+            title={`${visitsTotal} ${t(visitsTotal === 1 ? "visit" : "visits")}`}
+          >
+            <span className="flex items-baseline gap-2">
+              <span className="text-[11.5px] font-semibold" style={{ color: "var(--ink-2)" }}>
+                {t("Cumulative sold")}
+              </span>
+              <span
+                className="text-[16px] font-bold tabular-nums"
+                style={{ fontFamily: "var(--font-display)", color: "var(--accent)" }}
+              >
+                {visitsSold.toLocaleString("en-IN")}
+              </span>
+            </span>
+            {/* Every SKU, in the table's order, zeros included: in a total, "sold
+                none of these" is part of the answer, unlike in a single visit's
+                cell where an untouched SKU is just noise. */}
+            <span className="flex flex-wrap items-center justify-end gap-1.5">
+              {SEGMENT_ORDER.map((seg) => {
+                const n = visitsSoldBySku[seg] ?? 0;
+                return (
+                  <span
+                    key={seg}
+                    className="rounded px-1.5 py-0.5 text-[11.5px] tabular-nums"
+                    style={{ background: "var(--surface)", color: n > 0 ? "var(--ink-1)" : "var(--ink-3)" }}
+                    title={`${PRODUCT_SEGMENTS.find((p) => p.value === seg)?.label ?? seg} — ${t("sold")} ${n.toLocaleString("en-IN")}`}
+                  >
+                    <strong style={{ color: n > 0 ? "var(--accent)" : "var(--ink-3)" }}>{seg}</strong>{" "}
+                    {n.toLocaleString("en-IN")}
+                  </span>
+                );
+              })}
+            </span>
+          </div>
+        )}
       </div>
 
       {exportError && (

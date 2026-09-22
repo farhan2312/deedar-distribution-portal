@@ -22,6 +22,7 @@ import { competitorDisplayLabel, formatDuration, PRODUCT_SEGMENTS } from "@/lib/
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { UrlPagination } from "@/components/ui/url-pagination";
+import { VisitRowActions } from "./visit-row-actions";
 
 /** Visits per page — the same 25 the ISR detail table uses. */
 const VISITS_PER_PAGE = 25;
@@ -71,6 +72,10 @@ export default async function KhqCounterPage({
   if (!canAccess(user, "khq")) {
     return <Notice title={t("Counter")}>{t("You don't have Kanpur HQ access.")}</Notice>;
   }
+  // Everyone else reads this page; Central Admin can also correct it. Editing a
+  // counter's details or a logged visit is a data-fixing job, not a reporting
+  // one, so the affordances only appear for that account.
+  const isAdmin = user.accessRoles.includes("admin");
 
   const { id } = await params;
   const sp = await searchParams;
@@ -79,7 +84,43 @@ export default async function KhqCounterPage({
   const creator = alias(users, "creator");
   const parentStockist = alias(stockists, "parent_stockist");
 
-  const [counter] = await db
+  const onCounter = eq(visits.counterId, id);
+  const visitRowsAt = (page: number) =>
+    db
+      .select({
+        id: visits.id,
+        visitedAt: visits.visitedAt,
+        sold: visits.sold,
+        stock: visits.stock,
+        rank: visits.rank,
+        competitor: visits.competitor,
+        competitorBrand: visits.competitorBrand,
+        remarks: visits.remarks,
+        durationSeconds: visits.durationSeconds,
+        repName: users.name,
+      })
+      .from(visits)
+      .innerJoin(users, eq(users.id, visits.userId))
+      .where(onCounter)
+      // The id makes the sort total, so no visit is dropped or repeated across
+      // a page boundary when two share a timestamp.
+      .orderBy(desc(visits.visitedAt), asc(visits.id))
+      .limit(VISITS_PER_PAGE)
+      .offset((page - 1) * VISITS_PER_PAGE);
+
+  /*
+   * The counter, its totals over every visit, the SKU split, the competitor
+   * tally and one page of rows — all in one round trip.
+   *
+   * They used to run in three stages: the counter, then the aggregates, then
+   * the rows once the count had settled the page number. Everything is keyed
+   * on the id in the URL, so it all leaves together and the page is corrected
+   * afterwards on the rare occasion the URL asks past the end. Paging the rows
+   * must still not turn "packets sold" into "packets sold on this page", which
+   * is why the totals come from SQL over every visit.
+   */
+  const [[counter], agg, itemRows, competitorRows, askedRows] = await Promise.all([
+    db
     .select({
       id: counters.id,
       name: counters.name,
@@ -106,16 +147,7 @@ export default async function KhqCounterPage({
     .innerJoin(cnfs, eq(cnfs.id, stockists.cnfId))
     .leftJoin(creator, eq(creator.id, counters.createdByUserId))
     .where(eq(counters.id, id))
-    .limit(1);
-
-  if (!counter) notFound();
-
-  const onCounter = eq(visits.counterId, id);
-
-  // Totals over every visit, the SKU split, and one page of rows — the same
-  // split as the ISR page: paging the rows must not turn "packets sold" into
-  // "packets sold on this page".
-  const [agg, itemRows, competitorRows] = await Promise.all([
+    .limit(1),
     db
       .select({
         n: sql<number>`count(*)::int`,
@@ -137,33 +169,16 @@ export default async function KhqCounterPage({
       .where(and(onCounter, sql`${visits.competitor} is not null`))
       .groupBy(visits.competitor)
       .orderBy(desc(sql`count(*)`)),
+    visitRowsAt(askedPage),
   ]);
+
+  if (!counter) notFound();
 
   const total = agg[0]?.n ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / VISITS_PER_PAGE));
   const page = Math.min(askedPage, totalPages);
-
-  const visitRows = await db
-    .select({
-      id: visits.id,
-      visitedAt: visits.visitedAt,
-      sold: visits.sold,
-      stock: visits.stock,
-      rank: visits.rank,
-      competitor: visits.competitor,
-      competitorBrand: visits.competitorBrand,
-      remarks: visits.remarks,
-      durationSeconds: visits.durationSeconds,
-      repName: users.name,
-    })
-    .from(visits)
-    .innerJoin(users, eq(users.id, visits.userId))
-    .where(onCounter)
-    // The id makes the sort total, so no visit is dropped or repeated across a
-    // page boundary when two share a timestamp.
-    .orderBy(desc(visits.visitedAt), asc(visits.id))
-    .limit(VISITS_PER_PAGE)
-    .offset((page - 1) * VISITS_PER_PAGE);
+  // A page past the end is clamped, not rejected — and only then re-read.
+  const visitRows = page === askedPage ? askedRows : await visitRowsAt(page);
 
   // Per-SKU split, summed from the items JSONB in JS — a jsonb SRF join errors
   // on any non-array legacy row, same as on the dashboards.
@@ -207,6 +222,19 @@ export default async function KhqCounterPage({
           <span className="chip" style={{ background: "var(--bg-soft)", color: "var(--ink-2)", borderColor: "transparent" }}>
             {t(counterTypeLabel(counter.type, counter.typeOther))}
           </span>
+          {isAdmin && (
+            <>
+              {/* Pushed to the right edge, away from the chips: it acts on the
+                  whole counter, not on any one of them. */}
+              <span className="flex-1" />
+              <Link
+                className="btn btn-secondary flex-none"
+                href={`/field/counter/${counter.id}/edit?from=khq`}
+              >
+                {t("Edit details")}
+              </Link>
+            </>
+          )}
         </div>
         <p className="page-subtitle">
           {counter.areaName} · {counter.stockistName} · {counter.cnfName}
@@ -369,6 +397,7 @@ export default async function KhqCounterPage({
                     {["Date", "Time", "ISR", "Sold", "Stock", "Rank", "Competitor", "On counter", "Remarks"].map((h) => (
                       <th key={h}>{t(h)}</th>
                     ))}
+                    {isAdmin && <th className="text-right">{t("Actions")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -388,6 +417,18 @@ export default async function KhqCounterPage({
                       <td>{t(competitorDisplayLabel(v.competitor, v.competitorBrand))}</td>
                       <td className="tabular-nums">{formatDuration(v.durationSeconds)}</td>
                       <td style={{ color: "var(--ink-3)" }}>{v.remarks?.trim() || "—"}</td>
+                      {isAdmin && (
+                        <td>
+                          <VisitRowActions
+                            counterId={counter.id}
+                            visitId={v.id}
+                            // Date, time and rep together: several rows can
+                            // share a date, and on a duplicate run they share
+                            // the minute too.
+                            visitLabel={`${formatISTDate(v.visitedAt)} ${formatISTTime(v.visitedAt)} · ${v.repName}`}
+                          />
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

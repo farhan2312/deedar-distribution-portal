@@ -6,8 +6,7 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { formatISTDate, istDateString, istDayBounds } from "@/lib/date";
 import { counterTypeLabel } from "@/lib/field/counter-types";
-import { getCountersVisitedTodayIn, resolveMapScope } from "@/lib/portal/map-scope";
-import { getCountersAssignedToday } from "@/lib/supervisor/team";
+import { assignedTodayIn, resolveMapScope, visitedTodayIn } from "@/lib/portal/map-scope";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import type { CounterPin } from "../../_components/live-map";
@@ -38,53 +37,56 @@ export default async function FieldMapPage({
   // An ISR's map is their areas UNION today's beat — the Sales Officer can put
   // a counter outside their areas on the beat, and it must still show up.
   // Admins already see everything in scope, so there's nothing to union in.
-  const beatIds = isAdmin
-    ? new Set<string>()
-    : new Set(
-        (
-          await db
-            .select({ counterId: beatAssignments.counterId })
-            .from(beatAssignments)
-            .where(and(eq(beatAssignments.repUserId, user.id), eq(beatAssignments.beatDate, today)))
-        ).map((b) => b.counterId),
-      );
-  // Narrowing to a single area is a deliberate filter, so off-area beat
-  // counters drop out of that view rather than leaking back in.
-  const unionBeatIds = scope.area ? [] : [...beatIds];
+  // Today's beat for this rep. Narrowing to a single area is a deliberate
+  // filter, so off-area beat counters drop out of that view rather than
+  // leaking back in.
+  const myBeat = db
+    .select({ counterId: beatAssignments.counterId })
+    .from(beatAssignments)
+    .where(and(eq(beatAssignments.repUserId, user.id), eq(beatAssignments.beatDate, today)));
 
-  const rows = await db
-    .select({
-      id: counters.id,
-      name: counters.name,
-      type: counters.type,
-      typeOther: counters.typeOther,
-      areaName: areas.name,
-      lat: counters.lat,
-      lng: counters.lng,
-      lastVisitAt: counters.lastVisitAt,
-    })
-    .from(counters)
-    .innerJoin(areas, eq(areas.id, counters.areaId))
-    .where(unionBeatIds.length ? or(scope.where, inArray(counters.id, unionBeatIds)) : scope.where);
-
-  // Leaflet plots real coordinates, so a counter without GPS can't be mapped.
-  const geoCounters = rows.filter((c) => c.lat != null && c.lng != null);
-  const missingGps = rows.length - geoCounters.length;
-  const geoIds = geoCounters.map((c) => c.id);
-
-  // "Visited today" means the logged-in rep for an ISR, but ANY rep for an
-  // admin — they're auditing coverage, not their own round.
-  const [visitedIds, assignedIds] = await Promise.all([
+  // Counters, beat, visited and assigned all at once. The counter query unions
+  // the beat as a subquery rather than waiting for the list of ids, which is
+  // what used to make these three separate waits.
+  const [beatIds, rows, visitedIds, adminAssigned] = await Promise.all([
     isAdmin
-      ? getCountersVisitedTodayIn(geoIds, { start, end })
+      ? Promise.resolve(new Set<string>())
+      : myBeat.then((r) => new Set(r.map((b) => b.counterId))),
+    db
+      .select({
+        id: counters.id,
+        name: counters.name,
+        type: counters.type,
+        typeOther: counters.typeOther,
+        areaName: areas.name,
+        lat: counters.lat,
+        lng: counters.lng,
+        lastVisitAt: counters.lastVisitAt,
+      })
+      .from(counters)
+      .innerJoin(areas, eq(areas.id, counters.areaId))
+      .where(
+        !isAdmin && !scope.area
+          ? or(scope.where, inArray(counters.id, myBeat))
+          : scope.where,
+      ),
+    // "Visited today" means the logged-in rep for an ISR, but ANY rep for an
+    // admin — they're auditing coverage, not their own round.
+    isAdmin
+      ? visitedTodayIn(scope.where, { start, end })
       : db
           .select({ counterId: visits.counterId })
           .from(visits)
           .where(and(eq(visits.userId, user.id), gte(visits.visitedAt, start), lt(visits.visitedAt, end)))
           .then((r) => new Set(r.map((v) => v.counterId))),
     // Same for the beat: an admin's grey pins are any rep's pending calls.
-    isAdmin ? getCountersAssignedToday(geoIds, today) : Promise.resolve(beatIds),
+    isAdmin ? assignedTodayIn(scope.where, today) : Promise.resolve(new Set<string>()),
   ]);
+  const assignedIds = isAdmin ? adminAssigned : beatIds;
+
+  // Leaflet plots real coordinates, so a counter without GPS can't be mapped.
+  const geoCounters = rows.filter((c) => c.lat != null && c.lng != null);
+  const missingGps = rows.length - geoCounters.length;
 
   const mapCounters: CounterPin[] = geoCounters.map((c) => ({
     id: c.id,

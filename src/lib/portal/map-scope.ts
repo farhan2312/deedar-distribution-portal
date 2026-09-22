@@ -1,10 +1,10 @@
 import "server-only";
-import { and, asc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import type { AccessRole } from "@/db/schema";
-import { cnfs, counters, stockists, visits } from "@/db/schema";
+import { beatAssignments, cnfs, counters, stockists, visits } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
-import { areaOptionsFor, withSubDealers } from "./area-options";
+import { areaRowsWhere, groupAreaOptions } from "./area-options";
 
 export type ScopeOption = {
   id: string;
@@ -87,6 +87,12 @@ const FALLBACK_LABEL: Record<MapSection, string> = {
   hq: "All C&F",
 };
 
+/** An id-shaped param, or null — anything else would be a SQL type error. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function asId(v: string | undefined): string | null {
+  return v && UUID.test(v) ? v : null;
+}
+
 /** A picked id, or null for "all" / a stale id that isn't on offer. */
 function pick(options: ScopeOption[], requested: string | undefined): ScopeOption | null {
   if (!requested || requested === "all") return null;
@@ -120,42 +126,91 @@ export async function resolveMapScope(
   // An ISR is scoped by area within their one depot, so no depot filter.
   const hasDepotLevel = isAdmin || section !== "field";
 
+  // ── Every level's options, in one round trip ───────────────────────────
+  //
+  // The levels used to be read one after another — the C&F list, then the
+  // stockists under whichever C&F was picked, then their sub-dealers, then
+  // those stockists' areas — four waits on a database ~75 ms away before the
+  // page had asked for anything of its own. Each query below instead covers
+  // the widest scope this viewer could pick at that level, and the picking
+  // happens in memory. Ordering stays in SQL (see `areaRowsWhere`), and
+  // filtering preserves order, so every dropdown reads exactly as before.
+  const soDepots = section === "supervisor" && !isAdmin ? supervisorDepots(user) : null;
+  const cnfGuess = asId(params.cnf);
+
+  /** Every stockist this viewer can reach, sub-dealers included. */
+  let pool: SQL | undefined;
+  let needsPool = true;
+  if (soDepots) {
+    const ids = soDepots.map((d) => d.id);
+    // Their own stockists, and the sub-dealers hanging off them.
+    pool = ids.length
+      ? or(inArray(stockists.id, ids), inArray(stockists.parentId, ids))
+      : sql`false`;
+  } else if (section === "hq" && !isAdmin) {
+    pool = user.cnf ? eq(stockists.cnfId, user.cnf.id) : sql`false`;
+  } else if (isAdmin) {
+    // The C&F named in the URL, or everything. A name that no longer resolves
+    // is caught below.
+    pool = cnfGuess ? eq(stockists.cnfId, cnfGuess) : undefined;
+  } else {
+    // A field ISR's areas come from their own mapping — no pools to read.
+    needsPool = false;
+  }
+
+  const stockistCols = {
+    id: stockists.id,
+    name: stockists.name,
+    cnfId: stockists.cnfId,
+    parentId: stockists.parentId,
+  };
+  const none = Promise.resolve([] as never[]);
+  const [cnfOptions, pooledStockists, pooledAreas] = await Promise.all([
+    hasCnfLevel
+      ? db.select({ id: cnfs.id, name: cnfs.name }).from(cnfs).orderBy(asc(cnfs.name))
+      : none,
+    needsPool ? db.select(stockistCols).from(stockists).where(pool).orderBy(asc(stockists.name)) : none,
+    needsPool ? areaRowsWhere(pool) : none,
+  ]);
+  let stockistRows = pooledStockists;
+  let areaRows = pooledAreas;
+
   // ── C&F level ──────────────────────────────────────────────────────────
-  let cnfOptions: ScopeOption[] = [];
   let cnf: ScopeOption | null = null;
-  if (hasCnfLevel) {
-    cnfOptions = await db.select({ id: cnfs.id, name: cnfs.name }).from(cnfs).orderBy(asc(cnfs.name));
-    cnf = pick(cnfOptions, params.cnf);
-  } else if (section === "hq") {
-    cnf = user.cnf;
+  if (hasCnfLevel) cnf = pick(cnfOptions, params.cnf);
+  else if (section === "hq") cnf = user.cnf;
+
+  // An admin whose URL names a C&F that is gone: the pools were read for it,
+  // so read them again for everything. A stale link, not a normal load.
+  if (isAdmin && cnfGuess && !cnf) {
+    [stockistRows, areaRows] = await Promise.all([
+      db.select(stockistCols).from(stockists).orderBy(asc(stockists.name)),
+      areaRowsWhere(undefined),
+    ]);
   }
 
   // ── Depot level ────────────────────────────────────────────────────────
   // Admin and HQ read stockists from the C&F; an SO is limited to their own.
   let depotOptions: ScopeOption[] = [];
   if (hasDepotLevel) {
-    if (section === "supervisor" && !isAdmin) {
-      depotOptions = supervisorDepots(user);
+    if (soDepots) {
+      depotOptions = soDepots;
     } else if (cnf) {
-      depotOptions = await db
-        .select({ id: stockists.id, name: stockists.name })
-        .from(stockists)
-        .where(eq(stockists.cnfId, cnf.id))
-        .orderBy(asc(stockists.name));
+      const cnfId = cnf.id;
+      depotOptions = stockistRows.filter((s) => s.cnfId === cnfId).map((s) => ({ id: s.id, name: s.name }));
     } else if (isAdmin) {
-      depotOptions = await db
-        .select({ id: stockists.id, name: stockists.name })
-        .from(stockists)
-        .orderBy(asc(stockists.name));
+      depotOptions = stockistRows.map((s) => ({ id: s.id, name: s.name }));
     }
   }
   const depot = pick(depotOptions, params.depot);
   // Choosing a dealer means its sub-dealers too: their areas are part of that
   // dealer's territory, and the Area dropdown lists them, so the counters
   // behind them have to be in scope as well.
-  const scopedStockistIds = await withSubDealers(
-    depot ? [depot.id] : depotOptions.map((d) => d.id),
-  );
+  const base = depot ? [depot.id] : depotOptions.map((d) => d.id);
+  const children = base.length
+    ? stockistRows.filter((s) => s.parentId && base.includes(s.parentId)).map((s) => s.id)
+    : [];
+  const scopedStockistIds = children.length ? [...new Set([...base, ...children])] : base;
 
   // ── Area level ─────────────────────────────────────────────────────────
   // An ISR picks from their own areas. Everyone else picks from the selected
@@ -167,7 +222,8 @@ export async function resolveMapScope(
   } else if (scopedStockistIds.length) {
     // Grouped by owner once more than one stockist is in scope — a dealer's
     // own areas first, then a heading per sub-dealer.
-    areaOptions = await areaOptionsFor(scopedStockistIds);
+    const scoped = new Set(scopedStockistIds);
+    areaOptions = groupAreaOptions(areaRows.filter((r) => scoped.has(r.stockistId)));
   }
   const area = pick(areaOptions, params.area);
 
@@ -231,20 +287,53 @@ export async function resolveMapScope(
  * the window. The rep-keyed `getCountersVisitedToday` needs a rep id list; an
  * admin viewing by geography has none, so this works back from the counters.
  */
-export async function getCountersVisitedTodayIn(
-  counterIds: string[],
-  bounds: { start: Date; end: Date },
-): Promise<Set<string>> {
-  if (counterIds.length === 0) return new Set();
+/**
+ * Counter-wide lookups for a map, keyed on the scope predicate rather than on
+ * a list of counter ids.
+ *
+ * Asking by id meant waiting for the counter query first: three stages for one
+ * screen. Asking by scope lets them all run together — the same rows, one wait
+ * instead of two.
+ */
+
+/** Stock recorded at each counter's most recent visit. */
+export async function latestStockIn(where: SQL | undefined): Promise<Map<string, number>> {
   const rows = await db
-    .select({ counterId: visits.counterId })
+    // One row per counter, newest first — rather than every visit ever made to
+    // them, which is what keeping the first of a sorted list required.
+    .selectDistinctOn([visits.counterId], { counterId: visits.counterId, stock: visits.stock })
     .from(visits)
-    .where(
-      and(
-        inArray(visits.counterId, counterIds),
-        gte(visits.visitedAt, bounds.start),
-        lt(visits.visitedAt, bounds.end),
-      ),
-    );
+    .innerJoin(counters, eq(counters.id, visits.counterId))
+    .where(where)
+    .orderBy(visits.counterId, desc(visits.visitedAt), desc(visits.id));
+  return new Map(rows.map((r) => [r.counterId, r.stock]));
+}
+
+/** Counters on somebody's beat for the given IST day. */
+export async function assignedTodayIn(
+  where: SQL | undefined,
+  logDate: string,
+): Promise<Set<string>> {
+  const onDate = eq(beatAssignments.beatDate, logDate);
+  const rows = await db
+    .selectDistinct({ counterId: beatAssignments.counterId })
+    .from(beatAssignments)
+    .innerJoin(counters, eq(counters.id, beatAssignments.counterId))
+    .where(where ? and(onDate, where) : onDate);
   return new Set(rows.map((r) => r.counterId));
 }
+
+/** Counters visited by anyone within the window. */
+export async function visitedTodayIn(
+  where: SQL | undefined,
+  bounds: { start: Date; end: Date },
+): Promise<Set<string>> {
+  const inWindow = and(gte(visits.visitedAt, bounds.start), lt(visits.visitedAt, bounds.end))!;
+  const rows = await db
+    .selectDistinct({ counterId: visits.counterId })
+    .from(visits)
+    .innerJoin(counters, eq(counters.id, visits.counterId))
+    .where(where ? and(inWindow, where) : inWindow);
+  return new Set(rows.map((r) => r.counterId));
+}
+

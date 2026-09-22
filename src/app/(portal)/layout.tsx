@@ -23,18 +23,24 @@ export default async function PortalLayout({
   // in the top bar so it persists across every screen. Resolved here (in the
   // layout) rather than per-page; `router.refresh()` after start/end day
   // re-runs this, so the pill appears and disappears with the clock.
-  let trackingActive = false;
-  if (canAccess(user, "field")) {
-    const [log] = await db
-      .select({ startAt: dayLogs.startAt, endAt: dayLogs.endAt })
-      .from(dayLogs)
-      .where(and(eq(dayLogs.userId, user.id), eq(dayLogs.logDate, istDateString())))
-      .limit(1);
-    trackingActive = !!log?.startAt && !log.endAt;
-  }
-
+  //
   // Rendered server-side so the bell's badge is correct on first paint.
-  const bugInbox = await getBugInbox(user);
+  //
+  // The two are independent, so they run together. This layout wraps every
+  // portal page, and Next renders it alongside the page — a request finishes
+  // when the slower of the two does, and one after the other these made the
+  // layout the slower one on most screens.
+  const [trackingActive, bugInbox] = await Promise.all([
+    canAccess(user, "field")
+      ? db
+          .select({ startAt: dayLogs.startAt, endAt: dayLogs.endAt })
+          .from(dayLogs)
+          .where(and(eq(dayLogs.userId, user.id), eq(dayLogs.logDate, istDateString())))
+          .limit(1)
+          .then(([log]) => !!log?.startAt && !log.endAt)
+      : Promise.resolve(false),
+    getBugInbox(user),
+  ]);
 
   return (
     <PortalShell
