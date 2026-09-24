@@ -9,9 +9,10 @@ import type { CnfOption } from "@/lib/supervisor/team";
  * Central Admin only — the page decides that by handing this an empty option
  * list for everyone else, since a Sales Officer already sits under one C&F.
  *
- * Changing the C&F clears `?depot=` and `?page=`: a stockist chosen under the
- * previous C&F does not exist under this one, and leaving it in the URL would
- * silently show "no reps" instead of the C&F that was just picked.
+ * Changing the C&F clears `?depot=` and any page number: a stockist chosen
+ * under the previous C&F does not exist under this one, and leaving it in the
+ * URL would silently show "no reps" instead of the C&F that was just picked.
+ * Page 3 of the old C&F’s list means nothing in the new one either.
  */
 export function CnfPicker({ options, value }: { options: CnfOption[]; value: string }) {
   const router = useRouter();
@@ -24,6 +25,7 @@ export function CnfPicker({ options, value }: { options: CnfOption[]; value: str
     else q.set("cnf", next);
     q.delete("depot");
     q.delete("page");
+    q.delete("hpage");
     const s = q.toString();
     router.push(s ? `${pathname}?${s}` : pathname);
   }

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { and, desc, inArray, lt } from "drizzle-orm";
+import { and, asc, desc, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { dayLogs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
@@ -20,10 +20,14 @@ import { CnfPicker } from "../_components/cnf-picker";
 import { DepotPicker } from "../_components/depot-picker";
 import { dayState, DayLogTables, type HistoryRow, type TodayRow } from "../_components/day-log-tables";
 
+/** Days of history per page. The same 50 the audit log and the counters lists
+ * use, so a pager means the same thing wherever it appears. */
+const HISTORY_PAGE_SIZE = 50;
+
 export default async function SupervisorDayLogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cnf?: string; depot?: string }>;
+  searchParams: Promise<{ cnf?: string; depot?: string; hpage?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -34,7 +38,7 @@ export default async function SupervisorDayLogPage({
   const t = await getT();
   const isAdmin = user.accessRoles.includes("admin");
 
-  const { cnf: requestedCnf, depot: requestedDepot } = await searchParams;
+  const { cnf: requestedCnf, depot: requestedDepot, hpage: requestedPage } = await searchParams;
   // The scope levels are read together rather than one after another: the
   // C&F list vets the id in the URL, the stockist scope is read for that same
   // id beside it, and — when neither filter is set, which is how this page
@@ -64,17 +68,48 @@ export default async function SupervisorDayLogPage({
   const repName = new Map(reps.map((r) => [r.id, r.name]));
 
   const today = istDateString();
-  const [todayLogs, historyRows] = await Promise.all([
+
+  /*
+   * History, one page at a time.
+   *
+   * It used to take the most recent 80 rows and stop — which is not a page but
+   * a ceiling: a Sales Officer with eight reps hit it inside two weeks, and
+   * everything older simply did not exist as far as this screen was concerned.
+   * Now the whole history is reachable, and the cost of the page no longer
+   * grows with the size of the team.
+   *
+   * The count and the page are read together, as elsewhere: the page the URL
+   * asks for is fetched straight away and re-read only when the count turns out
+   * to put it past the end.
+   */
+  const inScope = and(inArray(dayLogs.userId, repIds), lt(dayLogs.logDate, today));
+  const historyAt = (page: number) =>
+    db
+      .select()
+      .from(dayLogs)
+      .where(inScope)
+      // The id breaks ties: several reps share a log date, and LIMIT/OFFSET over
+      // a non-total order drops and repeats rows across page boundaries.
+      .orderBy(desc(dayLogs.logDate), asc(dayLogs.id))
+      .limit(HISTORY_PAGE_SIZE)
+      .offset((page - 1) * HISTORY_PAGE_SIZE);
+
+  const asked = Math.max(1, Number.parseInt(requestedPage ?? "1", 10) || 1);
+  const [todayLogs, historyCount, askedHistory] = await Promise.all([
     getTeamDayLogs(repIds, today),
     repIds.length
-      ? db
-          .select()
-          .from(dayLogs)
-          .where(and(inArray(dayLogs.userId, repIds), lt(dayLogs.logDate, today)))
-          .orderBy(desc(dayLogs.logDate))
-          .limit(80)
-      : Promise.resolve([]),
+      ? db.select({ n: sql<number>`count(*)::int` }).from(dayLogs).where(inScope)
+      : Promise.resolve([{ n: 0 }]),
+    repIds.length ? historyAt(asked) : Promise.resolve([]),
   ]);
+
+  const historyTotal = historyCount[0]?.n ?? 0;
+  const historyPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
+  // Clamped, not rejected: narrowing to one depot can leave the URL pointing at
+  // page 6 of 2, and an empty table would read as "no history".
+  const historyPage = Math.min(asked, historyPages);
+  const historyRows =
+    historyPage === asked ? askedHistory : await historyAt(historyPage);
 
   const todayRows: TodayRow[] = reps.map((r) => {
     const log = todayLogs.get(r.id);
@@ -126,7 +161,16 @@ export default async function SupervisorDayLogPage({
               : t("No field reps report to you yet.")}
         </p>
       ) : (
-        <DayLogTables today={todayRows} history={history} />
+        <DayLogTables
+          today={todayRows}
+          history={history}
+          historyPager={{
+            page: historyPage,
+            totalPages: historyPages,
+            total: historyTotal,
+            param: "hpage",
+          }}
+        />
       )}
     </div>
   );

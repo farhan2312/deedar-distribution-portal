@@ -630,6 +630,9 @@ const HI: Record<string, string> = {
   // "Start" and "End" already defined above under Field: Day Log.
   "On Job": "काम पर",
   "No earlier days recorded.": "कोई पिछला दिन दर्ज नहीं है।",
+  // The count beside the history heading, once it pages.
+  day: "दिन",
+  days: "दिन",
   Complete: "पूर्ण",
   Active: "सक्रिय",
   "SO-closed": "SO द्वारा बंद",
@@ -1349,6 +1352,7 @@ const HI: Record<string, string> = {
   "vs previous period": "पिछली अवधि की तुलना में",
   // Counter detail page (Reports drill-through)
   "← Back to reports": "← रिपोर्ट पर वापस",
+  "← Back to Company Dashboard": "← कंपनी डैशबोर्ड पर वापस",
   "Every visit recorded at this counter": "इस काउंटर पर दर्ज हर विज़िट",
   "No visits recorded at this counter yet.": "इस काउंटर पर अभी कोई विज़िट दर्ज नहीं है।",
   // Central Admin's corrections on this page: the counter's own details, and

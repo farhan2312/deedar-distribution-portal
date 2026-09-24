@@ -51,6 +51,27 @@ function nowInstant(): Date {
 }
 
 /**
+ * Where "back" goes, by the `?from=` flag the linking page sets.
+ *
+ * Reports was the only way in for a long time, so the link said so outright.
+ * The Company Dashboard's attention table now links here too, and sending
+ * those readers to Reports drops them somewhere they have never been.
+ *
+ * A flag rather than a return URL: nothing arbitrary out of the query string
+ * becomes a link target. Filters on the origin page aren't carried — the
+ * browser's own Back button is what restores those.
+ */
+const BACK = {
+  dashboard: { href: "/khq/dashboard", label: "← Back to Company Dashboard" },
+  reports: { href: "/khq/reports", label: "← Back to reports" },
+} as const;
+type Origin = keyof typeof BACK;
+
+function origin(from: string | undefined): Origin {
+  return from === "dashboard" ? "dashboard" : "reports";
+}
+
+/**
  * One counter, whole: who owns it, where it sits, and every visit ever
  * recorded against it.
  *
@@ -64,7 +85,7 @@ export default async function KhqCounterPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ vpage?: string }>;
+  searchParams: Promise<{ vpage?: string; from?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -198,6 +219,11 @@ export default async function KhqCounterPage({
   const daysCovered = agg[0]?.days ?? 0;
   const topCompetitor = competitorRows.find((c) => c.competitor && c.competitor !== "none") ?? null;
 
+  const back = BACK[origin(sp.from)];
+  // Carried into the edit screens so their Cancel and Save come back here with
+  // the same origin, rather than quietly resetting the trail to Reports.
+  const backParam = sp.from === "dashboard" ? "&back=dashboard" : "";
+
   const status = STATUS_STYLE[counter.status];
   const daysSinceVisit =
     counter.lastVisitAt == null
@@ -208,8 +234,8 @@ export default async function KhqCounterPage({
     <div style={{ animation: "fadeUp .3s ease" }}>
       {/* Header */}
       <div className="mb-5">
-        <Link href="/khq/reports" className="link text-[12.5px]">
-          {t("← Back to reports")}
+        <Link href={back.href} className="link text-[12.5px]">
+          {t(back.label)}
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-2.5">
           <h1 className="page-title">{counter.name}</h1>
@@ -229,7 +255,7 @@ export default async function KhqCounterPage({
               <span className="flex-1" />
               <Link
                 className="btn btn-secondary flex-none"
-                href={`/field/counter/${counter.id}/edit?from=khq`}
+                href={`/field/counter/${counter.id}/edit?from=khq${backParam}`}
               >
                 {t("Edit details")}
               </Link>
@@ -422,6 +448,7 @@ export default async function KhqCounterPage({
                           <VisitRowActions
                             counterId={counter.id}
                             visitId={v.id}
+                            backParam={backParam}
                             // Date, time and rep together: several rows can
                             // share a date, and on a duplicate run they share
                             // the minute too.

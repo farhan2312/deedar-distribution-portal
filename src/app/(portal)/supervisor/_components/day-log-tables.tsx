@@ -2,6 +2,7 @@
 // day-log screen and the Admin company-wide view on the field day-log page.
 
 import { getT } from "@/lib/i18n/server";
+import { UrlPagination } from "@/components/ui/url-pagination";
 
 export type DayState = "complete" | "running" | "absent";
 
@@ -23,13 +24,33 @@ export type TodayRow = {
 
 export type HistoryRow = TodayRow & { dateLabel: string };
 
+/** Paging for the history table, when the caller resolves it in SQL. Optional:
+ * a caller that hands over every row it has renders no pager at all. */
+export type HistoryPager = {
+  page: number;
+  totalPages: number;
+  /** Rows across every page — worth showing, since the table only ever holds
+   * one page of them. */
+  total: number;
+  /** The query param this pager owns, so two lists on one page can't collide. */
+  param: string;
+};
+
 const STATE_STYLE: Record<DayState, { label: string; bg: string; color: string }> = {
   complete: { label: "Complete", bg: "rgba(30,158,90,.12)", color: "#1E9E5A" },
   running: { label: "Active", bg: "rgba(140,180,201,.2)", color: "#3E6B85" },
   absent: { label: "Not started", bg: "var(--bg-soft)", color: "var(--ink-3)" },
 };
 
-export async function DayLogTables({ today, history }: { today: TodayRow[]; history: HistoryRow[] }) {
+export async function DayLogTables({
+  today,
+  history,
+  historyPager,
+}: {
+  today: TodayRow[];
+  history: HistoryRow[];
+  historyPager?: HistoryPager;
+}) {
   const t = await getT();
   return (
     <>
@@ -59,7 +80,17 @@ export async function DayLogTables({ today, history }: { today: TodayRow[]; hist
         </table>
       </div>
 
-      <SectionLabel>{t("Full history — all salesmen")}</SectionLabel>
+      {/* No margin here: the label inside carries its own. */}
+      <div className="flex items-baseline justify-between gap-3">
+        <SectionLabel>{t("Full history — all salesmen")}</SectionLabel>
+        {historyPager && historyPager.total > 0 && (
+          <span className="text-[11.5px] tabular-nums" style={{ color: "var(--ink-3)" }}>
+            {/* Which slice of what — a bare table of 50 rows gives no sense of
+                how much history sits behind it. */}
+            {`${historyPager.total.toLocaleString("en-IN")} ${t(historyPager.total === 1 ? "day" : "days")}`}
+          </span>
+        )}
+      </div>
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -91,6 +122,15 @@ export async function DayLogTables({ today, history }: { today: TodayRow[]; hist
           </tbody>
         </table>
       </div>
+      {historyPager && (
+        <div className="mt-3">
+          <UrlPagination
+            page={historyPager.page}
+            totalPages={historyPager.totalPages}
+            param={historyPager.param}
+          />
+        </div>
+      )}
     </>
   );
 }

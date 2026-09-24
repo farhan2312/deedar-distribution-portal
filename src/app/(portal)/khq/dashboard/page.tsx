@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -984,7 +985,18 @@ export default async function KhqDashboardPage({
               <tbody>
                 {attention.map((c) => (
                   <tr key={c.id}>
-                    <td className="font-semibold">{c.name}</td>
+                    <td className="font-semibold">
+                      {/* The flag is only half the answer — "why is this one
+                          declining" is on the counter's own page, which is
+                          otherwise reachable only by finding the row again in
+                          Reports. A link on the name rather than a clickable
+                          row: this page is server-rendered, and a <tr> that
+                          navigates needs client JS and hand-built keyboard
+                          handling to be reachable without a mouse. */}
+                      <Link className="link" href={`/khq/counter/${c.id}?from=dashboard`} title={t("open counter")}>
+                        {c.name}
+                      </Link>
+                    </td>
                     <td>{c.area}</td>
                     <td>{c.depot}</td>
                     <td>
