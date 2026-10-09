@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CompetitorPresence, ProductSegment, VisitItem } from "@/db/schema";
 import { createVisit, updateVisit, type VisitInput } from "@/lib/field/visit-actions";
 import { COMPETITOR_OPTIONS, PRODUCT_SEGMENTS, SEGMENT_LABEL } from "@/lib/field/products";
 import { fillName, VISITED_BY_OTHER } from "@/lib/field/visit-messages";
+import { formatISTDate } from "@/lib/date";
 import { useT } from "@/lib/i18n/provider";
 import { QtyInput } from "@/components/ui/qty-input";
+import { CreditFields, type CreditContext } from "../../../_components/credit-fields";
 
 const SEGMENTS: ProductSegment[] = PRODUCT_SEGMENTS.map((p) => p.value);
 type SegMap = Record<ProductSegment, number>;
@@ -28,6 +30,23 @@ export type VisitFormProps = {
     competitorBrand?: string;
     remarks: string;
   };
+  /**
+   * Central Admin entering a visit for a rep — create only. Asks who made it
+   * and on which day, and drops the "checked in" badge and the timer: admin is
+   * typing a visit someone else made, so neither would be true.
+   */
+  admin?: CreditContext & { stockistId: string };
+  /**
+   * Rendered inside a pop-up (Kanpur HQ, Central Admin) rather than as a page:
+   * no outer card or page heading — the pop-up supplies both — and the
+   * callbacks below replace navigation. Never set on the ISR or SO pages, which
+   * behave exactly as they always have.
+   */
+  embedded?: boolean;
+  /** In place of going back, after a successful save. */
+  onSaved?: () => void;
+  /** In place of going back, on Cancel. */
+  onCancel?: () => void;
 };
 
 function zeroMap(): SegMap {
@@ -49,11 +68,27 @@ function mmss(totalSeconds: number): string {
  * for the same meaning and are imported as null). */
 const RANK_OPTIONS = [1, 2, 3, 4, 5, null] as const;
 
-export function VisitForm({ counterId, counterName, counterArea, visitId, initial, returnTo }: VisitFormProps) {
+export function VisitForm({
+  counterId,
+  counterName,
+  counterArea,
+  visitId,
+  initial,
+  returnTo,
+  admin,
+  embedded = false,
+  onSaved,
+  onCancel,
+}: VisitFormProps) {
   const router = useRouter();
   const t = useT();
   const isEdit = !!visitId;
+  /** Admin entering a visit on a rep's behalf. */
+  const proxy = !isEdit && !!admin;
   const back = returnTo ?? `/field/counter/${counterId}`;
+  const [visitedBy, setVisitedBy] = useState("");
+  const [visitedOn, setVisitedOn] = useState(admin?.today ?? "");
+  const errorRef = useRef<HTMLParagraphElement>(null);
 
   const [sold, setSold] = useState<SegMap>(() => initMap(initial?.items, "sold"));
   const [stock, setStock] = useState<SegMap>(() => initMap(initial?.items, "stock"));
@@ -71,11 +106,18 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
   // Live "time on counter" — counts up from when the check-in form opened.
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    if (isEdit) return;
+    if (isEdit || proxy) return;
     const startedAt = Date.now();
     const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
     return () => clearInterval(id);
-  }, [isEdit]);
+  }, [isEdit, proxy]);
+
+  // In a pop-up, a refused save drops the form from the short review back to the
+  // long entry step, which leaves the message below the fold of the dialog —
+  // so bring it into view. The full-page form is left exactly as it was.
+  useEffect(() => {
+    if (embedded && error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [embedded, error]);
 
   const totalSold = SEGMENTS.reduce((s, seg) => s + sold[seg], 0);
 
@@ -98,7 +140,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
       competitor,
       competitorBrand,
       remarks,
-      durationSeconds: isEdit ? null : elapsed,
+      durationSeconds: isEdit || proxy ? null : elapsed,
     };
   }
 
@@ -106,7 +148,13 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
     setError("");
     setBusy(true);
     const input = buildInput();
-    const res = isEdit ? await updateVisit(visitId, input) : await createVisit(counterId, input);
+    const res = isEdit
+      ? await updateVisit(visitId, input)
+      : await createVisit(
+          counterId,
+          input,
+          proxy ? { visitedByUserId: visitedBy, visitedOn } : undefined,
+        );
     if (!res.ok) {
       // The one-a-day guard fired — reachable from a stale tab, or a second
       // device. There is nothing to correct on this form, so hand them
@@ -135,14 +183,21 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
     // Stay disabled on success: the push + refresh are still in flight and this
     // component unmounts on navigation. Clearing `busy` here would re-enable
     // "Submit visit" mid-save and allow a duplicate visit to be recorded.
+    if (onSaved) {
+      onSaved();
+      return;
+    }
     router.push(back);
     router.refresh();
   }
 
   return (
-    <div className="card mx-auto max-w-xl overflow-hidden" style={{ animation: "fadeUp .3s ease" }}>
-      <div className="px-6 pb-6 pt-6">
-        {!isEdit && (
+    <div
+      className={embedded ? "" : "card mx-auto max-w-xl overflow-hidden"}
+      style={embedded ? undefined : { animation: "fadeUp .3s ease" }}
+    >
+      <div className={embedded ? "" : "px-6 pb-6 pt-6"}>
+        {!isEdit && !proxy && (
           <div
             className="mb-4 inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold"
             style={{ background: "rgba(30,158,90,.1)", color: "var(--success)" }}
@@ -160,7 +215,7 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
             </h3>
             <p className="mt-0.5 text-[12px]" style={{ color: "var(--ink-3)" }}>{counterArea}</p>
           </div>
-          {!isEdit && (
+          {!isEdit && !proxy && (
             <div className="flex-none text-right">
               <div className="text-[28px] font-bold tabular-nums" style={{ fontFamily: "var(--font-display)", letterSpacing: "-.02em", color: "var(--ink-1)" }}>
                 {mmss(elapsed)}
@@ -172,6 +227,18 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
 
         {step === "form" ? (
         <>
+        {proxy && admin && (
+          <CreditFields
+            personLabel={t("Visited by *")}
+            dateLabel={t("Visited on *")}
+            context={admin}
+            stockistId={admin.stockistId}
+            personId={visitedBy}
+            date={visitedOn}
+            onPerson={setVisitedBy}
+            onDate={setVisitedOn}
+          />
+        )}
         <p className="mb-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
           {t("4 quick questions — under 30 seconds.")}
         </p>
@@ -260,18 +327,29 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
             competitorBrand={competitorBrand}
             remarks={remarks}
             isEdit={isEdit}
+            credit={
+              proxy && admin
+                ? {
+                    by:
+                      visitedBy === admin.self.id
+                        ? `${admin.self.name} (${t("Myself")})`
+                        : (admin.people.find((p) => p.id === visitedBy)?.name ?? "—"),
+                    on: formatISTDate(visitedOn),
+                  }
+                : undefined
+            }
             t={t}
           />
         )}
 
-        {error && <p className="mt-3 text-[12px]" style={{ color: "var(--danger)" }}>{error}</p>}
+        {error && <p ref={errorRef} className="mt-3 text-[12px]" style={{ color: "var(--danger)" }}>{error}</p>}
 
         <div className="mt-5 flex gap-3">
           {step === "form" ? (
             <>
               <button
                 className="btn btn-secondary flex-1 justify-center py-3.5"
-                onClick={() => router.push(back)}
+                onClick={() => (onCancel ? onCancel() : router.push(back))}
               >
                 {t("Cancel")}
               </button>
@@ -279,6 +357,16 @@ export function VisitForm({ counterId, counterName, counterArea, visitId, initia
                 className="btn btn-primary flex-1 justify-center py-3.5"
                 onClick={() => {
                   setError("");
+                  if (proxy && admin) {
+                    if (!visitedBy) {
+                      setError(t("Pick who made this visit."));
+                      return;
+                    }
+                    if (!visitedOn || visitedOn > admin.today) {
+                      setError(t("Pick the date of the visit — today or earlier."));
+                      return;
+                    }
+                  }
                   setStep("review");
                 }}
               >
@@ -319,6 +407,7 @@ function ReviewPanel({
   competitorBrand,
   remarks,
   isEdit,
+  credit,
   t,
 }: {
   sold: SegMap;
@@ -329,15 +418,25 @@ function ReviewPanel({
   competitorBrand: string;
   remarks: string;
   isEdit: boolean;
+  /** Whose visit and which day, when admin is entering it for a rep. */
+  credit?: { by: string; on: string };
   t: (key: string) => string;
 }) {
   return (
     <>
       <p className="mb-4 text-[13px]" style={{ color: "var(--ink-3)" }}>
         {t("Check these numbers before submitting")}
-        {isEdit ? "." : t(" — a visit can only be edited until midnight tonight.")}
+        {/* The midnight lock is a rep's; admin can correct a visit any time. */}
+        {isEdit || credit ? "." : t(" — a visit can only be edited until midnight tonight.")}
       </p>
       <div className="mb-4 h-px" style={{ background: "var(--hairline)" }} />
+
+      {credit && (
+        <>
+          <ReviewRow label={t("Visited by")} value={credit.by} />
+          <ReviewRow label={t("Visited on")} value={credit.on} />
+        </>
+      )}
 
       <div className="mb-1 flex items-baseline justify-between">
         <h6 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--ink-3)" }}>

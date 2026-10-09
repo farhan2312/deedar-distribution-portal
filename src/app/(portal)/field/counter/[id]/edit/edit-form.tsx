@@ -4,19 +4,38 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateCounter, type EditCounterInput } from "@/lib/field/actions";
 import { ALL_COUNTER_TYPES } from "@/lib/field/counter-types";
-import { parseCoords } from "@/lib/field/gps";
+import { LOCATION_REQUIRED, parseCoords } from "@/lib/field/gps";
 import { useT } from "@/lib/i18n/provider";
 import { GpsCapture } from "../../../_components/gps-capture";
+import { LocationInput } from "../../../_components/location-input";
 
 export function EditCounterForm({
   counterId,
   areaOptions,
   initial,
   returnTo,
+  admin = false,
+  embedded = false,
+  onSaved,
+  onCancel,
 }: {
   counterId: string;
   /** Where Cancel and a successful save go — see the note on VisitFormProps. */
   returnTo?: string;
+  /** Central Admin types the location instead of capturing this device’s —
+   * from a desk, the device is at the office. See LocationInput. */
+  admin?: boolean;
+  /**
+   * Rendered inside a pop-up (Kanpur HQ, Central Admin) rather than as a page:
+   * no outer card or page heading — the pop-up supplies both — and the
+   * callbacks below replace navigation. Never set on the ISR or SO pages, which
+   * behave exactly as they always have.
+   */
+  embedded?: boolean;
+  /** In place of going back, after a successful save. */
+  onSaved?: () => void;
+  /** In place of going back, on Cancel. */
+  onCancel?: () => void;
   areaOptions: { id: string; name: string }[];
   initial: {
     name: string;
@@ -55,7 +74,7 @@ export function EditCounterForm({
       return;
     }
     if (!parseCoords(draft.gps)) {
-      setError(t("Capture the counter's GPS location before saving."));
+      setError(t(admin ? LOCATION_REQUIRED : "Capture the counter's GPS location before saving."));
       return;
     }
     setBusy(true);
@@ -77,15 +96,24 @@ export function EditCounterForm({
     // still in flight, and this component unmounts when the route changes.
     // Clearing `busy` here would flash the button back to "Save changes" while
     // the save was still completing, inviting a double submit.
+    if (onSaved) {
+      onSaved();
+      return;
+    }
     router.push(back);
     router.refresh();
   }
 
   return (
-    <div className="card mx-auto max-w-xl p-6" style={{ animation: "fadeUp .3s ease" }}>
-      <h1 className="mb-4 text-[22px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
-        {t("Edit counter")}
-      </h1>
+    <div
+      className={embedded ? "" : "card mx-auto max-w-xl p-6"}
+      style={embedded ? undefined : { animation: "fadeUp .3s ease" }}
+    >
+      {!embedded && (
+        <h1 className="mb-4 text-[22px] font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--ink-1)" }}>
+          {t("Edit counter")}
+        </h1>
+      )}
 
       <div className="field mb-3.5">
         <label>{t("Name of Counter/Point of Contact *")}</label>
@@ -142,9 +170,13 @@ export function EditCounterForm({
       </div>
       <div className="mb-5 rounded-2xl p-4" style={{ background: "var(--accent-tint)" }}>
         <label className="mb-2.5 block text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>
-          {t("GPS Coordinates *")}
+          {admin ? t("Location *") : t("GPS Coordinates *")}
         </label>
-        <GpsCapture value={draft.gps} onCapture={(gps) => setDraft({ ...draft, gps })} />
+        {admin ? (
+          <LocationInput value={draft.gps} onChange={(gps) => setDraft((d) => ({ ...d, gps }))} />
+        ) : (
+          <GpsCapture value={draft.gps} onCapture={(gps) => setDraft({ ...draft, gps })} />
+        )}
       </div>
 
       {error && <p className="mb-3 text-[12px]" style={{ color: "var(--danger)" }}>{error}</p>}
@@ -152,7 +184,7 @@ export function EditCounterForm({
       <div className="flex gap-3">
         <button
           className="btn btn-secondary flex-1 justify-center py-3.5"
-          onClick={() => router.push(back)}
+          onClick={() => (onCancel ? onCancel() : router.push(back))}
           disabled={busy}
         >
           {t("Cancel")}

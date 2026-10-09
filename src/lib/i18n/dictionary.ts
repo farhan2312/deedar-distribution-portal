@@ -1358,6 +1358,45 @@ const HI: Record<string, string> = {
   // Central Admin's corrections on this page: the counter's own details, and
   // each logged visit.
   "Edit details": "विवरण संपादित करें",
+  // Central Admin entering counters and visits on a rep's behalf.
+  "+ Add counter": "+ काउंटर जोड़ें",
+  "Counter added": "काउंटर जुड़ गया",
+  "is now in the list.": "अब सूची में है।",
+  "Couldn't load this form.": "यह फ़ॉर्म लोड नहीं हो सका।",
+  "Try again": "फिर से कोशिश करें",
+  "+ Add visit": "+ विज़िट जोड़ें",
+  "Location *": "लोकेशन *",
+  "e.g. 25.7716, 75.8537 — or a Google Maps link": "जैसे 25.7716, 75.8537 — या Google Maps लिंक",
+  "On the rep's phone: open Google Maps, long-press the shop, and copy the numbers shown. A shared Maps link works too.":
+    "रिप के फ़ोन पर: Google Maps खोलें, दुकान पर देर तक दबाएँ, और दिखे नंबर कॉपी करें। शेयर किया गया Maps लिंक भी चलेगा।",
+  "Reading the link…": "लिंक पढ़ा जा रहा है…",
+  "Check on map ↗": "मैप पर देखें ↗",
+  "Couldn't read a location from that — paste coordinates like 25.7716, 75.8537, or a Google Maps link.":
+    "इससे लोकेशन नहीं पढ़ी जा सकी — 25.7716, 75.8537 जैसे निर्देशांक या Google Maps लिंक पेस्ट करें।",
+  "Couldn't open that link — check the connection, or paste the coordinates instead.":
+    "लिंक नहीं खुल सका — कनेक्शन जाँचें, या निर्देशांक पेस्ट करें।",
+  "That link doesn't carry a position — open it, long-press the shop, and paste the coordinates instead.":
+    "इस लिंक में लोकेशन नहीं है — इसे खोलें, दुकान पर देर तक दबाएँ, और निर्देशांक पेस्ट करें।",
+  "Not a Google Maps short link.": "यह Google Maps का छोटा लिंक नहीं है।",
+  "Enter the counter's location — coordinates or a Google Maps link.":
+    "काउंटर की लोकेशन डालें — निर्देशांक या Google Maps लिंक।",
+  "Entering this for someone else? Credit them, and the day it happened.":
+    "किसी और के लिए दर्ज कर रहे हैं? उनका नाम और वह दिन चुनें जब यह हुआ।",
+  "Select a person": "व्यक्ति चुनें",
+  Myself: "मैं स्वयं",
+  SO: "SO",
+  "No one is mapped to this stockist yet — map them in Users & Access.":
+    "इस स्टॉकिस्ट से अभी कोई जुड़ा नहीं है — उन्हें Users & Access में जोड़ें।",
+  "Added by *": "किसने जोड़ा *",
+  "Added on *": "कब जोड़ा *",
+  "Visited by *": "विज़िट किसने की *",
+  "Visited on *": "विज़िट की तारीख *",
+  "Visited by": "विज़िट किसने की",
+  "Visited on": "विज़िट की तारीख",
+  "Pick who added this counter.": "चुनें कि यह काउंटर किसने जोड़ा।",
+  "Pick the date it was added — today or earlier.": "जोड़ने की तारीख चुनें — आज या उससे पहले।",
+  "Pick who made this visit.": "चुनें कि यह विज़िट किसने की।",
+  "Pick the date of the visit — today or earlier.": "विज़िट की तारीख चुनें — आज या उससे पहले।",
   // "visit" itself is already above, for the delete dialog's label.
   "The visit's packets and stock leave every total that counts them. This can't be undone.":
     "इस विज़िट के पैकेट और स्टॉक हर उस कुल से हट जाएंगे जिसमें वे गिने जाते हैं। इसे पूर्ववत नहीं किया जा सकता।",

@@ -3,13 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { areas, counters, stockists } from "@/db/schema";
+import { areas, counters, stockists, type AccessRole } from "@/db/schema";
 import { recordAudit, diffFields } from "@/lib/audit/record";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { hasStartedToday, START_DAY_REQUIRED } from "@/lib/field/day-log";
-import { GPS_REQUIRED, parseCoords } from "@/lib/field/gps";
+import { GPS_REQUIRED, LOCATION_REQUIRED, parseCoords } from "@/lib/field/gps";
+import { isProxyDate, loadProxyPerson, proxyInstant } from "@/lib/field/proxy-entry";
+import { formatISTDate } from "@/lib/date";
 
 export type DuplicateMatch = { name: string; type: string; area: string } | null;
 
@@ -66,7 +68,15 @@ export type NewCounterInput = {
   gps: string;
 };
 
-export async function createCounter(input: NewCounterInput) {
+/** Central Admin only: who the counter is credited to, and the day it was
+ * added. See lib/field/proxy-entry.ts. */
+export type CounterProxy = { addedByUserId: string; addedOn: string };
+
+/** Who may be credited with adding a counter: the reps who add them in the
+ * field, and the Sales Officers who add wholesale ones. */
+const COUNTER_ADDERS: AccessRole[] = ["field", "supervisor"];
+
+export async function createCounter(input: NewCounterInput, proxy?: CounterProxy) {
   const user = await getCurrentUser();
   if (!user || !canAccess(user, "field")) {
     return { ok: false as const, error: "Not authorized." };
@@ -113,7 +123,24 @@ export async function createCounter(input: NewCounterInput) {
   if (existing) return { ok: false as const, error: "This mobile number is already a counter." };
 
   const coords = parseCoords(input.gps);
-  if (!coords) return { ok: false as const, error: GPS_REQUIRED };
+  if (!coords) return { ok: false as const, error: isAdmin ? LOCATION_REQUIRED : GPS_REQUIRED };
+
+  // Crediting someone else, and back-dating, are Central Admin's alone — a rep
+  // records their own counters, today.
+  let creditedTo: { id: string; name: string } | null = null;
+  let createdAt: Date | undefined;
+  if (proxy) {
+    if (!isAdmin) return { ok: false as const, error: "Not authorized." };
+    creditedTo = await loadProxyPerson(proxy.addedByUserId, COUNTER_ADDERS, {
+      id: user.id,
+      name: user.name,
+    });
+    if (!creditedTo) return { ok: false as const, error: "Pick who added this counter." };
+    if (!isProxyDate(proxy.addedOn)) {
+      return { ok: false as const, error: "Pick the date it was added — today or earlier." };
+    }
+    createdAt = proxyInstant(proxy.addedOn);
+  }
 
   // The id comes back so the caller can send the rep straight into the visit
   // for the counter they are standing in front of.
@@ -130,16 +157,25 @@ export async function createCounter(input: NewCounterInput) {
       lat: coords.lat,
       lng: coords.lng,
       status: "active",
-      createdByUserId: user.id,
+      // The rep it is credited to, which also keeps it on their beat if it
+      // sits outside their assigned areas — see `createdByUserId`.
+      createdByUserId: creditedTo?.id ?? user.id,
+      ...(createdAt ? { createdAt } : {}),
     })
     .returning({ id: counters.id });
 
+  // The actor on this row is still the admin who typed it; the summary says
+  // whose counter it is, so the log reads true either way.
+  const credit =
+    creditedTo && proxy
+      ? ` · entered for ${creditedTo.id === user.id ? "self" : creditedTo.name}, dated ${formatISTDate(proxy.addedOn)}`
+      : "";
   await recordAudit({
     action: "create",
     module: "counters",
     entityId: created.id,
     entityLabel: input.name.trim(),
-    summary: `Added counter ${input.name.trim()} (${counterTypeLabel(input.type, typeOther || null)}) in ${area.name}, ${depot.name}`,
+    summary: `Added counter ${input.name.trim()} (${counterTypeLabel(input.type, typeOther || null)}) in ${area.name}, ${depot.name}${credit}`,
   });
 
   return { ok: true as const, counterId: created.id };
@@ -207,7 +243,7 @@ export async function updateCounter(counterId: string, input: EditCounterInput) 
   // Also enforced on edit, not just create — that's what closes the gap for
   // counters added before coordinates were mandatory.
   const coords = parseCoords(input.gps);
-  if (!coords) return { ok: false as const, error: GPS_REQUIRED };
+  if (!coords) return { ok: false as const, error: isAdmin ? LOCATION_REQUIRED : GPS_REQUIRED };
 
   await db
     .update(counters)

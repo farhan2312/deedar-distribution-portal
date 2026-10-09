@@ -7,6 +7,8 @@ import { canAccess } from "@/lib/auth/access";
 import { counterTypeLabel } from "@/lib/field/counter-types";
 import { hasStartedToday } from "@/lib/field/day-log";
 import { findTodaysVisit } from "@/lib/field/visit-day";
+import { listProxyPeople } from "@/lib/field/proxy-entry";
+import { istDateString } from "@/lib/date";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { AlreadyVisited } from "../../../_components/already-visited";
@@ -15,8 +17,11 @@ import { VisitForm } from "./visit-form";
 
 export default async function NewVisitPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  /** `?from=khq` (and the counter page’s own `back`) — see the counter edit page. */
+  searchParams: Promise<{ from?: string; back?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -25,7 +30,7 @@ export default async function NewVisitPage({
     return <Notice title={t("Add visit")}>{t("You don't have Field Salesman ISR access.")}</Notice>;
   }
 
-  const { id } = await params;
+  const [{ id }, { from, back }] = await Promise.all([params, searchParams]);
   const isAdmin = user.accessRoles.includes("admin");
 
   /*
@@ -34,7 +39,7 @@ export default async function NewVisitPage({
    * guards below read the same three facts in the same order as before; they
    * are simply fetched together rather than one guard at a time.
    */
-  const [[counter], startedToday, existing] = await Promise.all([
+  const [[counter], startedToday, existing, reps] = await Promise.all([
     db
       .select({
         id: counters.id,
@@ -50,6 +55,8 @@ export default async function NewVisitPage({
       .limit(1),
     isAdmin ? Promise.resolve(true) : hasStartedToday(user.id),
     isAdmin ? Promise.resolve(null) : findTodaysVisit(user.id, id),
+    // Admin enters visits for reps, so needs the reps to credit them to.
+    isAdmin ? listProxyPeople(["field"]) : Promise.resolve(null),
   ]);
   if (!counter) notFound();
 
@@ -92,6 +99,21 @@ export default async function NewVisitPage({
       counterId={counter.id}
       counterName={counter.name}
       counterArea={`${counterTypeLabel(counter.type, counter.typeOther)} · ${counter.areaName}`}
+      returnTo={
+        from === "khq"
+          ? `/khq/counter/${counter.id}${back === "dashboard" ? "?from=dashboard" : ""}`
+          : undefined
+      }
+      admin={
+        reps
+          ? {
+              people: reps,
+              self: { id: user.id, name: user.name },
+              today: istDateString(),
+              stockistId: counter.stockistId,
+            }
+          : undefined
+      }
     />
   );
 }

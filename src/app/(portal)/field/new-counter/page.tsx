@@ -5,12 +5,19 @@ import { areas, cnfs, stockists } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { canAccess } from "@/lib/auth/access";
 import { hasStartedToday } from "@/lib/field/day-log";
+import { listProxyPeople } from "@/lib/field/proxy-entry";
+import { istDateString } from "@/lib/date";
 import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { StartDayRequired } from "../_components/start-day-required";
 import { NewCounterWizard } from "./wizard";
 
-export default async function NewCounterPage() {
+export default async function NewCounterPage({
+  searchParams,
+}: {
+  /** `?from=khq` — opened from Kanpur HQ Reports’ "Add counter" button. */
+  searchParams: Promise<{ from?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccess(user, "field")) {
@@ -67,15 +74,24 @@ export default async function NewCounterPage() {
 
   // Admin sees the whole hierarchy and can pick any C&F → depot → area.
   if (isAdmin) {
-    const [allCnfs, allStockists, allAreas] = await Promise.all([
+    const [allCnfs, allStockists, allAreas, people, { from }] = await Promise.all([
       db.select().from(cnfs).orderBy(asc(cnfs.name)),
       db.select().from(stockists).orderBy(asc(stockists.name)),
       db.select().from(areas).orderBy(asc(areas.name)),
+      // Who a counter can be credited to: reps, and the SOs who add wholesale ones.
+      listProxyPeople(["field", "supervisor"]),
+      searchParams,
     ]);
 
     return (
       <NewCounterWizard
         mode="open"
+        admin={{
+          people,
+          self: { id: user.id, name: user.name },
+          today: istDateString(),
+          fromKhq: from === "khq",
+        }}
         cnfs={allCnfs.map((c) => ({ id: c.id, name: c.name }))}
         stockists={allStockists.map((d) => ({
           id: d.id,

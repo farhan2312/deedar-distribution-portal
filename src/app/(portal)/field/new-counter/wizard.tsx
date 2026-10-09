@@ -12,9 +12,12 @@ import {
   createCounterBySupervisor,
 } from "@/lib/supervisor/actions";
 import { ALL_COUNTER_TYPES } from "@/lib/field/counter-types";
-import { parseCoords } from "@/lib/field/gps";
+import { LOCATION_REQUIRED, parseCoords } from "@/lib/field/gps";
+import { formatISTDate } from "@/lib/date";
 import { useT } from "@/lib/i18n/provider";
 import { GpsCapture } from "../_components/gps-capture";
+import { LocationInput } from "../_components/location-input";
+import { CreditFields, type CreditContext } from "../_components/credit-fields";
 
 export type AreaOption = { id: string; name: string };
 export type StockistOption = { id: string; name: string; cnfId: string; areas: AreaOption[] };
@@ -29,7 +32,32 @@ type WizardMode =
   | { mode: "locked"; depot: { id: string; name: string }; cnf: { name: string }; areas: AreaOption[] }
   | { mode: "open"; cnfs: CnfOption[]; stockists: StockistOption[] };
 
-type WizardProps = WizardMode & { variant?: WizardVariant };
+/**
+ * Central Admin's additions, passed only for that account.
+ *
+ * Admin adds counters from a desk on behalf of reps who had no signal, so the
+ * form takes a typed location instead of this device's GPS, and asks who the
+ * counter belongs to and the day it was added. See lib/field/proxy-entry.ts.
+ */
+export type AdminWizardExtras = CreditContext & {
+  /** Opened from Kanpur HQ Reports: back returns there, and the new counter
+   * opens on its Kanpur HQ page, where its first visit can be added. */
+  fromKhq: boolean;
+};
+
+type WizardProps = WizardMode & {
+  variant?: WizardVariant;
+  admin?: AdminWizardExtras;
+  /**
+   * Rendered inside a pop-up (Kanpur HQ, Central Admin) rather than as a page:
+   * no outer card or page heading — the pop-up supplies both — and the
+   * callbacks below replace navigation. Never set on the ISR or SO pages, which
+   * behave exactly as they always have.
+   */
+  embedded?: boolean;
+  /** Called with the new counter in place of navigating to it. */
+  onCreated?: (counterId: string, name: string) => void;
+};
 
 type Step = "duplicate" | "details" | "review";
 
@@ -37,7 +65,15 @@ export function NewCounterWizard(props: WizardProps) {
   const router = useRouter();
   const t = useT();
   const isSupervisor = props.variant === "supervisor";
-  const backHref = isSupervisor ? "/supervisor/assign-beat" : "/field/beat";
+  const admin = props.admin;
+  const backHref = admin?.fromKhq
+    ? "/khq/reports"
+    : isSupervisor
+      ? "/supervisor/assign-beat"
+      : "/field/beat";
+  /** Where a counter opens once it exists — Kanpur HQ's page when that is where
+   * the admin came from, so Add visit is right there. */
+  const counterHref = (id: string) => (admin?.fromKhq ? `/khq/counter/${id}` : `/field/counter/${id}`);
   const doneHref = isSupervisor ? "/supervisor/assign-beat" : "/field/beat";
   // Wholesale counters are Supervisor-added only — the field counter form
   // (used by field reps AND admin alike) never offers it. Only the
@@ -57,6 +93,9 @@ export function NewCounterWizard(props: WizardProps) {
     /** Manual label, only meaningful (and required) when type is "Others". */
     typeOther: "",
     gps: "",
+    /** Admin only: who added it and on which day. */
+    addedBy: "",
+    addedOn: admin?.today ?? "",
   });
   // A phone is a counter's unique id, so a match means the outlet already
   // exists — a field rep is then routed to add a visit (id + canVisit set),
@@ -106,6 +145,10 @@ export function NewCounterWizard(props: WizardProps) {
       ? props.areas
       : props.stockists.find((d) => d.id === draft.stockistId)?.areas ?? [];
   const areaName = areaOptions.find((a) => a.id === draft.areaId)?.name ?? "";
+  /** Admin only: who "Added by" names belongs to a stockist, so a change of
+   * stockist clears it — keeping "Myself", which belongs to every one. */
+  const addedByAfterStockistChange = () =>
+    admin && draft.addedBy === admin.self.id ? draft.addedBy : "";
 
   function goDetails() {
     setError("");
@@ -129,8 +172,18 @@ export function NewCounterWizard(props: WizardProps) {
       return;
     }
     if (!parseCoords(draft.gps)) {
-      setError(t("Capture the counter's GPS location before saving."));
+      setError(t(admin ? LOCATION_REQUIRED : "Capture the counter's GPS location before saving."));
       return;
+    }
+    if (admin) {
+      if (!draft.addedBy) {
+        setError(t("Pick who added this counter."));
+        return;
+      }
+      if (!draft.addedOn || draft.addedOn > admin.today) {
+        setError(t("Pick the date it was added — today or earlier."));
+        return;
+      }
     }
     setStep("review");
   }
@@ -150,7 +203,10 @@ export function NewCounterWizard(props: WizardProps) {
     };
     const res = isSupervisor
       ? await createCounterBySupervisor(payload)
-      : await createCounter(payload);
+      : await createCounter(
+          payload,
+          admin ? { addedByUserId: draft.addedBy, addedOn: draft.addedOn } : undefined,
+        );
     if (!res.ok) {
       // Only re-enable on failure — the wizard stays put so the rejected value
       // can be corrected and resubmitted.
@@ -170,13 +226,21 @@ export function NewCounterWizard(props: WizardProps) {
     // details in and gets to see them saved, and adding the visit stays their
     // decision. A supervisor is filling the roster from a desk and does not
     // check in, so they go back to assign-beat.
-    router.push(isSupervisor ? doneHref : `/field/counter/${res.counterId}`);
+    if (props.onCreated) {
+      props.onCreated(res.counterId, draft.name.trim());
+      return;
+    }
+    router.push(isSupervisor ? doneHref : counterHref(res.counterId));
     router.refresh();
   }
 
   return (
-    <div className="card mx-auto max-w-xl overflow-hidden" style={{ animation: "fadeUp .3s ease" }}>
-      {/* Header */}
+    <div
+      className={props.embedded ? "" : "card mx-auto max-w-xl overflow-hidden"}
+      style={props.embedded ? undefined : { animation: "fadeUp .3s ease" }}
+    >
+      {/* Header — the pop-up has its own title and close. */}
+      {!props.embedded && (
       <div
         className="flex items-center gap-3.5 px-6 py-4.5"
         style={{ background: "var(--gradient-cosmic)", color: "#fff" }}
@@ -198,9 +262,10 @@ export function NewCounterWizard(props: WizardProps) {
           {t("Add New Counter")}
         </div>
       </div>
+      )}
 
       {/* Step bar */}
-      <div className="flex gap-2 px-6 pt-4 pb-1">
+      <div className={props.embedded ? "flex gap-2 pb-1" : "flex gap-2 px-6 pt-4 pb-1"}>
         {steps.map((s, i) => {
           const done = i <= stepIdx;
           return (
@@ -220,7 +285,7 @@ export function NewCounterWizard(props: WizardProps) {
         })}
       </div>
 
-      <div className="px-6 pt-2 pb-7">
+      <div className={props.embedded ? "pt-1" : "px-6 pt-2 pb-7"}>
         {step === "duplicate" && (
           <>
             <h4 className="page-title mt-4 mb-1">{t("Check for duplicates")}</h4>
@@ -267,7 +332,7 @@ export function NewCounterWizard(props: WizardProps) {
                     type="button"
                     className="btn btn-primary btn-sm mt-2.5"
                     onClick={() => {
-                      router.push(`/field/counter/${dup.id}`);
+                      router.push(counterHref(dup.id!));
                       router.refresh();
                     }}
                   >
@@ -330,7 +395,15 @@ export function NewCounterWizard(props: WizardProps) {
                   <select
                     className="inp"
                     value={draft.cnfId}
-                    onChange={(e) => setDraft({ ...draft, cnfId: e.target.value, stockistId: "", areaId: "" })}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        cnfId: e.target.value,
+                        stockistId: "",
+                        areaId: "",
+                        addedBy: addedByAfterStockistChange(),
+                      })
+                    }
                   >
                     <option value="">{t("Select")}</option>
                     {props.cnfs.map((c) => (
@@ -344,7 +417,14 @@ export function NewCounterWizard(props: WizardProps) {
                     className="inp"
                     value={draft.stockistId}
                     disabled={!draft.cnfId}
-                    onChange={(e) => setDraft({ ...draft, stockistId: e.target.value, areaId: "" })}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        stockistId: e.target.value,
+                        areaId: "",
+                        addedBy: addedByAfterStockistChange(),
+                      })
+                    }
                   >
                     <option value="">{draft.cnfId ? t("Select") : t("Pick a C&F first")}</option>
                     {stockistOptionsForCnf.map((d) => (
@@ -409,10 +489,28 @@ export function NewCounterWizard(props: WizardProps) {
             </div>
             <div className="mb-5 rounded-2xl p-4" style={{ background: "var(--accent-tint)" }}>
               <label className="mb-2.5 block text-[13px] font-semibold" style={{ color: "var(--ink-1)" }}>
-                {t("GPS Coordinates *")}
+                {admin ? t("Location *") : t("GPS Coordinates *")}
               </label>
-              <GpsCapture value={draft.gps} onCapture={(gps) => setDraft({ ...draft, gps })} />
+              {/* Admin is at a desk, not at the shop: this device's position
+                  would be the office's. */}
+              {admin ? (
+                <LocationInput value={draft.gps} onChange={(gps) => setDraft((d) => ({ ...d, gps }))} />
+              ) : (
+                <GpsCapture value={draft.gps} onCapture={(gps) => setDraft({ ...draft, gps })} />
+              )}
             </div>
+            {admin && (
+              <CreditFields
+                personLabel={t("Added by *")}
+                dateLabel={t("Added on *")}
+                context={admin}
+                stockistId={draft.stockistId || null}
+                personId={draft.addedBy}
+                date={draft.addedOn}
+                onPerson={(addedBy) => setDraft((d) => ({ ...d, addedBy }))}
+                onDate={(addedOn) => setDraft((d) => ({ ...d, addedOn }))}
+              />
+            )}
             {error && <ErrorText>{error}</ErrorText>}
             <div className="flex gap-3">
               <button className="btn btn-secondary flex-1 justify-center py-3.5" onClick={() => setStep("duplicate")}>
@@ -437,6 +535,19 @@ export function NewCounterWizard(props: WizardProps) {
                 <Review k={t("Stockist")} v={stockistName} />
                 <Review k={t("Area")} v={areaName} />
                 <Review k={t("GPS")} v={draft.gps || "—"} />
+                {admin && (
+                  <>
+                    <Review
+                      k={t("Added by")}
+                      v={
+                        draft.addedBy === admin.self.id
+                          ? `${admin.self.name} (${t("Myself")})`
+                          : (admin.people.find((p) => p.id === draft.addedBy)?.name ?? "—")
+                      }
+                    />
+                    <Review k={t("Added on")} v={formatISTDate(draft.addedOn)} />
+                  </>
+                )}
               </div>
             </div>
             {error && <ErrorText>{error}</ErrorText>}

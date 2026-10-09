@@ -23,6 +23,7 @@ import { getT } from "@/lib/i18n/server";
 import { Notice } from "@/components/ui/notice";
 import { UrlPagination } from "@/components/ui/url-pagination";
 import { VisitRowActions } from "./visit-row-actions";
+import { AddVisitButton, EditCounterButton } from "../../_components/admin-forms";
 
 /** Visits per page — the same 25 the ISR detail table uses. */
 const VISITS_PER_PAGE = 25;
@@ -220,9 +221,6 @@ export default async function KhqCounterPage({
   const topCompetitor = competitorRows.find((c) => c.competitor && c.competitor !== "none") ?? null;
 
   const back = BACK[origin(sp.from)];
-  // Carried into the edit screens so their Cancel and Save come back here with
-  // the same origin, rather than quietly resetting the trail to Reports.
-  const backParam = sp.from === "dashboard" ? "&back=dashboard" : "";
 
   const status = STATUS_STYLE[counter.status];
   const daysSinceVisit =
@@ -253,12 +251,12 @@ export default async function KhqCounterPage({
               {/* Pushed to the right edge, away from the chips: it acts on the
                   whole counter, not on any one of them. */}
               <span className="flex-1" />
-              <Link
-                className="btn btn-secondary flex-none"
-                href={`/field/counter/${counter.id}/edit?from=khq${backParam}`}
-              >
-                {t("Edit details")}
-              </Link>
+              {/* Both open as pop-ups over this page — admin never lands in
+                  the ISR's own screens. Add visit is for a rep who couldn't
+                  log it themselves: the form credits the visit to them, on the
+                  day it was made. */}
+              <EditCounterButton counterId={counter.id} counterName={counter.name} />
+              <AddVisitButton counterId={counter.id} counterName={counter.name} />
             </>
           )}
         </div>
@@ -448,7 +446,6 @@ export default async function KhqCounterPage({
                           <VisitRowActions
                             counterId={counter.id}
                             visitId={v.id}
-                            backParam={backParam}
                             // Date, time and rep together: several rows can
                             // share a date, and on a duplicate run they share
                             // the minute too.

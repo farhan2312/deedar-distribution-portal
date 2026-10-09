@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { EditVisitButton } from "../../_components/admin-forms";
 import { useRouter } from "next/navigation";
 import { deleteVisit } from "@/lib/field/visit-actions";
 import { ConfirmDelete } from "@/components/ui/confirm-delete";
@@ -20,25 +20,18 @@ export function VisitRowActions({
   /** Quoted back in the confirmation, so the admin can see which of several
    * same-day rows they are about to remove. */
   visitLabel,
-  backParam,
 }: {
   counterId: string;
   visitId: string;
   visitLabel: string;
-  /** Carries this page’s own origin into the edit form, so returning from it
-   * lands back here with the same trail. Already `&`-prefixed, or empty. */
-  backParam?: string;
 }) {
   const router = useRouter();
   const t = useT();
 
   return (
     <span className="flex items-center justify-end gap-3 whitespace-nowrap">
-      {/* `from=khq` brings the form's Cancel and Save back to this page rather
-          than dropping an admin into the ISR's own counter screen. */}
-      <Link className="link" href={`/field/counter/${counterId}/visit/${visitId}?from=khq${backParam ?? ""}`}>
-        {t("Edit")}
-      </Link>
+      {/* A pop-up over this page, not the ISR's own edit screen. */}
+      <EditVisitButton counterId={counterId} visitId={visitId} visitLabel={visitLabel} />
       <ConfirmDelete
         action={() => deleteVisit(visitId)}
         itemLabel={t("visit")}

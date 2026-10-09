@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   counters,
@@ -19,6 +19,7 @@ import { formatISTDate, istDateString } from "@/lib/date";
 import { hasStartedToday, START_DAY_REQUIRED } from "./day-log";
 import { ALREADY_VISITED_TODAY, findTodaysVisit, visitedByOther } from "./visit-day";
 import { isWithinEditWindow } from "./products";
+import { isProxyDate, loadProxyPerson, proxyInstant } from "./proxy-entry";
 
 const SEGMENTS: ProductSegment[] = ["DG10", "DG20", "DB20", "DB40"];
 const COMPETITORS: CompetitorPresence[] = ["none", "local", "national"];
@@ -87,7 +88,39 @@ function normalizeDuration(v: number | null | undefined): number | null {
   return Math.min(24 * 60 * 60, Math.floor(v));
 }
 
-export async function createVisit(counterId: string, input: VisitInput): Promise<Result> {
+/** Central Admin only: who made the visit, and on which day. See
+ * lib/field/proxy-entry.ts. */
+export type VisitProxy = { visitedByUserId: string; visitedOn: string };
+
+/** Any visit at this counter on IST day `date`. Reads `visit_date`, which the
+ * unique index covers, and also the older rows that predate that column and
+ * carry only `visited_at` — the index can't see those, so this check has to. */
+async function visitOnDay(counterId: string, date: string) {
+  const [clash] = await db
+    .select({ id: visits.id, repName: users.name })
+    .from(visits)
+    .innerJoin(users, eq(users.id, visits.userId))
+    .where(
+      and(
+        eq(visits.counterId, counterId),
+        or(
+          eq(visits.visitDate, date),
+          and(
+            isNull(visits.visitDate),
+            sql`(${visits.visitedAt} AT TIME ZONE 'Asia/Kolkata')::date = ${date}::date`,
+          ),
+        ),
+      ),
+    )
+    .limit(1);
+  return clash ?? null;
+}
+
+export async function createVisit(
+  counterId: string,
+  input: VisitInput,
+  proxy?: VisitProxy,
+): Promise<Result> {
   const user = await getCurrentUser();
   if (!user || !canAccess(user, "field")) return { ok: false, error: "Not authorized." };
 
@@ -136,17 +169,47 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
   const competitorBrand = input.competitor !== "none" ? input.competitorBrand?.trim() || null : null;
   const now = new Date();
 
+  // Whose visit, and which day. A rep's own visit is theirs, now. Central Admin
+  // entering one for a rep credits that rep, on the day it happened.
+  let visitedBy: { id: string; name: string } = { id: user.id, name: user.name };
+  let visitedAt = now;
+  let visitDate = istDateString(now);
+  if (proxy) {
+    if (!isAdmin) return { ok: false, error: "Not authorized." };
+    const person = await loadProxyPerson(proxy.visitedByUserId, ["field"], {
+      id: user.id,
+      name: user.name,
+    });
+    if (!person) return { ok: false, error: "Pick who made this visit." };
+    if (!isProxyDate(proxy.visitedOn)) {
+      return { ok: false, error: "Pick the date of the visit — today or earlier." };
+    }
+    visitedBy = person;
+    visitedAt = proxyInstant(proxy.visitedOn, now);
+    visitDate = proxy.visitedOn;
+    // Still one visit per counter per day — a back-dated entry is exactly how a
+    // second copy of an already-logged visit would get in. Named, so the admin
+    // can tell a real duplicate from a mix-up over the date.
+    const clash = await visitOnDay(counter.id, visitDate);
+    if (clash) {
+      return {
+        ok: false,
+        error: `${clash.repName} already has a visit at this counter on ${formatISTDate(visitDate)}.`,
+      };
+    }
+  }
+
   let v: { id: string };
   try {
     [v] = await db
       .insert(visits)
       .values({
-        userId: user.id,
+        userId: visitedBy.id,
         counterId: counter.id,
-        visitedAt: now,
+        visitedAt,
         // The IST day the partial unique index keys on. Set for every row this
         // action writes; historical rows keep NULL and stay out of the index.
-        visitDate: istDateString(now),
+        visitDate,
         stock: totalStock,
         sold: totalSold,
         items,
@@ -154,11 +217,19 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
         competitor: input.competitor,
         competitorBrand,
         remarks: input.remarks.trim() || null,
-        durationSeconds: normalizeDuration(input.durationSeconds),
+        // The form's timer measures how long the admin spent typing, not how
+        // long the rep stood at the counter — so an entered visit has none.
+        durationSeconds: proxy ? null : normalizeDuration(input.durationSeconds),
         updatedAt: now,
       })
       .returning({ id: visits.id });
   } catch (err) {
+    if (proxy && isUniqueViolation(err, "visits_counter_day_unique")) {
+      return {
+        ok: false,
+        error: `There's already a visit at this counter on ${formatISTDate(visitDate)}.`,
+      };
+    }
     // 23505 on this index means another rep's visit landed between the check
     // above and this insert — a real race, not a bug. Re-read so the message
     // can name them, and report it exactly as the pre-check would have.
@@ -174,18 +245,33 @@ export async function createVisit(counterId: string, input: VisitInput): Promise
     throw err;
   }
 
-  await db.update(counters).set({ lastVisitAt: now }).where(eq(counters.id, counter.id));
+  // A visit made now is the newest by definition — the rep's path, unchanged.
+  // An entry admin back-dates is not: it takes the newer of what was there and
+  // itself, so last week's visit can't pull "last visit" back from yesterday.
+  await db
+    .update(counters)
+    .set({
+      lastVisitAt: proxy
+        ? sql`greatest(${counters.lastVisitAt}, ${visitedAt.toISOString()}::timestamptz)`
+        : now,
+    })
+    .where(eq(counters.id, counter.id));
 
+  // The actor on this row is the admin who typed it; the summary says whose
+  // visit it is and when, so the log reads true either way.
+  const credit = proxy
+    ? ` · entered for ${visitedBy.id === user.id ? "self" : visitedBy.name}, dated ${formatISTDate(visitDate)}`
+    : "";
   await recordAudit({
     action: "create",
     module: "visits",
     entityId: v.id,
     entityLabel: counter.name,
-    summary: `Visited ${counter.name} — sold ${totalSold}, stock ${totalStock}`,
+    summary: `Visited ${counter.name} — sold ${totalSold}, stock ${totalStock}${credit}`,
   });
 
   revalidatePath("/field/beat");
-  revalidatePath(`/field/counter/${counterId}`);
+  revalidateVisit(counterId, isAdmin);
   return { ok: true, visitId: v.id };
 }
 
@@ -292,7 +378,7 @@ export async function updateVisit(visitId: string, input: VisitInput): Promise<R
     ),
   });
 
-  revalidateVisit(v.counterId);
+  revalidateVisit(v.counterId, isAdmin);
   return { ok: true, visitId };
 }
 
@@ -356,15 +442,21 @@ export async function deleteVisit(visitId: string): Promise<WriteResult> {
     summary: `Deleted ${v.repName}'s ${formatISTDate(v.visitedAt)} visit to ${v.counterName} — sold ${v.sold}, stock ${v.stock}`,
   });
 
-  revalidateVisit(v.counterId);
+  revalidateVisit(v.counterId, true);
   return { ok: true };
 }
 
-/** Every screen a visit's figures show up on. The Kanpur HQ pages are in the
- * list because that is where a visit is now edited from, and Reports reads the
- * same totals. */
-function revalidateVisit(counterId: string): void {
+/**
+ * The screens to refresh after a visit changes.
+ *
+ * A rep's save refreshes their own counter page, exactly as it always has. The
+ * Kanpur HQ pages join in only when Central Admin made the change, since that is
+ * where admin enters and corrects visits from — a rep's action shouldn't carry
+ * work it never needed.
+ */
+function revalidateVisit(counterId: string, byAdmin: boolean): void {
   revalidatePath(`/field/counter/${counterId}`);
+  if (!byAdmin) return;
   revalidatePath(`/khq/counter/${counterId}`);
   revalidatePath("/khq/reports");
 }

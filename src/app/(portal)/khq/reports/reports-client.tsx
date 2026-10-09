@@ -3,6 +3,7 @@
 import { useOptimistic, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MapScopePickers } from "@/app/(portal)/_components/map-scope-pickers";
+import { AddCounterButton } from "../_components/admin-forms";
 import { formatISTDate, formatISTTime } from "@/lib/date";
 import { useT } from "@/lib/i18n/provider";
 import { Pagination } from "@/components/ui/pagination";
@@ -61,6 +62,7 @@ export function ReportsClient({
   visitsSold,
   visitsSoldBySku,
   pageSize,
+  canAddCounter = false,
 }: {
   scope: ReportsScope;
   counters: CounterReportRow[];
@@ -72,6 +74,9 @@ export function ReportsClient({
   /** The same, per SKU. */
   visitsSoldBySku: Record<(typeof SEGMENT_ORDER)[number], number>;
   pageSize: number;
+  /** Central Admin only — entering a counter on behalf of a rep who had no
+   * signal to add it themselves. */
+  canAddCounter?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -166,14 +171,17 @@ export function ReportsClient({
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={runExport}
-          disabled={exporting || total === 0}
-        >
-          {exporting ? t("Exporting…") : t("Export Excel")}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {canAddCounter && <AddCounterButton />}
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={runExport}
+            disabled={exporting || total === 0}
+          >
+            {exporting ? t("Exporting…") : t("Export Excel")}
+          </button>
+        </div>
       </div>
 
       <div className="mb-3">

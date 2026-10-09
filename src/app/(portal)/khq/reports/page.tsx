@@ -59,6 +59,7 @@ export default async function KhqReportsPage({
       visitsSold={visitsTotals.sold}
       visitsSoldBySku={visitsTotals.bySku}
       pageSize={REPORT_PAGE_SIZE}
+      canAddCounter={user.accessRoles.includes("admin")}
     />
   );
 }

@@ -77,6 +77,7 @@ export default async function EditCounterPage({
       counterId={counter.id}
       areaOptions={depotAreas}
       returnTo={returnPath(from, back, counter.id)}
+      admin={isAdmin}
       initial={{
         name: counter.name,
         address: counter.address ?? "",
